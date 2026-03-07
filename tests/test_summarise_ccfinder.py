@@ -18,10 +18,18 @@ if str(BIN_DIR) not in sys.path:
 import summarise_ccfinder  # noqa: E402
 
 
-def read_tsv(path: Path) -> list[dict[str, str]]:
-    """Read a TSV file into a list of dictionaries."""
+def read_tsv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read a TSV file into a header and list of dictionaries."""
     with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames is not None
+        return reader.fieldnames, list(reader)
+
+
+def read_tsv_rows(path: Path) -> list[dict[str, str]]:
+    """Read a TSV file into a list of dictionaries."""
+    _, rows = read_tsv(path)
+    return rows
 
 
 class SummariseCCFinderTestCase(unittest.TestCase):
@@ -91,21 +99,57 @@ class SummariseCCFinderTestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            strain_rows = read_tsv(outdir / "ccfinder_strains.tsv")
-            contig_rows = read_tsv(outdir / "ccfinder_contigs.tsv")
-            crispr_rows = read_tsv(outdir / "ccfinder_crisprs.tsv")
+            strain_header, strain_rows = read_tsv(outdir / "ccfinder_strains.tsv")
+            contig_header, contig_rows = read_tsv(outdir / "ccfinder_contigs.tsv")
+            crispr_header, crispr_rows = read_tsv(outdir / "ccfinder_crisprs.tsv")
 
             self.assertEqual(len(strain_rows), 1)
+            self.assertEqual(
+                strain_header,
+                [
+                    "accession",
+                    "CRISPRS",
+                    "SPACERS_SUM",
+                    "CRISPR_FRAC",
+                    "ccfinder_status",
+                    "warnings",
+                ],
+            )
             self.assertEqual(strain_rows[0]["CRISPRS"], "2")
             self.assertEqual(strain_rows[0]["SPACERS_SUM"], "7")
             self.assertEqual(strain_rows[0]["CRISPR_FRAC"], "0.1")
             self.assertEqual(strain_rows[0]["ccfinder_status"], "done")
+            self.assertEqual(strain_rows[0]["warnings"], "")
 
             self.assertEqual(len(contig_rows), 2)
+            self.assertEqual(
+                contig_header,
+                [
+                    "accession",
+                    "contig_id",
+                    "contig_length",
+                    "CRISPRS",
+                    "SPACERS_SUM",
+                    "CRISPR_FRAC",
+                ],
+            )
             self.assertEqual(contig_rows[0]["CRISPRS"], "1")
             self.assertEqual(contig_rows[1]["SPACERS_SUM"], "4")
 
             self.assertEqual(len(crispr_rows), 2)
+            self.assertEqual(
+                crispr_header,
+                [
+                    "accession",
+                    "contig_id",
+                    "crispr_id",
+                    "evidence_level",
+                    "spacer_count",
+                    "start",
+                    "end",
+                    "crispr_length",
+                ],
+            )
             self.assertEqual(crispr_rows[0]["crispr_id"], "c1_a")
             self.assertEqual(crispr_rows[1]["crispr_length"], "50")
 
@@ -146,12 +190,129 @@ class SummariseCCFinderTestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            strain_row = read_tsv(outdir / "ccfinder_strains.tsv")[0]
-            crispr_rows = read_tsv(outdir / "ccfinder_crisprs.tsv")
+            strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
+            contig_rows = read_tsv_rows(outdir / "ccfinder_contigs.tsv")
+            crispr_rows = read_tsv_rows(outdir / "ccfinder_crisprs.tsv")
             self.assertEqual(strain_row["CRISPRS"], "0")
             self.assertEqual(strain_row["SPACERS_SUM"], "0")
             self.assertEqual(strain_row["CRISPR_FRAC"], "0")
+            self.assertEqual(strain_row["ccfinder_status"], "done")
+            self.assertEqual(contig_rows[0]["CRISPRS"], "0")
+            self.assertEqual(contig_rows[0]["SPACERS_SUM"], "0")
+            self.assertEqual(contig_rows[0]["CRISPR_FRAC"], "0")
             self.assertEqual(crispr_rows, [])
+
+    def test_main_handles_samples_with_no_crispr_arrays(self) -> None:
+        """Write zero-valued summaries when the sample has no CRISPR arrays at all."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            result_json = self.write_json(
+                tmpdir / "result.json",
+                {
+                    "Sequences": [
+                        {
+                            "Id": "contig1",
+                            "Length": 750,
+                            "Crisprs": [],
+                        },
+                        {
+                            "Id": "contig2",
+                            "Length": 250,
+                        },
+                    ]
+                },
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_ccfinder.main(
+                [
+                    "--accession",
+                    "ACC_EMPTY",
+                    "--result-json",
+                    str(result_json),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
+            contig_rows = read_tsv_rows(outdir / "ccfinder_contigs.tsv")
+            crispr_rows = read_tsv_rows(outdir / "ccfinder_crisprs.tsv")
+
+            self.assertEqual(strain_row["accession"], "ACC_EMPTY")
+            self.assertEqual(strain_row["CRISPRS"], "0")
+            self.assertEqual(strain_row["SPACERS_SUM"], "0")
+            self.assertEqual(strain_row["CRISPR_FRAC"], "0")
+            self.assertEqual(strain_row["ccfinder_status"], "done")
+            self.assertEqual(strain_row["warnings"], "")
+            self.assertEqual(len(contig_rows), 2)
+            self.assertEqual(contig_rows[0]["CRISPRS"], "0")
+            self.assertEqual(contig_rows[0]["CRISPR_FRAC"], "0")
+            self.assertEqual(contig_rows[1]["CRISPRS"], "0")
+            self.assertEqual(contig_rows[1]["CRISPR_FRAC"], "0")
+            self.assertEqual(crispr_rows, [])
+
+    def test_build_strain_row_emits_stable_master_table_values(self) -> None:
+        """Build stable strain-level master-table fields from retained CRISPR records."""
+        crispr_records = [
+            summarise_ccfinder.CrisprRecord(
+                accession="ACC_STABLE",
+                contig_id="contig1",
+                crispr_id="c1",
+                evidence_level=4,
+                spacer_count=3,
+                start=1,
+                end=101,
+            ),
+            summarise_ccfinder.CrisprRecord(
+                accession="ACC_STABLE",
+                contig_id="contig2",
+                crispr_id="c2",
+                evidence_level=3,
+                spacer_count=4,
+                start=50,
+                end=99,
+            ),
+        ]
+        contig_summaries = [
+            summarise_ccfinder.ContigSummary(
+                accession="ACC_STABLE",
+                contig_id="contig1",
+                contig_length=1000,
+                crisprs=1,
+                spacers_sum=3,
+                crispr_frac=0.101,
+            ),
+            summarise_ccfinder.ContigSummary(
+                accession="ACC_STABLE",
+                contig_id="contig2",
+                contig_length=500,
+                crisprs=1,
+                spacers_sum=4,
+                crispr_frac=0.1,
+            ),
+        ]
+
+        row = summarise_ccfinder.build_strain_row(
+            accession="ACC_STABLE",
+            crispr_records=crispr_records,
+            contig_summaries=contig_summaries,
+            status="done",
+            warnings=[],
+        )
+
+        self.assertEqual(
+            row,
+            {
+                "accession": "ACC_STABLE",
+                "CRISPRS": "2",
+                "SPACERS_SUM": "7",
+                "CRISPR_FRAC": "0.100667",
+                "ccfinder_status": "done",
+                "warnings": "",
+            },
+        )
 
     def test_main_marks_invalid_json_as_failed(self) -> None:
         """Emit NA-like strain output and empty detail tables on failure."""
@@ -172,12 +333,12 @@ class SummariseCCFinderTestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            strain_row = read_tsv(outdir / "ccfinder_strains.tsv")[0]
+            strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
             self.assertEqual(strain_row["CRISPRS"], "NA")
             self.assertEqual(strain_row["ccfinder_status"], "failed")
             self.assertEqual(strain_row["warnings"], "ccfinder_summary_failed")
-            self.assertEqual(read_tsv(outdir / "ccfinder_contigs.tsv"), [])
-            self.assertEqual(read_tsv(outdir / "ccfinder_crisprs.tsv"), [])
+            self.assertEqual(read_tsv_rows(outdir / "ccfinder_contigs.tsv"), [])
+            self.assertEqual(read_tsv_rows(outdir / "ccfinder_crisprs.tsv"), [])
 
     def test_main_generates_fallback_ids_and_invalid_entry_warning(self) -> None:
         """Handle missing IDs and skip malformed retained CRISPR entries with a warning."""
@@ -220,9 +381,9 @@ class SummariseCCFinderTestCase(unittest.TestCase):
                 ]
             )
 
-            strain_row = read_tsv(outdir / "ccfinder_strains.tsv")[0]
-            contig_row = read_tsv(outdir / "ccfinder_contigs.tsv")[0]
-            crispr_row = read_tsv(outdir / "ccfinder_crisprs.tsv")[0]
+            strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
+            contig_row = read_tsv_rows(outdir / "ccfinder_contigs.tsv")[0]
+            crispr_row = read_tsv_rows(outdir / "ccfinder_crisprs.tsv")[0]
 
             self.assertEqual(strain_row["CRISPRS"], "1")
             self.assertEqual(strain_row["warnings"], "invalid_crispr_entry")
