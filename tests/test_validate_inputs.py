@@ -176,6 +176,184 @@ class ValidateInputsTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertFalse((outdir / "accession_map.tsv").exists())
 
+    def test_main_rejects_invalid_boolean_values(self) -> None:
+        """Fail when `is_new` cannot be normalised to true or false."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genome.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,maybe,,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID\nACC1,1\n",
+            )
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(tmpdir / "validated"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_main_rejects_uppercase_sample_headers(self) -> None:
+        """Fail when required sample-manifest headers are not lower-case."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genome.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,Assembly_Level,genome_fasta",
+                        f"ACC1,false,,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID\nACC1,1\n",
+            )
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(tmpdir / "validated"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_main_rejects_new_samples_without_assembly_level(self) -> None:
+        """Fail when `is_new=true` rows omit the required assembly_level."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genome.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,true,,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID\nACC1,1\n",
+            )
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(tmpdir / "validated"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_main_rejects_accessions_that_sanitise_to_empty_ids(self) -> None:
+        """Fail when sanitisation removes every character from the accession."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genome.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"!!!,false,,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID\n!!!,1\n",
+            )
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(tmpdir / "validated"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_main_rejects_duplicate_metadata_accessions(self) -> None:
+        """Fail when the metadata table contains ambiguous duplicate keys."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genome.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,false,,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "\n".join(
+                    [
+                        "accession,Tax_ID",
+                        "ACC1,1",
+                        "ACC1,2",
+                    ]
+                )
+                + "\n",
+            )
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(tmpdir / "validated"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_sanitise_accession_replaces_non_ascii_characters(self) -> None:
+        """Keep only ASCII alphanumerics and underscores in internal IDs."""
+        self.assertEqual(validate_inputs.sanitise_accession("A-B C"), "A_B_C")
+        self.assertEqual(validate_inputs.sanitise_accession("A__B"), "A__B")
+        self.assertEqual(validate_inputs.sanitise_accession("Acc\u00e9ssion"), "Acc_ssion")
+
 
 if __name__ == "__main__":
     unittest.main()

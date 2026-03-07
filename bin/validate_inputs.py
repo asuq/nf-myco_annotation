@@ -138,7 +138,7 @@ def sanitise_accession(accession: str) -> str:
     characters: list[str] = []
     previous_was_underscore = False
     for char in accession:
-        if char.isalnum() or char == "_":
+        if char.isascii() and (char.isalnum() or char == "_"):
             characters.append(char)
             previous_was_underscore = False
             continue
