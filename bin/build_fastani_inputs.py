@@ -85,9 +85,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--busco",
+        action="append",
         required=True,
         type=Path,
-        help="Path to the combined BUSCO summary TSV.",
+        help="Path to a BUSCO summary TSV. May be supplied multiple times.",
     )
     parser.add_argument(
         "--primary-busco-column",
@@ -151,24 +152,31 @@ def load_staged_manifest(path: Path) -> dict[str, dict[str, str]]:
     return manifest
 
 
-def load_busco_index(path: Path) -> dict[str, dict[str, str]]:
-    """Load the combined BUSCO summary TSV keyed by accession."""
-    header, rows = read_table(path, delimiter="\t")
-    accession_column = detect_key_column(header, ("accession",))
-    busco_columns = [column for column in header if column.startswith("BUSCO_")]
-    if not busco_columns:
-        raise FastAniInputError("Combined BUSCO summary is missing BUSCO_<lineage> columns.")
-
+def load_busco_index(paths: Sequence[Path]) -> dict[str, dict[str, str]]:
+    """Load one or more BUSCO summary TSVs keyed by accession."""
     index: dict[str, dict[str, str]] = {}
-    for row in rows:
-        accession = row.get(accession_column, "").strip()
-        if not accession:
-            raise FastAniInputError("Combined BUSCO summary contains an empty accession.")
-        entry = index.setdefault(accession, {})
-        for column in busco_columns:
-            value = row.get(column, "").strip()
-            if value and value != MISSING_VALUE:
-                entry[column] = value
+    seen_busco_columns: set[str] = set()
+
+    for path in paths:
+        header, rows = read_table(path, delimiter="\t")
+        accession_column = detect_key_column(header, ("accession",))
+        busco_columns = [column for column in header if column.startswith("BUSCO_")]
+        if len(busco_columns) != 1:
+            raise FastAniInputError(
+                f"BUSCO table must contain exactly one BUSCO_<lineage> column: {path}"
+            )
+        busco_column = busco_columns[0]
+        if busco_column in seen_busco_columns:
+            raise FastAniInputError(f"Duplicate BUSCO lineage column supplied: {busco_column}")
+        seen_busco_columns.add(busco_column)
+
+        for row in rows:
+            accession = row.get(accession_column, "").strip()
+            if not accession:
+                raise FastAniInputError(f"BUSCO table {path} contains an empty accession.")
+            entry = index.setdefault(accession, {})
+            value = row.get(busco_column, "").strip()
+            entry[busco_column] = value if value else MISSING_VALUE
     return index
 
 
@@ -286,7 +294,7 @@ def run_build_fastani_inputs(
     staged_manifest: Path,
     checkm2: Path,
     sixteen_s_status: Path,
-    busco: Path,
+    busco: Sequence[Path],
     primary_busco_column: str,
     outdir: Path,
 ) -> None:

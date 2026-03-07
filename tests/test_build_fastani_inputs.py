@@ -94,13 +94,22 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
                 + "\n",
             )
             busco = self.write_text_file(
-                tmpdir / "busco.tsv",
+                tmpdir / "busco_bacillota.tsv",
                 "\n".join(
                     [
-                        "accession\tlineage\tBUSCO_bacillota_odb12\tBUSCO_mycoplasmatota_odb12\tbusco_status\twarnings",
-                        "ACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tNA\tdone\t",
-                        "ACC1\tmycoplasmatota_odb12\tNA\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:180\tdone\t",
-                        "ACC2\tbacillota_odb12\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200\tNA\tdone\t",
+                        "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings",
+                        "ACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t",
+                        "ACC2\tbacillota_odb12\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco_mycoplasmatota = self.write_text_file(
+                tmpdir / "busco_mycoplasmatota.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_mycoplasmatota_odb12\tbusco_status\twarnings",
+                        "ACC1\tmycoplasmatota_odb12\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:180\tdone\t",
                     ]
                 )
                 + "\n",
@@ -121,6 +130,8 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
                     str(sixteen_s),
                     "--busco",
                     str(busco),
+                    "--busco",
+                    str(busco_mycoplasmatota),
                     "--primary-busco-column",
                     "BUSCO_bacillota_odb12",
                     "--outdir",
