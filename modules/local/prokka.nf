@@ -4,6 +4,13 @@
  */
 process PROKKA {
     tag "${meta.accession}"
+    label 'process_high'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/prokka" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(genome), val(gcode)

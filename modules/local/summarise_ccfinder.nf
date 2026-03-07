@@ -4,6 +4,13 @@
  */
 process SUMMARISE_CCFINDER {
     tag "${meta.accession}"
+    label 'process_single'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/ccfinder" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(result_json)

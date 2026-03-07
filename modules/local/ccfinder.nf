@@ -1,9 +1,15 @@
 /*
- * Run CRISPRCasFinder through a user-configurable command template so the
- * legacy invocation can be preserved without hard-coding the wrong flags here.
+ * Run CRISPRCasFinder with the locked standalone invocation semantics.
  */
 process CCFINDER {
     tag "${meta.accession}"
+    label 'process_high'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/ccfinder" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(genome), val(gcode)
@@ -14,31 +20,36 @@ process CCFINDER {
     path 'versions.yml', emit: versions
 
     script:
-    def commandTemplate = (params.ccfinder_command_template ?: '').replace("'", "'\"'\"'")
+    def ccfinderRoot = (params.ccfinder_root ?: '/usr/local/CRISPRCasFinder').toString()
+    def macsyfinderCpus = params.ccfinder_cpu_macsyfinder ?: 30
+    def extraArgs = (params.ccfinder_extra_args ?: '').toString()
     """
-    if [[ -z '${commandTemplate}' ]]; then
-        echo "params.ccfinder_command_template is required for CCFINDER." >&2
+    ccfinder_root='${ccfinderRoot}'
+    if [[ ! -f "\${ccfinder_root}/CRISPRCasFinder.pl" ]]; then
+        echo "CRISPRCasFinder.pl not found under \${ccfinder_root}." >&2
         exit 1
     fi
 
-    genome_path=\$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())' "${genome}")
-    outdir_path="\$PWD/ccfinder"
-    genome_escaped=\$(printf '%q' "\${genome_path}")
-    outdir_escaped=\$(printf '%q' "\${outdir_path}")
-    gcode_escaped=\$(printf '%q' "${gcode}")
-    command_template='${commandTemplate}'
-    command_template="\${command_template//\\{genome\\}/\${genome_escaped}}"
-    command_template="\${command_template//\\{outdir\\}/\${outdir_escaped}}"
-    command_template="\${command_template//\\{gcode\\}/\${gcode_escaped}}"
-
     set +e
-    eval "\${command_template}" > ccfinder.log 2>&1
+    perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "${genome}" \
+        -outdir "\$PWD/ccfinder" \
+        -soFile "\${ccfinder_root}/sel392v2.so" \
+        -DBcrispr "\${ccfinder_root}/supplementary_files/CRISPR_crisprdb.csv" \
+        -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
+        -DIRrepeat "\${ccfinder_root}/supplementary_files/repeatDirection.tsv" \
+        -CASFinder "\${ccfinder_root}/CasFinder-2.0.3" \
+        -cpuMacSyFinder ${macsyfinderCpus} -cpuProkka ${task.cpus} \
+        -log -html -levelMin 2 \
+        -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \
+        ${extraArgs} \
+        > ccfinder.log 2>&1
     exit_code=\$?
     set -e
 
     mkdir -p ccfinder
-    if [[ -f ccfinder/result.json ]]; then
-        cp ccfinder/result.json result.json
+    result_json_path=\$(find ccfinder -type f -name 'result.json' | head -n 1 || true)
+    if [[ -n "\${result_json_path}" ]]; then
+        cp "\${result_json_path}" result.json
     else
         : > result.json
     fi
@@ -47,7 +58,7 @@ process CCFINDER {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      invocation_mode: "template"
+      crisprcasfinder: "$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 
@@ -61,7 +72,7 @@ process CCFINDER {
     : > ccfinder.log
     cat <<'EOF' > versions.yml
     "${task.process}":
-      invocation_mode: "stub"
+      crisprcasfinder: "stub"
     EOF
     '''
 }
