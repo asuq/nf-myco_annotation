@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,12 @@ if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
 import cluster_ani  # noqa: E402
+
+
+def read_tsv(path: Path) -> list[dict[str, str]]:
+    """Read a TSV file into row dictionaries."""
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 class ClusterAniHelperTestCase(unittest.TestCase):
@@ -125,6 +132,75 @@ class ClusterAniHelperTestCase(unittest.TestCase):
             self.assertEqual(eligible_names, ["fastani_inputs/ACC1.fasta"])
             self.assertIn("fastani_inputs/ACC1.fasta", metadata)
             self.assertEqual(metadata["fastani_inputs/ACC1.fasta"].Accession, "ACC1")
+
+    def test_main_writes_cluster_memberships_without_representatives(self) -> None:
+        """Emit stable cluster assignments only from the ANI matrix and metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            matrix = tmpdir / "fastani.matrix"
+            matrix.write_text(
+                "\n".join(
+                    [
+                        "3",
+                        "fastani_inputs/ACC1.fasta",
+                        "fastani_inputs/ACC2.fasta 97.5000",
+                        "fastani_inputs/ACC3.fasta 80.0000 79.5000",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            metadata_tsv = tmpdir / "ani_metadata.tsv"
+            metadata_tsv.write_text(
+                "\n".join(
+                    [
+                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\torganism_name\tBUSCO_bacillota_odb12",
+                        "ACC2\tfastani_inputs/ACC2.fasta\tfastani_inputs/ACC2.fasta\tScaffold\t11\t95\t1.0\t50000\t4\t1000000\tTwo\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200",
+                        "ACC1\tfastani_inputs/ACC1.fasta\tfastani_inputs/ACC1.fasta\tScaffold\t11\t94\t1.5\t49000\t5\t1000000\tOne\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:200",
+                        "ACC3\tfastani_inputs/ACC3.fasta\tfastani_inputs/ACC3.fasta\tScaffold\t4\t93\t2.0\t48000\t6\t1000000\tThree\tC:95.0%[S:95.0%,D:0.0%],F:3.0%,M:2.0%,n:200",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = cluster_ani.main(
+                [
+                    "--ani-matrix",
+                    str(matrix),
+                    "--ani-metadata",
+                    str(metadata_tsv),
+                    "--threshold",
+                    "0.95",
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            rows = read_tsv(outdir / "cluster.tsv")
+            self.assertEqual(
+                rows,
+                [
+                    {
+                        "Accession": "ACC1",
+                        "Cluster_ID": "C000001",
+                        "Matrix_Name": "fastani_inputs/ACC1.fasta",
+                    },
+                    {
+                        "Accession": "ACC2",
+                        "Cluster_ID": "C000001",
+                        "Matrix_Name": "fastani_inputs/ACC2.fasta",
+                    },
+                    {
+                        "Accession": "ACC3",
+                        "Cluster_ID": "C000002",
+                        "Matrix_Name": "fastani_inputs/ACC3.fasta",
+                    },
+                ],
+            )
+            self.assertFalse((outdir / "representatives.tsv").exists())
 
 
 if __name__ == "__main__":

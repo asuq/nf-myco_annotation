@@ -361,6 +361,153 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 "missing_busco_mycoplasmatota_odb12_summary",
             )
 
+    def test_main_selects_ani_representatives_from_clusters_during_final_build(self) -> None:
+        """Derive ANI representative columns from cluster memberships, metadata, and matrix."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                        "ACC2\tfalse\tNA\t/path/two.fna\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                        "ACC1\t123\tOne\tComplete Genome\t100000\t1\t900000\tNA",
+                        "ACC2\t456\tTwo\tScaffold\t50000\t5\t850000\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "\n".join(
+                    [
+                        "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings",
+                        "ACC1\t90\t97\t2\t1\t0.8\t0.95\t850\t980\t780\t910\t11\tfalse\tdone\t",
+                        "ACC2\t88\t93\t3\t2\t0.75\t0.90\t800\t930\t760\t880\t11\tfalse\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC1\tYes\th1\t1500\ttrue\t",
+                        "ACC2\tYes\th2\t1490\ttrue\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings",
+                        "ACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t",
+                        "ACC2\tbacillota_odb12\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            ani_clusters = self.write_text_file(
+                tmpdir / "cluster.tsv",
+                "\n".join(
+                    [
+                        "Accession\tCluster_ID\tMatrix_Name",
+                        "ACC1\tC000001\tfastani_inputs/ACC1.fasta",
+                        "ACC2\tC000001\tfastani_inputs/ACC2.fasta",
+                    ]
+                )
+                + "\n",
+            )
+            ani_metadata = self.write_text_file(
+                tmpdir / "ani_metadata.tsv",
+                "\n".join(
+                    [
+                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\torganism_name\tBUSCO_bacillota_odb12",
+                        "ACC1\tfastani_inputs/ACC1.fasta\tfastani_inputs/ACC1.fasta\tComplete Genome\t11\t97\t1\t100000\t1\t900000\tOne\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+                        "ACC2\tfastani_inputs/ACC2.fasta\tfastani_inputs/ACC2.fasta\tScaffold\t11\t93\t2\t50000\t5\t850000\tTwo\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200",
+                    ]
+                )
+                + "\n",
+            )
+            ani_matrix = self.write_text_file(
+                tmpdir / "fastani.matrix",
+                "\n".join(
+                    [
+                        "2",
+                        "fastani_inputs/ACC1.fasta",
+                        "fastani_inputs/ACC2.fasta 97.2500",
+                    ]
+                )
+                + "\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+            status_output = tmpdir / "sample_status.tsv"
+            representatives_output = tmpdir / "ani_representatives.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco),
+                    "--ani-clusters",
+                    str(ani_clusters),
+                    "--ani-metadata",
+                    str(ani_metadata),
+                    "--ani-matrix",
+                    str(ani_matrix),
+                    "--ani-representatives-output",
+                    str(representatives_output),
+                    "--output",
+                    str(master_output),
+                    "--sample-status-output",
+                    str(status_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, master_rows = read_tsv_rows(master_output)
+            _, status_rows = read_tsv_rows(status_output)
+            _, representative_rows = read_tsv_rows(representatives_output)
+            master_by_accession = {row["Accession"]: row for row in master_rows}
+            status_by_accession = {row["accession"]: row for row in status_rows}
+
+            self.assertEqual(master_by_accession["ACC1"]["Cluster_ID"], "C000001")
+            self.assertEqual(master_by_accession["ACC1"]["Is_Representative"], "yes")
+            self.assertEqual(master_by_accession["ACC1"]["ANI_to_Representative"], "100.0000")
+            self.assertNotEqual(master_by_accession["ACC1"]["Score"], "NA")
+
+            self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "C000001")
+            self.assertEqual(master_by_accession["ACC2"]["Is_Representative"], "no")
+            self.assertEqual(master_by_accession["ACC2"]["ANI_to_Representative"], "97.2500")
+            self.assertNotEqual(master_by_accession["ACC2"]["Score"], "NA")
+
+            self.assertEqual(representative_rows[0]["Cluster_ID"], "C000001")
+            self.assertEqual(representative_rows[0]["Representative_Accession"], "ACC1")
+            self.assertEqual(status_by_accession["ACC1"]["ani_included"], "true")
+            self.assertEqual(status_by_accession["ACC2"]["ani_included"], "true")
+
     def test_main_handles_new_genome_with_sparse_metadata(self) -> None:
         """Fill missing metadata with NA while preserving supplemental new-sample values."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
