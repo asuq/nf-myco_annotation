@@ -4,13 +4,22 @@
  */
 process FASTANI {
     tag "fastani"
+    label 'process_medium'
+    publishDir(
+        { "${params.outdir}/cohort/fastani" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
+    path fastani_inputs
     path fastani_paths
 
     output:
     path 'fastani.matrix', emit: matrix
     path 'fastani.tsv', emit: raw_output
+    path 'fastani.log', emit: log
     path 'versions.yml', emit: versions
 
     script:
@@ -45,8 +54,12 @@ process FASTANI {
 
     stub:
     '''
-    : > fastani.matrix
+    cat <<'EOF' > fastani.matrix
+    1
+    fastani_inputs/sample_a.fasta
+    EOF
     : > fastani.tsv
+    : > fastani.log
     cat <<'EOF' > versions.yml
     "${task.process}":
       fastani: "stub"

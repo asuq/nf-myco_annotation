@@ -4,6 +4,13 @@
  */
 process CLUSTER_ANI {
     tag "ani_cluster"
+    label 'process_medium'
+    publishDir(
+        { "${params.outdir}/cohort/ani_clusters" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     path ani_matrix
@@ -22,6 +29,7 @@ process CLUSTER_ANI {
         --ani-matrix "${ani_matrix}" \
         --ani-metadata "${ani_metadata}" \
         --busco-column "${buscoColumn}" \
+        --matrix-name-column matrix_name \
         --threshold ${aniThreshold} \
         --threads ${task.cpus} \
         --outdir .

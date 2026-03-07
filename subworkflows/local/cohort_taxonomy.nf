@@ -1,15 +1,19 @@
 include { TAXONOMY_EXPAND } from '../../modules/local/taxonomy_expand'
 
 /*
- * Placeholder for cohort-level taxonomy expansion.
+ * Expand taxonomy for the requested sample set from a pinned user-supplied
+ * taxdump directory.
  */
 workflow COHORT_TAXONOMY {
     take:
-    taxonomy_inputs
+    validated_samples
+    metadata
+    taxdump
 
     main:
-    results = taxonomy_inputs
+    TAXONOMY_EXPAND(validated_samples, metadata, taxdump)
 
     emit:
-    results = results
+    taxonomy = TAXONOMY_EXPAND.out.taxonomy
+    versions = TAXONOMY_EXPAND.out.versions
 }
