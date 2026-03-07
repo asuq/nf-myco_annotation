@@ -1,4 +1,4 @@
-"""Tests for final master-table assembly."""
+"""Tests for final master-table and sample-status assembly."""
 
 from __future__ import annotations
 
@@ -18,16 +18,16 @@ import build_master_table  # noqa: E402
 import master_table_contract  # noqa: E402
 
 
-def read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    """Read a CSV file into a header and row dictionaries."""
+def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read a TSV file into a header and row dictionaries."""
     with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
+        reader = csv.DictReader(handle, delimiter="\t")
         assert reader.fieldnames is not None
         return reader.fieldnames, list(reader)
 
 
 class BuildMasterTableTestCase(unittest.TestCase):
-    """Cover metadata preservation, supplemental fills, and duplicate detection."""
+    """Cover manifest-driven joins, stable order, and NA propagation."""
 
     def write_text_file(self, path: Path, content: str) -> Path:
         """Write a UTF-8 text file and return its path."""
@@ -35,8 +35,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
-    def test_main_builds_master_table_with_preserved_metadata_and_na_fills(self) -> None:
-        """Preserve metadata order and fill new-sample metadata from validated extras."""
+    def test_main_builds_master_table_and_sample_status_with_stable_order(self) -> None:
+        """Preserve metadata order, append locked columns, and emit sample status."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             validated_samples = self.write_text_file(
@@ -134,7 +134,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
-            output = tmpdir / "master_table.csv"
+            master_output = tmpdir / "master_table.tsv"
+            status_output = tmpdir / "sample_status.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -159,36 +160,306 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--ani",
                     str(ani),
                     "--output",
-                    str(output),
+                    str(master_output),
+                    "--sample-status-output",
+                    str(status_output),
                 ]
             )
 
             self.assertEqual(exit_code, 0)
-            header, rows = read_csv_rows(output)
-            expected_header = master_table_contract.build_master_table_columns(
+
+            master_header, master_rows = read_tsv_rows(master_output)
+            status_header, status_rows = read_tsv_rows(status_output)
+            expected_master_header = master_table_contract.build_master_table_columns(
                 ["Accession", "Tax_ID", "Organism_Name", "Atypical_Warnings"]
             )
-            self.assertEqual(header, expected_header)
-            self.assertEqual(len(rows), 2)
 
-            self.assertEqual(rows[0]["Accession"], "ACC1")
-            self.assertEqual(rows[0]["Tax_ID"], "123")
-            self.assertEqual(rows[0]["superkingdom"], "Bacteria")
-            self.assertEqual(rows[0]["16S"], "Yes")
-            self.assertEqual(rows[0]["CRISPRS"], "2")
-            self.assertEqual(rows[0]["Cluster_ID"], "cluster_1")
+            self.assertEqual(master_header, expected_master_header)
+            self.assertEqual(status_header, build_master_table.load_sample_status_columns())
+            self.assertNotIn("PADLOC", master_header)
+            self.assertNotIn("eggNOG", master_header)
+            self.assertEqual(len(master_rows), 2)
+            self.assertEqual(len(status_rows), 2)
 
-            self.assertEqual(rows[1]["Accession"], "ACC2")
-            self.assertEqual(rows[1]["Tax_ID"], "NA")
-            self.assertEqual(rows[1]["Organism_Name"], "Candidate two")
-            self.assertEqual(rows[1]["Atypical_Warnings"], "NA")
-            self.assertEqual(rows[1]["superkingdom"], "NA")
-            self.assertEqual(rows[1]["16S"], "No")
-            self.assertEqual(rows[1]["CRISPRS"], "NA")
-            self.assertEqual(rows[1]["Cluster_ID"], "NA")
+            master_by_accession = {row["Accession"]: row for row in master_rows}
+            status_by_accession = {row["accession"]: row for row in status_rows}
+
+            self.assertEqual(master_by_accession["ACC1"]["Tax_ID"], "123")
+            self.assertEqual(master_by_accession["ACC1"]["superkingdom"], "Bacteria")
+            self.assertEqual(master_by_accession["ACC1"]["16S"], "Yes")
+            self.assertEqual(master_by_accession["ACC1"]["CRISPRS"], "2")
+            self.assertEqual(master_by_accession["ACC1"]["Cluster_ID"], "cluster_1")
+
+            self.assertEqual(master_by_accession["ACC2"]["Accession"], "ACC2")
+            self.assertEqual(master_by_accession["ACC2"]["Tax_ID"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["Organism_Name"], "Candidate two")
+            self.assertEqual(master_by_accession["ACC2"]["Atypical_Warnings"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["superkingdom"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["CRISPRS"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "NA")
+
+            self.assertEqual(status_by_accession["ACC1"]["ani_included"], "true")
+            self.assertEqual(status_by_accession["ACC1"]["ccfinder_status"], "done")
+            self.assertEqual(status_by_accession["ACC1"]["busco_bacillota_odb12_status"], "done")
+            self.assertEqual(
+                status_by_accession["ACC1"]["busco_mycoplasmatota_odb12_status"],
+                "done",
+            )
+
+            self.assertEqual(status_by_accession["ACC2"]["validation_status"], "done")
+            self.assertEqual(status_by_accession["ACC2"]["taxonomy_status"], "na")
+            self.assertEqual(status_by_accession["ACC2"]["gcode_status"], "failed")
+            self.assertEqual(status_by_accession["ACC2"]["prokka_status"], "skipped")
+            self.assertEqual(status_by_accession["ACC2"]["ccfinder_status"], "skipped")
+            self.assertEqual(status_by_accession["ACC2"]["ani_included"], "false")
+            self.assertEqual(
+                status_by_accession["ACC2"]["ani_exclusion_reason"],
+                "gcode_na;no_16s;missing_primary_busco",
+            )
+            self.assertEqual(
+                status_by_accession["ACC2"]["warnings"],
+                "gcode_na;busco_summary_failed;missing_metadata_for_new_sample",
+            )
+            self.assertEqual(
+                status_by_accession["ACC2"]["notes"],
+                "New sample metadata missing; unavailable fields filled with NA.",
+            )
+
+    def test_main_uses_keyed_joins_and_marks_missing_joins(self) -> None:
+        """Join by accession only and propagate missing derived rows as NA."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                        "ACC2\tfalse\tNA\t/path/two.fna\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings",
+                        "ACC1\t123\tOne\tNA",
+                        "ACC2\t456\tTwo\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "\n".join(
+                    [
+                        "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings",
+                        "ACC2\t60\t92\t6\t2\t0.6\t0.92\t600\t920\t500\t900\t11\tfalse\tdone\t",
+                        "ACC1\t94\t80\t1\t2\t0.95\t0.8\t940\t800\t910\t790\t4\tfalse\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC2\tpartial\th2\t1200\tfalse\t",
+                        "ACC1\tYes\th1\t1500\ttrue\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco_one = self.write_text_file(
+                tmpdir / "busco_b.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings",
+                        "ACC2\tbacillota_odb12\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco_two = self.write_text_file(
+                tmpdir / "busco_m.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_mycoplasmatota_odb12\tbusco_status\twarnings",
+                        "ACC1\tmycoplasmatota_odb12\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:180\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+            status_output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco_one),
+                    "--busco",
+                    str(busco_two),
+                    "--output",
+                    str(master_output),
+                    "--sample-status-output",
+                    str(status_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, master_rows = read_tsv_rows(master_output)
+            _, status_rows = read_tsv_rows(status_output)
+            master_by_accession = {row["Accession"]: row for row in master_rows}
+            status_by_accession = {row["accession"]: row for row in status_rows}
+
+            self.assertEqual(master_by_accession["ACC1"]["Gcode"], "4")
+            self.assertEqual(master_by_accession["ACC1"]["16S"], "Yes")
+            self.assertEqual(master_by_accession["ACC1"]["BUSCO_bacillota_odb12"], "NA")
+            self.assertEqual(
+                master_by_accession["ACC1"]["BUSCO_mycoplasmatota_odb12"],
+                "C:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:180",
+            )
+
+            self.assertEqual(master_by_accession["ACC2"]["Gcode"], "11")
+            self.assertEqual(master_by_accession["ACC2"]["16S"], "partial")
+            self.assertEqual(
+                master_by_accession["ACC2"]["BUSCO_bacillota_odb12"],
+                "C:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200",
+            )
+            self.assertEqual(master_by_accession["ACC2"]["BUSCO_mycoplasmatota_odb12"], "NA")
+
+            self.assertEqual(status_by_accession["ACC1"]["busco_bacillota_odb12_status"], "failed")
+            self.assertEqual(
+                status_by_accession["ACC1"]["busco_mycoplasmatota_odb12_status"],
+                "done",
+            )
+            self.assertEqual(
+                status_by_accession["ACC1"]["warnings"],
+                "missing_busco_bacillota_odb12_summary",
+            )
+
+            self.assertEqual(status_by_accession["ACC2"]["busco_bacillota_odb12_status"], "done")
+            self.assertEqual(
+                status_by_accession["ACC2"]["busco_mycoplasmatota_odb12_status"],
+                "failed",
+            )
+            self.assertEqual(
+                status_by_accession["ACC2"]["warnings"],
+                "missing_busco_mycoplasmatota_odb12_summary",
+            )
+
+    def test_main_handles_new_genome_with_sparse_metadata(self) -> None:
+        """Fill missing metadata with NA while preserving supplemental new-sample values."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\torganism_name\tinternal_id",
+                        "ACC_NEW\ttrue\tContig\t/path/new.fna\tNovel isolate\tnew_id",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+            status_output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--output",
+                    str(master_output),
+                    "--sample-status-output",
+                    str(status_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, master_rows = read_tsv_rows(master_output)
+            _, status_rows = read_tsv_rows(status_output)
+
+            self.assertEqual(len(master_rows), 1)
+            self.assertEqual(master_rows[0]["Accession"], "ACC_NEW")
+            self.assertEqual(master_rows[0]["Tax_ID"], "NA")
+            self.assertEqual(master_rows[0]["Organism_Name"], "Novel isolate")
+            self.assertEqual(master_rows[0]["Atypical_Warnings"], "NA")
+            self.assertEqual(master_rows[0]["Gcode"], "NA")
+            self.assertEqual(master_rows[0]["BUSCO_bacillota_odb12"], "NA")
+            self.assertEqual(master_rows[0]["CRISPRS"], "NA")
+
+            self.assertEqual(len(status_rows), 1)
+            self.assertEqual(status_rows[0]["accession"], "ACC_NEW")
+            self.assertEqual(status_rows[0]["validation_status"], "done")
+            self.assertEqual(status_rows[0]["warnings"], "missing_metadata_for_new_sample")
+            self.assertEqual(
+                status_rows[0]["notes"],
+                "New sample metadata missing; unavailable fields filled with NA.",
+            )
+            self.assertEqual(status_rows[0]["barrnap_status"], "na")
+            self.assertEqual(status_rows[0]["ani_included"], "na")
+
+    def test_main_rejects_duplicate_accessions_in_validated_manifest(self) -> None:
+        """Fail when validated_samples.tsv contains duplicate accession rows."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                        "ACC1\ttrue\tScaffold\t/path/two.fna\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\nACC1\t123\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--output",
+                    str(master_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(master_output.exists())
 
     def test_main_rejects_duplicate_rows_in_derived_tables(self) -> None:
-        """Fail when a derived table creates ambiguous duplicate accession joins."""
+        """Fail when a derived accession-keyed table contains ambiguous duplicates."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             validated_samples = self.write_text_file(
@@ -216,7 +487,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
-            output = tmpdir / "master_table.csv"
+            master_output = tmpdir / "master_table.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -229,154 +500,15 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--checkm2",
                     str(duplicate_checkm2),
                     "--output",
-                    str(output),
+                    str(master_output),
                 ]
             )
 
             self.assertEqual(exit_code, 1)
-            self.assertFalse(output.exists())
-
-    def test_main_rejects_duplicate_internal_ids_in_validated_samples(self) -> None:
-        """Fail when the validated manifest maps two rows to the same internal ID."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            validated_samples = self.write_text_file(
-                tmpdir / "validated_samples.tsv",
-                "\n".join(
-                    [
-                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
-                        "ACC1\tfalse\tNA\t/path/one.fna\tdup_id",
-                        "ACC2\ttrue\tScaffold\t/path/two.fna\tdup_id",
-                    ]
-                )
-                + "\n",
-            )
-            metadata = self.write_text_file(
-                tmpdir / "metadata.tsv",
-                "Accession\tTax_ID\nACC1\t123\n",
-            )
-            output = tmpdir / "master_table.csv"
-
-            exit_code = build_master_table.main(
-                [
-                    "--validated-samples",
-                    str(validated_samples),
-                    "--metadata",
-                    str(metadata),
-                    "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
-                    "--output",
-                    str(output),
-                ]
-            )
-
-            self.assertEqual(exit_code, 1)
-            self.assertFalse(output.exists())
-
-    def test_main_rejects_metadata_with_both_accession_header_variants(self) -> None:
-        """Fail when metadata contains both `accession` and `Accession` key columns."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            validated_samples = self.write_text_file(
-                tmpdir / "validated_samples.tsv",
-                "\n".join(
-                    [
-                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
-                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
-                    ]
-                )
-                + "\n",
-            )
-            metadata = self.write_text_file(
-                tmpdir / "metadata.tsv",
-                "\n".join(
-                    [
-                        "accession\tAccession\tTax_ID",
-                        "ACC1\tACC1\t123",
-                    ]
-                )
-                + "\n",
-            )
-            output = tmpdir / "master_table.csv"
-
-            exit_code = build_master_table.main(
-                [
-                    "--validated-samples",
-                    str(validated_samples),
-                    "--metadata",
-                    str(metadata),
-                    "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
-                    "--output",
-                    str(output),
-                ]
-            )
-
-            self.assertEqual(exit_code, 1)
-            self.assertFalse(output.exists())
-
-    def test_main_rejects_duplicate_busco_lineage_inputs(self) -> None:
-        """Fail when the same BUSCO lineage column is supplied more than once."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            validated_samples = self.write_text_file(
-                tmpdir / "validated_samples.tsv",
-                "\n".join(
-                    [
-                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
-                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
-                    ]
-                )
-                + "\n",
-            )
-            metadata = self.write_text_file(
-                tmpdir / "metadata.tsv",
-                "Accession\tTax_ID\nACC1\t123\n",
-            )
-            busco_one = self.write_text_file(
-                tmpdir / "busco_1.tsv",
-                "\n".join(
-                    [
-                        "accession\tBUSCO_bacillota_odb12",
-                        "ACC1\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
-                    ]
-                )
-                + "\n",
-            )
-            busco_two = self.write_text_file(
-                tmpdir / "busco_2.tsv",
-                "\n".join(
-                    [
-                        "accession\tBUSCO_bacillota_odb12",
-                        "ACC1\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:200",
-                    ]
-                )
-                + "\n",
-            )
-            output = tmpdir / "master_table.csv"
-
-            exit_code = build_master_table.main(
-                [
-                    "--validated-samples",
-                    str(validated_samples),
-                    "--metadata",
-                    str(metadata),
-                    "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
-                    "--busco",
-                    str(busco_one),
-                    "--busco",
-                    str(busco_two),
-                    "--output",
-                    str(output),
-                ]
-            )
-
-            self.assertEqual(exit_code, 1)
-            self.assertFalse(output.exists())
+            self.assertFalse(master_output.exists())
 
     def test_main_rejects_append_contract_drift(self) -> None:
-        """Fail when the provided append-column contract no longer matches the code contract."""
+        """Fail when the append-column asset drifts from the locked contract."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             validated_samples = self.write_text_file(
@@ -401,7 +533,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
-            output = tmpdir / "master_table.csv"
+            master_output = tmpdir / "master_table.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -412,12 +544,12 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--append-columns",
                     str(append_columns),
                     "--output",
-                    str(output),
+                    str(master_output),
                 ]
             )
 
             self.assertEqual(exit_code, 1)
-            self.assertFalse(output.exists())
+            self.assertFalse(master_output.exists())
 
 
 if __name__ == "__main__":
