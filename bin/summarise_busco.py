@@ -15,7 +15,14 @@ from typing import Any, Sequence
 
 LOGGER = logging.getLogger(__name__)
 
-BUSCO_STRING_RE = re.compile(r"C:\s*\d+(?:\.\d+)?%.*?M:\s*\d+(?:\.\d+)?%", re.IGNORECASE)
+BUSCO_STRING_RE = re.compile(
+    r"C:\s*\d+(?:\.\d+)?%\s*"
+    r"\[\s*S:\s*\d+(?:\.\d+)?%,\s*D:\s*\d+(?:\.\d+)?%\s*\],\s*"
+    r"F:\s*\d+(?:\.\d+)?%,\s*"
+    r"M:\s*\d+(?:\.\d+)?%,\s*"
+    r"n:\s*\d+",
+    re.IGNORECASE,
+)
 PERCENT_ALIASES = {
     "C": (
         "completepercentage",
@@ -108,6 +115,19 @@ def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
+def busco_column_name(lineage: str) -> str:
+    """Return the stable output column name for one BUSCO lineage."""
+    return f"BUSCO_{lineage}"
+
+
+def primary_busco_column(configured_lineages: Sequence[str]) -> str:
+    """Return the BUSCO column name used as the primary ANI-scoring lineage."""
+    lineages = tuple(lineage.strip() for lineage in configured_lineages if lineage.strip())
+    if not lineages:
+        raise ValueError("At least one BUSCO lineage is required.")
+    return busco_column_name(lineages[0])
+
+
 def normalise_key(key: str) -> str:
     """Normalise a JSON key for alias matching."""
     return "".join(character for character in key.lower() if character.isalnum())
@@ -136,7 +156,10 @@ def collect_scalar_values(data: Any) -> dict[str, list[Any]]:
 def find_existing_busco_string(data: Any) -> str | None:
     """Find an existing BUSCO summary string anywhere in the JSON document."""
     if isinstance(data, str):
-        return data if BUSCO_STRING_RE.search(data) else None
+        match = BUSCO_STRING_RE.search(data)
+        if match is None:
+            return None
+        return match.group(0)
     if isinstance(data, dict):
         for value in data.values():
             found = find_existing_busco_string(value)
@@ -273,7 +296,7 @@ def write_output(
     output: Path,
 ) -> None:
     """Write the one-row BUSCO summary TSV."""
-    busco_column = f"BUSCO_{lineage}"
+    busco_column = busco_column_name(lineage)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(

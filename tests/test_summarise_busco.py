@@ -18,10 +18,17 @@ if str(BIN_DIR) not in sys.path:
 import summarise_busco  # noqa: E402
 
 
+def read_tsv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read a TSV file into a header and row dictionaries."""
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames is not None
+        return reader.fieldnames, list(reader)
+
+
 def read_tsv_row(path: Path) -> dict[str, str]:
     """Read a single-row TSV file."""
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
+    _, rows = read_tsv(path)
     return rows[0]
 
 
@@ -71,6 +78,98 @@ class SummariseBuscoTestCase(unittest.TestCase):
             )
             self.assertEqual(row["busco_status"], "done")
             self.assertEqual(row["warnings"], "")
+
+    def test_main_keeps_both_configured_lineages_in_distinct_columns(self) -> None:
+        """Emit stable lineage-specific BUSCO columns for both configured lineages."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            bacillota_summary = self.write_json(
+                tmpdir / "bacillota.json",
+                {
+                    "results": {
+                        "one_line_summary": (
+                            "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200"
+                        )
+                    }
+                },
+            )
+            mycoplasmatota_summary = self.write_json(
+                tmpdir / "mycoplasmatota.json",
+                {
+                    "results": {
+                        "one_line_summary": (
+                            "C:97.0%[S:96.0%,D:1.0%],F:2.0%,M:1.0%,n:180"
+                        )
+                    }
+                },
+            )
+            bacillota_output = tmpdir / "bacillota.tsv"
+            mycoplasmatota_output = tmpdir / "mycoplasmatota.tsv"
+
+            self.assertEqual(
+                summarise_busco.main(
+                    [
+                        "--accession",
+                        "ACC_BOTH",
+                        "--summary",
+                        str(bacillota_summary),
+                        "--lineage",
+                        "bacillota_odb12",
+                        "--output",
+                        str(bacillota_output),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                summarise_busco.main(
+                    [
+                        "--accession",
+                        "ACC_BOTH",
+                        "--summary",
+                        str(mycoplasmatota_summary),
+                        "--lineage",
+                        "mycoplasmatota_odb12",
+                        "--output",
+                        str(mycoplasmatota_output),
+                    ]
+                ),
+                0,
+            )
+
+            bacillota_header, bacillota_rows = read_tsv(bacillota_output)
+            mycoplasmatota_header, mycoplasmatota_rows = read_tsv(mycoplasmatota_output)
+
+            self.assertEqual(
+                bacillota_header,
+                [
+                    "accession",
+                    "lineage",
+                    "BUSCO_bacillota_odb12",
+                    "busco_status",
+                    "warnings",
+                ],
+            )
+            self.assertEqual(
+                mycoplasmatota_header,
+                [
+                    "accession",
+                    "lineage",
+                    "BUSCO_mycoplasmatota_odb12",
+                    "busco_status",
+                    "warnings",
+                ],
+            )
+            self.assertNotIn("BUSCO_selected", bacillota_header)
+            self.assertNotIn("BUSCO_selected", mycoplasmatota_header)
+            self.assertEqual(
+                bacillota_rows[0]["BUSCO_bacillota_odb12"],
+                "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+            )
+            self.assertEqual(
+                mycoplasmatota_rows[0]["BUSCO_mycoplasmatota_odb12"],
+                "C:97.0%[S:96.0%,D:1.0%],F:2.0%,M:1.0%,n:180",
+            )
 
     def test_main_builds_busco_string_from_numeric_percentages(self) -> None:
         """Construct a cluster_ani-compatible summary string from numeric JSON values."""
@@ -138,6 +237,41 @@ class SummariseBuscoTestCase(unittest.TestCase):
             self.assertEqual(row["busco_status"], "failed")
             self.assertEqual(row["warnings"], "busco_summary_failed")
 
+    def test_main_marks_missing_lineage_output_as_failed(self) -> None:
+        """Emit an NA row for a missing lineage-specific BUSCO output."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC_MISSING",
+                    "--summary",
+                    str(tmpdir / "missing_mycoplasmatota.json"),
+                    "--lineage",
+                    "mycoplasmatota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            header, rows = read_tsv(output)
+            self.assertEqual(
+                header,
+                [
+                    "accession",
+                    "lineage",
+                    "BUSCO_mycoplasmatota_odb12",
+                    "busco_status",
+                    "warnings",
+                ],
+            )
+            self.assertEqual(rows[0]["BUSCO_mycoplasmatota_odb12"], "NA")
+            self.assertEqual(rows[0]["busco_status"], "failed")
+            self.assertEqual(rows[0]["warnings"], "busco_summary_failed")
+
     def test_main_builds_busco_string_from_counts(self) -> None:
         """Reconstruct percentages from count-style machine-readable fields."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -200,6 +334,48 @@ class SummariseBuscoTestCase(unittest.TestCase):
             row = read_tsv_row(output)
             self.assertEqual(row["BUSCO_bacillota_odb12"], "NA")
             self.assertEqual(row["busco_status"], "failed")
+
+    def test_main_marks_malformed_machine_readable_summary_as_failed(self) -> None:
+        """Reject JSON that contains a malformed BUSCO one-line summary string."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            summary = self.write_json(
+                tmpdir / "short_summary.json",
+                {
+                    "results": {
+                        "one_line_summary": "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%"
+                    }
+                },
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC_BAD",
+                    "--summary",
+                    str(summary),
+                    "--lineage",
+                    "bacillota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["BUSCO_bacillota_odb12"], "NA")
+            self.assertEqual(row["busco_status"], "failed")
+            self.assertEqual(row["warnings"], "busco_summary_failed")
+
+    def test_primary_busco_column_uses_first_configured_lineage(self) -> None:
+        """Expose the primary BUSCO column from the first configured lineage."""
+        self.assertEqual(
+            summarise_busco.primary_busco_column(
+                ["mycoplasmatota_odb12", "bacillota_odb12"]
+            ),
+            "BUSCO_mycoplasmatota_odb12",
+        )
 
 
 if __name__ == "__main__":
