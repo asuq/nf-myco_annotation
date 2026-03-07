@@ -98,13 +98,46 @@ class CollectVersionsTestCase(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             rows = read_tsv(output)
-            row_map = {(row["category"], row["name"], row["source"]): row["value"] for row in rows}
-            self.assertEqual(row_map[("runtime", "nextflow_version", "workflow")], "25.04.8")
-            self.assertEqual(row_map[("resource", "busco_lineages", "params")], "bacillota_odb12;mycoplasmatota_odb12")
-            self.assertEqual(row_map[("container", "python", "params")], "python:3.12-slim")
-            self.assertEqual(row_map[("tool_version", "python", "VALIDATE_INPUTS")], "3.12.1")
-            self.assertEqual(row_map[("script", "script", "VALIDATE_INPUTS")], "bin/validate_inputs.py")
-            self.assertEqual(row_map[("tool_version", "checkm2", "CHECKM2")], "1.0.2")
+            self.assertEqual(list(rows[0]), list(collect_versions.OUTPUT_COLUMNS))
+
+            row_map = {
+                (row["component"], row["kind"], row["notes"]): row
+                for row in rows
+            }
+            self.assertEqual(
+                row_map[("nextflow", "runtime", "workflow")]["version"],
+                "25.04.8",
+            )
+            self.assertEqual(
+                row_map[("busco_datasets", "database", "Configured BUSCO lineages in order")][
+                    "version"
+                ],
+                "bacillota_odb12;mycoplasmatota_odb12",
+            )
+            self.assertEqual(
+                row_map[("bacillota_odb12", "database", "BUSCO lineage dataset")][
+                    "image_or_path"
+                ],
+                "/db/busco/bacillota_odb12",
+            )
+            self.assertEqual(
+                row_map[("python", "container", "params container reference")][
+                    "image_or_path"
+                ],
+                "python:3.12-slim",
+            )
+            self.assertEqual(
+                row_map[("python", "runtime", "reported by VALIDATE_INPUTS")]["version"],
+                "3.12.1",
+            )
+            self.assertEqual(
+                row_map[("VALIDATE_INPUTS", "pipeline", "script")]["image_or_path"],
+                "bin/validate_inputs.py",
+            )
+            self.assertEqual(
+                row_map[("checkm2", "tool", "reported by CHECKM2")]["version"],
+                "1.0.2",
+            )
 
     def test_missing_version_file_fails(self) -> None:
         """Fail cleanly when an input versions file is missing."""
@@ -116,6 +149,46 @@ class CollectVersionsTestCase(unittest.TestCase):
                 [
                     "--version-file",
                     str(tmpdir / "missing.yml"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_invalid_container_ref_fails(self) -> None:
+        """Fail cleanly when a container reference is not name=value."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--container-ref",
+                    "python",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_malformed_versions_file_fails(self) -> None:
+        """Fail cleanly when a versions file is not simple YAML-like key/value text."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            versions = self.write_text_file(
+                tmpdir / "broken_versions.yml",
+                '"VALIDATE_INPUTS"\n  python "3.12.1"\n',
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-file",
+                    str(versions),
                     "--output",
                     str(output),
                 ]

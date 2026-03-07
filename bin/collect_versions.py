@@ -12,10 +12,11 @@ from typing import Sequence
 
 
 LOGGER = logging.getLogger(__name__)
-OUTPUT_COLUMNS = ("category", "name", "value", "source")
-VERSION_CATEGORY_KEYS = {
-    "script": "script",
-    "transform": "helper",
+OUTPUT_COLUMNS = ("component", "kind", "version", "image_or_path", "notes")
+VERSION_KIND_KEYS = {
+    "python": "runtime",
+    "script": "pipeline",
+    "transform": "pipeline",
 }
 
 
@@ -134,6 +135,23 @@ def normalise_value(value: str | None) -> str:
     return stripped if stripped else "NA"
 
 
+def build_row(
+    component: str,
+    kind: str,
+    version: str | None = "NA",
+    image_or_path: str | None = "NA",
+    notes: str | None = "",
+) -> dict[str, str]:
+    """Build one normalized provenance row."""
+    return {
+        "component": normalise_value(component),
+        "kind": normalise_value(kind),
+        "version": normalise_value(version),
+        "image_or_path": normalise_value(image_or_path),
+        "notes": notes.strip() if notes else "",
+    }
+
+
 def parse_name_value(token: str, argument_name: str) -> tuple[str, str]:
     """Parse one name=value token."""
     if "=" not in token:
@@ -176,14 +194,36 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
             name, value = stripped.split(":", 1)
             clean_name = name.strip()
             clean_value = value.strip().strip("'\"")
-            category = VERSION_CATEGORY_KEYS.get(clean_name, "tool_version")
+            kind = VERSION_KIND_KEYS.get(clean_name, "tool")
+            if clean_name == "script":
+                rows.append(
+                    build_row(
+                        component=current_source,
+                        kind=kind,
+                        version="NA",
+                        image_or_path=clean_value,
+                        notes="script",
+                    )
+                )
+                continue
+            if clean_name == "transform":
+                rows.append(
+                    build_row(
+                        component=current_source,
+                        kind=kind,
+                        version="NA",
+                        image_or_path=clean_value,
+                        notes="helper",
+                    )
+                )
+                continue
             rows.append(
-                {
-                    "category": category,
-                    "name": clean_name,
-                    "value": normalise_value(clean_value),
-                    "source": current_source,
-                }
+                build_row(
+                    component=clean_name,
+                    kind=kind,
+                    version=clean_value,
+                    notes=f"reported by {current_source}",
+                )
             )
     return rows
 
@@ -191,75 +231,91 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
 def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     """Build runtime and resource report rows from CLI arguments."""
     rows = [
-        {"category": "runtime", "name": "nextflow_version", "value": normalise_value(args.nextflow_version), "source": "workflow"},
-        {"category": "runtime", "name": "pipeline_version", "value": normalise_value(args.pipeline_version), "source": "workflow"},
-        {"category": "runtime", "name": "git_commit", "value": normalise_value(args.git_commit), "source": "workflow"},
-        {"category": "runtime", "name": "container_engine", "value": normalise_value(args.container_engine), "source": "workflow"},
-        {"category": "config", "name": "use_biocontainers", "value": normalise_value(args.use_biocontainers), "source": "params"},
-        {"category": "resource", "name": "checkm2_db", "value": normalise_value(args.checkm2_db), "source": "params"},
-        {"category": "resource", "name": "checkm2_db_label", "value": normalise_value(args.checkm2_db_label), "source": "params"},
-        {"category": "resource", "name": "taxdump", "value": normalise_value(args.taxdump), "source": "params"},
-        {"category": "resource", "name": "taxdump_label", "value": normalise_value(args.taxdump_label), "source": "params"},
-        {"category": "resource", "name": "busco_download_dir", "value": normalise_value(args.busco_download_dir), "source": "params"},
-        {"category": "resource", "name": "eggnog_db", "value": normalise_value(args.eggnog_db), "source": "params"},
-        {"category": "resource", "name": "eggnog_db_label", "value": normalise_value(args.eggnog_db_label), "source": "params"},
-        {"category": "resource", "name": "padloc_db_label", "value": normalise_value(args.padloc_db_label), "source": "params"},
-        {
-            "category": "resource",
-            "name": "busco_lineages",
-            "value": ";".join(args.busco_lineage) if args.busco_lineage else "NA",
-            "source": "params",
-        },
+        build_row("nextflow", "runtime", args.nextflow_version, notes="workflow"),
+        build_row("pipeline", "pipeline", args.pipeline_version, notes="workflow manifest"),
+        build_row("pipeline_git_commit", "pipeline", args.git_commit, notes="workflow revision"),
+        build_row("container_engine", "runtime", args.container_engine, notes="workflow"),
+        build_row("use_biocontainers", "pipeline", args.use_biocontainers, notes="config flag"),
+        build_row(
+            "checkm2_db",
+            "database",
+            args.checkm2_db_label,
+            args.checkm2_db,
+            "CheckM2 database",
+        ),
+        build_row("taxdump", "database", args.taxdump_label, args.taxdump, "Pinned taxdump"),
+        build_row(
+            "busco_datasets",
+            "database",
+            ";".join(args.busco_lineage) if args.busco_lineage else "NA",
+            args.busco_download_dir,
+            "Configured BUSCO lineages in order",
+        ),
+        build_row(
+            "eggnog_db",
+            "database",
+            args.eggnog_db_label,
+            args.eggnog_db,
+            "eggNOG database",
+        ),
+        build_row(
+            "padloc_db",
+            "database",
+            args.padloc_db_label,
+            "NA",
+            "PADLOC database label",
+        ),
     ]
     for lineage in args.busco_lineage:
         rows.append(
-            {
-                "category": "resource",
-                "name": f"busco_dataset_{lineage}",
-                "value": (
+            build_row(
+                component=lineage,
+                kind="database",
+                version="NA",
+                image_or_path=(
                     str(Path(args.busco_download_dir) / lineage)
                     if normalise_value(args.busco_download_dir) != "NA"
                     else "NA"
                 ),
-                "source": "params",
-            }
+                notes="BUSCO lineage dataset",
+            )
         )
     for token in args.container_ref:
         name, value = parse_name_value(token, "--container-ref")
         rows.append(
-            {
-                "category": "container",
-                "name": name,
-                "value": value,
-                "source": "params",
-            }
+            build_row(name, "container", "NA", value, "params container reference")
         )
     return rows
 
 
 def deduplicate_rows(rows: Sequence[dict[str, str]]) -> list[dict[str, str]]:
     """Deduplicate rows while keeping a stable, category-aware order."""
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[tuple[str, str, str, str, str]] = set()
     ordered_rows: list[dict[str, str]] = []
-    category_order = {
+    kind_order = {
+        "pipeline": 0,
         "runtime": 0,
-        "config": 1,
-        "resource": 2,
+        "database": 1,
         "container": 3,
-        "tool_version": 4,
-        "script": 5,
-        "helper": 6,
+        "tool": 4,
     }
     for row in sorted(
         rows,
         key=lambda row: (
-            category_order.get(row["category"], 99),
-            row["name"],
-            row["source"],
-            row["value"],
+            kind_order.get(row["kind"], 99),
+            row["component"],
+            row["notes"],
+            row["version"],
+            row["image_or_path"],
         ),
     ):
-        key = (row["category"], row["name"], row["value"], row["source"])
+        key = (
+            row["component"],
+            row["kind"],
+            row["version"],
+            row["image_or_path"],
+            row["notes"],
+        )
         if key in seen:
             continue
         seen.add(key)

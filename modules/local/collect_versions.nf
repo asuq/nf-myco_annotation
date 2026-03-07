@@ -67,9 +67,9 @@ process COLLECT_VERSIONS {
     stub:
     '''
     cat <<'EOF' > tool_and_db_versions.tsv
-    category	name	value	source
-    runtime	nextflow_version	stub	workflow
-    tool_version	python	stub	VALIDATE_INPUTS
+    component	kind	version	image_or_path	notes
+    nextflow	runtime	stub	NA	workflow
+    python	runtime	stub	NA	reported by VALIDATE_INPUTS
     EOF
     '''
 }
