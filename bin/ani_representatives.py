@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Representative-selection helpers for ANI clusters."""
+"""Representative-selection helpers for ANI clusters.
+
+This module scores all members within one ANI cluster, selects exactly one
+representative with a deterministic tie cascade, and formats the per-sample and
+per-cluster ANI outputs used downstream.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +23,34 @@ def select_representative_for_indices(
     ani: "np.ndarray",
     score_profile: str,
 ) -> tuple[int, str, list[str]]:
-    """Select one ANI representative for a cluster by score and tie cascade."""
+    """Select one representative for one ANI cluster.
+
+    Each cluster member is scored from six components:
+
+    - assembly rank
+    - CheckM2 quality
+    - BUSCO completeness-minus-missing
+    - N50
+    - scaffold count
+    - ANI centrality within the cluster
+
+    Raw BUSCO, CheckM2, N50, and scaffold values are winsorized for larger
+    clusters, normalized to the [0, 1] range within the cluster, and combined
+    with the chosen weight profile. If the top score is tied within a small
+    epsilon, the deterministic tie cascade is:
+
+    1. higher assembly rank
+    2. higher BUSCO complete percentage
+    3. lower BUSCO missing percentage
+    4. lower contamination
+    5. higher completeness
+    6. fewer scaffolds
+    7. higher N50
+    8. lexicographically smallest accession
+
+    The return value contains the cluster size, the chosen representative
+    matrix-name token, and the debug trace lines explaining the decision.
+    """
     import numpy as np
 
     epsilon = 1e-6
@@ -309,7 +341,13 @@ def build_ani_summary_from_clusters(
     score_profile: str = "default",
     threads: int = 1,
 ) -> tuple[dict[str, dict[str, str]], list[dict[str, str]]]:
-    """Build final ANI rows and representative rows from cluster memberships."""
+    """Build ANI summary rows and representative rows from cluster memberships.
+
+    The first return value is an accession-keyed mapping for the master-table
+    ANI columns: `Cluster_ID`, `Is_Representative`, `ANI_to_Representative`,
+    and `Score`. The second return value is the ordered representative table
+    with one row per cluster for the published `ani_representatives.tsv`.
+    """
     import numpy as np
 
     representative_rows: list[dict[str, str]] = []

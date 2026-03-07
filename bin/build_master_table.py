@@ -12,8 +12,6 @@ from pathlib import Path
 from typing import Sequence
 
 import master_table_contract
-from ani_common import AniInputError, load_ani_metadata, load_matrix, subset_matrix
-from ani_representatives import build_ani_summary_from_clusters
 
 
 LOGGER = logging.getLogger(__name__)
@@ -31,17 +29,6 @@ CHECKM2_COLUMNS = tuple(master_table_contract.CHECKM2_COLUMNS) + ("Gcode", "Low_
 SIXTEEN_S_COLUMNS = ("16S",)
 CRISPR_COLUMNS = tuple(master_table_contract.CRISPR_COLUMNS)
 ANI_COLUMNS = tuple(master_table_contract.ANI_COLUMNS)
-ANI_REPRESENTATIVE_COLUMNS = (
-    "Cluster_ID",
-    "Representative_Accession",
-    "Organism_Name",
-    "CheckM2_Completeness",
-    "CheckM2_Contamination",
-    "BUSCO",
-    "Assembly_Level",
-    "N50",
-    "Cluster_Size",
-)
 DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 
@@ -113,33 +100,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--ani",
         type=Path,
-        help="Optional ANI cluster summary TSV.",
-    )
-    parser.add_argument(
-        "--ani-clusters",
-        type=Path,
-        help="Optional ANI cluster-membership TSV from cluster_ani.py.",
-    )
-    parser.add_argument(
-        "--ani-metadata",
-        type=Path,
-        help="Optional ANI metadata TSV from build_fastani_inputs.py.",
-    )
-    parser.add_argument(
-        "--ani-matrix",
-        type=Path,
-        help="Optional FastANI PHYLIP matrix used for representative selection.",
-    )
-    parser.add_argument(
-        "--ani-representatives-output",
-        type=Path,
-        help="Optional output path for ani_representatives.tsv.",
-    )
-    parser.add_argument(
-        "--ani-score-profile",
-        choices=("default", "isolate", "mag"),
-        default="default",
-        help="Representative-selection score profile. Default: default.",
+        help="Optional ANI summary TSV from select_ani_representatives.py.",
     )
     parser.add_argument(
         "--output",
@@ -437,95 +398,6 @@ def load_busco_index(
             )
 
     return busco_index, seen_busco_columns
-
-
-def load_ani_cluster_index(
-    path: Path,
-    validated_accessions: set[str],
-) -> tuple[dict[str, dict[str, str]], str]:
-    """Load ANI cluster memberships keyed by accession."""
-    header, rows = read_table(path, delimiter="\t")
-    accession_column = detect_key_column(header, ("accession", "Accession"))
-    cluster_column = find_column_by_normalised_name(header, "Cluster_ID")
-    if cluster_column is None:
-        raise MasterTableError("ANI cluster table is missing required column: Cluster_ID")
-
-    index = build_index(rows, accession_column, "ANI cluster table")
-    ensure_index_keys_are_valid(index, validated_accessions, "ANI cluster table")
-    for accession, row in index.items():
-        cluster_id = row.get(cluster_column, "").strip()
-        if not cluster_id:
-            raise MasterTableError(
-                f"ANI cluster table contains an empty Cluster_ID for accession {accession!r}."
-            )
-    return index, cluster_column
-
-
-def build_ani_outputs_from_clusters(
-    ani_clusters: Path,
-    ani_metadata: Path,
-    ani_matrix: Path,
-    validated_accessions: set[str],
-    score_profile: str,
-) -> tuple[dict[str, dict[str, str]], list[dict[str, str]]]:
-    """Build ANI summary rows and representative rows from cluster memberships."""
-    cluster_index, cluster_column = load_ani_cluster_index(ani_clusters, validated_accessions)
-
-    try:
-        names, ani, name_to_idx = load_matrix(ani_matrix)
-        metadata_by_matrix_name, eligible_names = load_ani_metadata(
-            ani_metadata=ani_metadata,
-            matrix_names=names,
-            busco_column=None,
-            matrix_name_column="matrix_name",
-            require_existing_paths=False,
-        )
-        names, ani, name_to_idx = subset_matrix(names, ani, eligible_names, name_to_idx)
-        metadata_by_matrix_name = {
-            matrix_name: metadata_by_matrix_name[matrix_name]
-            for matrix_name in eligible_names
-        }
-    except AniInputError as error:
-        raise MasterTableError(str(error)) from error
-
-    matrix_name_by_accession: dict[str, str] = {}
-    for matrix_name, genome in metadata_by_matrix_name.items():
-        if genome.Accession in matrix_name_by_accession:
-            raise MasterTableError(
-                f"ANI metadata contains duplicate accession {genome.Accession!r}."
-            )
-        matrix_name_by_accession[genome.Accession] = matrix_name
-
-    cluster_members: dict[str, list[str]] = {}
-    for accession, row in cluster_index.items():
-        if accession not in matrix_name_by_accession:
-            raise MasterTableError(
-                f"ANI cluster table contains accession not present in ANI metadata: {accession!r}."
-            )
-        cluster_id = row[cluster_column].strip()
-        cluster_members.setdefault(cluster_id, []).append(matrix_name_by_accession[accession])
-
-    missing_cluster_accessions = sorted(
-        set(matrix_name_by_accession) - set(cluster_index)
-    )
-    if missing_cluster_accessions:
-        raise MasterTableError(
-            "ANI metadata contains eligible accession(s) missing from ANI clusters: "
-            + ", ".join(missing_cluster_accessions)
-        )
-
-    try:
-        return build_ani_summary_from_clusters(
-            cluster_members=cluster_members,
-            names=names,
-            ani=ani,
-            name_to_idx=name_to_idx,
-            meta=metadata_by_matrix_name,
-            score_profile=score_profile,
-            threads=1,
-        )
-    except RuntimeError as error:
-        raise MasterTableError(str(error)) from error
 
 
 def load_append_columns(path: Path) -> list[str]:
@@ -966,35 +838,12 @@ def run_build(args: argparse.Namespace) -> None:
         "CRISPR strain summary table",
         validated_accessions,
     )
-    ani_raw_inputs = [args.ani_clusters, args.ani_metadata, args.ani_matrix]
-    if any(path is not None for path in ani_raw_inputs) and not all(
-        path is not None for path in ani_raw_inputs
-    ):
-        raise MasterTableError(
-            "ANI representative selection requires --ani-clusters, --ani-metadata, "
-            "and --ani-matrix together."
-        )
-    if args.ani is not None and any(path is not None for path in ani_raw_inputs):
-        raise MasterTableError(
-            "Use either --ani or the raw ANI inputs (--ani-clusters/--ani-metadata/--ani-matrix), not both."
-        )
-
-    ani_representative_rows: list[dict[str, str]] = []
-    if all(path is not None for path in ani_raw_inputs):
-        ani_index, ani_representative_rows = build_ani_outputs_from_clusters(
-            ani_clusters=args.ani_clusters,
-            ani_metadata=args.ani_metadata,
-            ani_matrix=args.ani_matrix,
-            validated_accessions=validated_accessions,
-            score_profile=args.ani_score_profile,
-        )
-    else:
-        ani_index = load_optional_accession_index(
-            args.ani,
-            ANI_COLUMNS,
-            "ANI summary table",
-            validated_accessions,
-        )
+    ani_index = load_optional_accession_index(
+        args.ani,
+        ANI_COLUMNS,
+        "ANI summary table",
+        validated_accessions,
+    )
     busco_index, provided_busco_columns = load_busco_index(args.busco, validated_accessions)
 
     rows: list[dict[str, str]] = []
@@ -1038,7 +887,7 @@ def run_build(args: argparse.Namespace) -> None:
                 ccfinder_index=ccfinder_index,
                 ccfinder_requested=args.ccfinder_strains is not None,
                 ani_index=ani_index,
-                ani_requested=args.ani is not None or all(path is not None for path in ani_raw_inputs),
+                ani_requested=args.ani is not None,
                 sample_status_columns=sample_status_columns,
             )
         )
@@ -1050,12 +899,6 @@ def run_build(args: argparse.Namespace) -> None:
     write_tsv(args.output, output_header, rows)
     sample_status_output = args.sample_status_output or args.output.with_name("sample_status.tsv")
     write_tsv(sample_status_output, sample_status_columns, sample_status_rows)
-    if args.ani_representatives_output is not None and ani_representative_rows:
-        write_tsv(
-            args.ani_representatives_output,
-            ANI_REPRESENTATIVE_COLUMNS,
-            ani_representative_rows,
-        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
