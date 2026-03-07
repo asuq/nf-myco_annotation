@@ -168,7 +168,12 @@ def reports_have_consistent_shared_stats(
     report_eleven: ParsedCheckM2Report,
 ) -> bool:
     """Check whether shared assembly statistics match between two reports."""
-    shared_keys = set(report_four.shared_stats) & set(report_eleven.shared_stats)
+    shared_keys_four = set(report_four.shared_stats)
+    shared_keys_eleven = set(report_eleven.shared_stats)
+    if shared_keys_four != shared_keys_eleven:
+        return False
+
+    shared_keys = shared_keys_four
     for key in shared_keys:
         left = report_four.shared_stats[key]
         right = report_eleven.shared_stats[key]

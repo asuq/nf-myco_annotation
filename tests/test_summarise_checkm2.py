@@ -76,6 +76,64 @@ class SummariseCheckM2TestCase(unittest.TestCase):
         )
         return self.write_text_file(path, content + "\n")
 
+    def test_main_writes_stable_output_columns_and_paired_metrics(self) -> None:
+        """Emit the locked column order and preserve both paired metric sets."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_report(
+                tmpdir / "g4.tsv",
+                completeness="95.5",
+                contamination="2.5",
+                coding_density="0.91",
+                average_gene_length="901",
+                total_coding_sequences="801",
+            )
+            report11 = self.write_report(
+                tmpdir / "g11.tsv",
+                completeness="80.25",
+                contamination="1.5",
+                coding_density="0.83",
+                average_gene_length="851",
+                total_coding_sequences="781",
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC1",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            with output.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle, delimiter="\t")
+                self.assertEqual(reader.fieldnames, list(summarise_checkm2.OUTPUT_COLUMNS))
+                rows = list(reader)
+
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["Completeness_gcode4"], "95.5")
+            self.assertEqual(row["Contamination_gcode4"], "2.5")
+            self.assertEqual(row["Coding_Density_gcode4"], "0.91")
+            self.assertEqual(row["Average_Gene_Length_gcode4"], "901")
+            self.assertEqual(row["Total_Coding_Sequences_gcode4"], "801")
+            self.assertEqual(row["Completeness_gcode11"], "80.25")
+            self.assertEqual(row["Contamination_gcode11"], "1.5")
+            self.assertEqual(row["Coding_Density_gcode11"], "0.83")
+            self.assertEqual(row["Average_Gene_Length_gcode11"], "851")
+            self.assertEqual(row["Total_Coding_Sequences_gcode11"], "781")
+            self.assertEqual(row["Gcode"], "4")
+            self.assertEqual(row["Low_quality"], "false")
+            self.assertEqual(row["checkm2_status"], "done")
+            self.assertEqual(row["warnings"], "")
+
     def test_main_assigns_gcode4_and_low_quality_false(self) -> None:
         """Prefer translation table 4 when completeness differs by more than 10."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -100,6 +158,34 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             row = read_tsv_row(output)
             self.assertEqual(row["Gcode"], "4")
+            self.assertEqual(row["Low_quality"], "false")
+            self.assertEqual(row["checkm2_status"], "done")
+            self.assertEqual(row["warnings"], "")
+
+    def test_main_assigns_gcode11_when_table_11_is_clearly_better(self) -> None:
+        """Prefer translation table 11 when its completeness wins by more than 10."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_report(tmpdir / "g4.tsv", completeness="78", contamination="1")
+            report11 = self.write_report(tmpdir / "g11.tsv", completeness="92", contamination="3")
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC11",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["Gcode"], "11")
             self.assertEqual(row["Low_quality"], "false")
             self.assertEqual(row["checkm2_status"], "done")
             self.assertEqual(row["warnings"], "")
@@ -214,6 +300,32 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             self.assertEqual(row["Gcode"], "4")
             self.assertEqual(row["Low_quality"], "true")
 
+    def test_main_uses_chosen_gcode11_metrics_for_low_quality(self) -> None:
+        """Compute low-quality status from the chosen table 11 metrics only."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_report(tmpdir / "g4.tsv", completeness="20", contamination="0")
+            report11 = self.write_report(tmpdir / "g11.tsv", completeness="70", contamination="5")
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC7",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["Gcode"], "11")
+            self.assertEqual(row["Low_quality"], "true")
+
     def test_main_marks_inconsistent_shared_stats_as_failed(self) -> None:
         """Treat mismatched shared assembly statistics as a failed CheckM2 merge."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -243,6 +355,63 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             row = read_tsv_row(output)
             self.assertEqual(row["Gcode"], "NA")
+            self.assertEqual(row["checkm2_status"], "failed")
+            self.assertEqual(row["warnings"], "inconsistent_shared_stats")
+
+    def test_main_marks_missing_shared_stats_as_failed(self) -> None:
+        """Treat asymmetric shared-stat fields as an invalid paired report set."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_report(tmpdir / "g4.tsv", completeness="95", contamination="1")
+            report11 = self.write_text_file(
+                tmpdir / "g11.tsv",
+                "\n".join(
+                    [
+                        "\t".join(
+                            [
+                                "Name",
+                                "Completeness",
+                                "Contamination",
+                                "Coding_Density",
+                                "Average_Gene_Length",
+                                "Total_Coding_Sequences",
+                                "Genome_Size",
+                            ]
+                        ),
+                        "\t".join(
+                            [
+                                "sample",
+                                "80",
+                                "1",
+                                "0.8",
+                                "850",
+                                "780",
+                                "1000000",
+                            ]
+                        ),
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC8",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["Gcode"], "NA")
+            self.assertEqual(row["Low_quality"], "NA")
             self.assertEqual(row["checkm2_status"], "failed")
             self.assertEqual(row["warnings"], "inconsistent_shared_stats")
 
