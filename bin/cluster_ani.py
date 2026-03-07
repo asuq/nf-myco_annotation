@@ -1,64 +1,63 @@
 #!/usr/bin/env python3
 """
-Cluster genomes from a PHYLIP lower-triangular ANI matrix (from FastANI)
-using complete linkage, then choose one representative per cluster
+Cluster ANI-eligible genomes from a FastANI PHYLIP lower-triangular matrix
+using complete linkage, then choose one representative per cluster.
 
-Required packages: numpy, pandas, scipy
+Required packages: numpy, scipy
 
 Core pipeline
 -------------
-1) Read matrix: parse PHYLIP lower‑triangular ANI; enforce strict structure.
-2) Validate tables:
-   - input_list.tsv: Accession, Path (1:1, paths must exist).
-   - metadata.csv : required fields present & parseable (see REQUIRED_NONEMPTY_COLS).
-   - Name identity: every matrix name is present in both TSV and CSV (hard fail).
-   - Cross‑file equality for Assembly_Name / Organism_Name, allowing space↔underscore
-     normalization (differences beyond that -> hard fail).
-3) Cluster: complete‑linkage on distance d = 1 − ANI/100; cut at (1 − threshold)
-   so all pairs in a cluster have ANI ≥ threshold and non‑NA (post‑checked).
-4) Score candidates, per cluster, with channel‑specific transforms,
-   winsorization (5–95%), and min–max normalization within cluster:
+1) Read matrix: parse PHYLIP lower-triangular ANI; enforce strict structure.
+2) Read ANI metadata: one normalized TSV emitted by upstream Nextflow processes.
+   Rows missing required ANI-scoring metadata are excluded with a warning.
+3) Cluster: complete-linkage on distance d = 1 - ANI/100; cut at (1 - threshold)
+   so all pairs in a cluster have ANI >= threshold and non-NA (post-checked).
+4) Score candidates, per cluster, with channel-specific transforms,
+   winsorization (5-95%), and min-max normalization within cluster:
    - A: Assembly level (rank/3; Complete Genome>Chromosome>Scaffold>Contig).
-   - B: BUSCO   (Complete − 1·Missing) %, winsorized -> min–max.
-   - Q: CheckM2 (Complete − 5·Contamination) %, winsorized -> min–max (Gcode‑matched).
-   - N: N50, log10(x+1) -> winsorized -> min–max.
-   - S: Scaffolds, log10(x+1) -> winsorized -> min–max -> invert (fewer is better).
+   - B: BUSCO   (Complete - 1*Missing) %, winsorized -> min-max.
+   - Q: CheckM2 (Complete - 5*Contamination) %, winsorized -> min-max.
+   - N: N50, log10(x+1) -> winsorized -> min-max.
+   - S: Scaffolds, log10(x+1) -> winsorized -> min-max -> invert (fewer is better).
    - C: ANI centrality within cluster:
            - for each genome i, compute mean ANI to all other members;
-           - if max(mean_i) − min(mean_i) < 0.05, treat the cluster as
+           - if max(mean_i) - min(mean_i) < 0.05, treat the cluster as
              homogeneous and set C_i = 0.5 for all members;
            - otherwise rescale the mean ANI values so the minimum becomes 0
              and the maximum becomes 1;
            singleton clusters get C=1.
-   Composite score S = wA·A + wB·B + wQ·Q + wN·N + wS·S + wC·C.
+   Composite score S = wA*A + wB*B + wQ*Q + wN*N + wS*S + wC*C.
    Weight presets chosen by --score-profile {default,isolate,mag}.
-5) Select representative: pick highest score (ties if |Δ| ≤ ε). Tie‑cascade:
+5) Select representative: pick highest score (ties if |Delta| <= epsilon).
+   Tie-cascade:
    assembly rank (higher) -> BUSCO C (higher) -> BUSCO M (lower) ->
-   CheckM2 contamination (lower) -> CheckM2 completeness (higher) -> Scaffolds (fewer) ->
-   N50 (higher) -> lexicographically smallest Accession.
+   CheckM2 contamination (lower) -> CheckM2 completeness (higher) ->
+   Scaffolds (fewer) -> N50 (higher) -> lexicographically smallest accession.
 6) Soft screen (warn only): list all offenders per cluster where
-   Completeness < 90 or Contamination > 5; never hard‑fail here.
+   completeness < 90 or contamination > 5.
 7) Outputs:
-   - cluster.tsv:  Accession, Cluster_ID, Is_Representative, ANI_to_Representative, Score, Path
+   - cluster.tsv: Accession, Cluster_ID, Is_Representative, ANI_to_Representative, Score, Path
    - representatives.tsv: Cluster_ID, Representative_Accession, Organism_Name,
-     CheckM2_Completeness, CheckM2_Contamination,
-     BUSCO, Assembly_Level, N50, Cluster_Size
-     (Organism_Name has whitespace collapsed to underscores).
+     CheckM2_Completeness, CheckM2_Contamination, BUSCO, Assembly_Level, N50, Cluster_Size
 
 Strict validation:
-  - PHYLIP names == Accession set in matrix (hard fail if any matrix name missing in TSV/CSV).
   - PHYLIP structure enforced (row i has i values; tokens are float or literal uppercase 'NA').
-  - 'NA' allowed only in the ANI matrix; not allowed in required CSV fields.
-  - Gcode must be 4 or 11 (hard fail).
+  - Matrix names must all be present in the ANI metadata table, unless the row was excluded
+    due to missing ANI-scoring metadata.
+  - ANI metadata must contain lower-case Nextflow-facing columns after normalization:
+        accession, path, assembly_level, gcode, checkm2_completeness,
+        checkm2_contamination, n50, scaffolds, genome_size
+    plus a BUSCO column selected by --busco-column (default: primary_busco).
+  - Gcode must be 4 or 11 for included rows.
   - Assembly_Level normalized case-insensitively to exactly:
-        {'Complete Genome','Chromosome','Scaffold','Contig'} (no synonyms).
-  - Required CSV fields must be present & parseable; missing/unparsable => hard fail.
-  - Accession <-> Path must be 1:1 and Path must exist on disk.
+        {'Complete Genome','Chromosome','Scaffold','Contig'}.
+  - Zero ANI-eligible samples is a hard fail.
+  - One ANI-eligible sample is treated as a singleton cluster.
 
 Threading:
   - --threads is an upper bound; actual worker count is capped by hardware/scheduler limits
     (affinity/cgroups/cgroups v1/v2, SLURM/PBS/SGE). That cap is applied to:
-      (a) BLAS/OpenMP/numexpr via env vars (set before importing numpy/scipy/pandas)
+      (a) BLAS/OpenMP/numexpr via env vars (set before importing numpy/scipy)
       (b) Python ThreadPoolExecutors.
 
 References:
@@ -106,17 +105,22 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "-l",
-        "--input-list",
+        "--ani-metadata",
         required=True,
         type=Path,
-        help="TSV with: Accession, Assembly_Name, Organism_Name, Path.",
+        help=(
+            "TSV emitted by build_fastani_inputs with ANI-ready metadata columns: "
+            "accession, path, assembly_level, gcode, checkm2_completeness, "
+            "checkm2_contamination, n50, scaffolds, genome_size, and a BUSCO column."
+        ),
     )
     p.add_argument(
-        "-m",
-        "--metadata",
-        required=True,
-        type=Path,
-        help="CSV with full metadata columns.",
+        "--busco-column",
+        default="primary_busco",
+        help=(
+            "Column in --ani-metadata containing the BUSCO summary string used for "
+            "representative scoring. Default: primary_busco."
+        ),
     )
     p.add_argument(
         "-t",
@@ -253,7 +257,7 @@ def resolve_thread_cap(requested: int) -> int:
 def set_thread_envs(n_threads: int) -> None:
     """
     Cap math-library threads. If an env var is already set to a positive int, keep min(existing, cap);
-    else set to cap. Must be called BEFORE importing numpy/scipy/pandas.
+    else set to cap. Must be called BEFORE importing numpy/scipy.
     """
 
     def cap(existing: str | None, limit: int) -> str:
@@ -281,18 +285,16 @@ def set_thread_envs(n_threads: int) -> None:
 # --------------------------------------------------------------------------- #
 # Parsing helpers and types
 # --------------------------------------------------------------------------- #
-REQUIRED_NONEMPTY_COLS: set[str] = {
-    "Accession",
-    "Gcode",
-    "N50",
-    "Assembly_Level",
-    "BUSCO_bacillota_odb12",
-    "Scaffolds",
-    "Genome_Size",
-    "Completeness_gcode4",
-    "Completeness_gcode11",
-    "Contamination_gcode4",
-    "Contamination_gcode11",
+REQUIRED_METADATA_COLS: set[str] = {
+    "accession",
+    "path",
+    "assembly_level",
+    "gcode",
+    "checkm2_completeness",
+    "checkm2_contamination",
+    "n50",
+    "scaffolds",
+    "genome_size",
 }
 
 BUSCO_RE = re.compile(r"C:(?P<C>\d+(?:\.\d+)?)%.*?M:(?P<M>\d+(?:\.\d+)?)%", re.IGNORECASE)
@@ -319,33 +321,64 @@ def normalize_assembly_level(raw: str, *, acc: str) -> str:
     return ASSEMBLY_LEVEL_MAP[key]
 
 
+def normalize_header(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().casefold()).strip("_")
+
+
+def is_missing_value(value: Any) -> bool:
+    return str(value).strip().upper() in {"", "NA"}
+
+
+def try_parse_int_like(x: Any) -> int | None:
+    xs = str(x).strip()
+    if is_missing_value(xs):
+        return None
+    if re.fullmatch(r"[+-]?\d+", xs):
+        return int(xs)
+    try:
+        xf = float(xs)
+    except Exception:
+        return None
+    if xf.is_integer():
+        return int(xf)
+    return None
+
+
+def try_parse_float_like(x: Any) -> float | None:
+    xs = str(x).strip()
+    if is_missing_value(xs):
+        return None
+    try:
+        return float(xs)
+    except Exception:
+        return None
+
+
+def try_parse_busco(busco_str: Any) -> tuple[float, float] | None:
+    if not isinstance(busco_str, str) or is_missing_value(busco_str):
+        return None
+    match = BUSCO_RE.search(busco_str)
+    if not match:
+        return None
+    return float(match.group("C")), float(match.group("M"))
+
+
 def parse_int_like(x: Any, field: str, acc: str) -> int:
     """
     Accept integers or strings that represent integers.
     Float-like string only if exactly integral (e.g., '1234.0').
     """
-    try:
-        xs = str(x).strip()
-        if xs.upper() == "NA" or xs == "":
-            die(f"Required integer field '{field}' is empty or 'NA' for accession '{acc}'")
-        if re.fullmatch(r"[+-]?\d+", xs):
-            return int(xs)
-        xf = float(xs)
-        if xf.is_integer():
-            return int(xf)
-        die(f"Non-integer value for '{field}' in accession '{acc}': '{x}'")
-    except Exception:
+    value = try_parse_int_like(x)
+    if value is None:
         die(f"Unparsable integer for '{field}' in accession '{acc}': '{x}'")
+    return value
 
 
 def parse_float_like(x: Any, field: str, acc: str) -> float:
-    try:
-        xs = str(x).strip()
-        if xs.upper() == "NA" or xs == "":
-            die(f"Required float field '{field}' is empty or 'NA' for accession '{acc}'")
-        return float(xs)
-    except Exception:
+    value = try_parse_float_like(x)
+    if value is None:
         die(f"Unparsable float for '{field}' in accession '{acc}': '{x}'")
+    return value
 
 
 def parse_busco(busco_str: str, acc: str) -> tuple[float, float]:
@@ -353,19 +386,10 @@ def parse_busco(busco_str: str, acc: str) -> tuple[float, float]:
     Extract C and M percentages from a BUSCO string like:
     'C:94.0%[S:93.5%,D:0.5%],F:1.5%,M:4.5%,n:201'
     """
-    if not isinstance(busco_str, str) or not busco_str.strip():
-        die(f"Missing BUSCO string for accession '{acc}'")
-    m = BUSCO_RE.search(busco_str)
-    if not m:
+    parsed = try_parse_busco(busco_str)
+    if parsed is None:
         die(f"Unparsable BUSCO string for accession '{acc}': '{busco_str}'")
-    return float(m.group("C")), float(m.group("M"))
-
-
-def _canon_space_underscore(s: str) -> str:
-    """
-    Normalize by treating sequences of spaces/underscores as a single space.
-    """
-    return re.sub(r"[\s_]+", " ", s.strip())
+    return parsed
 
 
 @dataclass(slots=True)
@@ -417,9 +441,7 @@ def load_phylip_lower_triangular(path: Path) -> tuple[list[str], list[list[str]]
         die(f"First line must be integer taxon count; got: '{lines[0]}'")
 
     if n == 0:
-        die(f"ANI matrix does not contain any sample")
-    elif n == 1:
-        die(f"ANI matrix only contains one sample")
+        die("ANI matrix does not contain any sample")
 
     if len(lines) - 1 != n:
         die(f"Expected {n} matrix rows, found {len(lines) - 1}.")
@@ -488,243 +510,217 @@ def load_matrix(path: Path) -> tuple[list[str], "np.ndarray", dict[str, int]]:
 
 
 # --------------------------------------------------------------------------- #
-# TSV/CSV loading + structural checks
+# ANI metadata loading + structural checks
 # --------------------------------------------------------------------------- #
-def load_and_check_tables(
-    input_list: Path,
-    metadata: Path,
-    matrix_names: list[str],
-) -> tuple["pd.DataFrame", "pd.DataFrame"]:
+def build_genome_from_row(
+    row: dict[str, str],
+    *,
+    acc: str,
+    busco_column: str,
+) -> tuple[Genome | None, list[str]]:
     """
-    Load input_list.tsv and metadata CSV, perform structural checks:
+    Convert one normalized ANI metadata row into a Genome record.
 
-      - Keep 'NA' as literal strings (not NaN)
-      - TSV: required columns 'Accession' and 'Path'
-      - TSV: Accession and Path must be unique (1:1 mapping)
-      - TSV: every Path must exist on disk
-      - CSV: required metadata columns must be present
-      - Identity/coverage: every matrix accession MUST exist in both TSV and CSV (hard fail).
-        TSV/CSV MAY contain extras not in the matrix (warn and ignore).
-      - Cross-file equality checks for names apply only to accessions present in the matrix.
-      - Assembly_Name and Organism_Name equality tolerates space↔underscore substitutions; other differences hard-fail.
-
-    Returns:
-        (tsv_df, csv_df) with 'Accession' as a column.
+    Returns a populated Genome when all ANI-scoring fields are present and
+    parseable. Otherwise returns None plus the exclusion reasons that should be
+    logged upstream.
     """
-    import pandas as pd  # local import for type name
+    reasons: list[str] = []
 
-    if not input_list.is_file():
-        die(f"Input TSV not found: {input_list}")
-    if not metadata.is_file():
-        die(f"Metadata CSV not found: {metadata}")
+    path_str = row["path"].strip()
+    if is_missing_value(path_str):
+        reasons.append("missing_path")
+    elif not Path(path_str).exists():
+        reasons.append("path_not_found")
 
-    # Keep 'NA' as literal strings, not NaN
-    tsv_df = pd.read_csv(input_list, sep="\t", dtype=str, keep_default_na=False).fillna("")
-    csv_df = pd.read_csv(metadata, dtype=str, keep_default_na=False).fillna("")
+    assembly_key = row["assembly_level"].strip().casefold()
+    if assembly_key in ASSEMBLY_LEVEL_MAP:
+        assembly_level = ASSEMBLY_LEVEL_MAP[assembly_key]
+    else:
+        assembly_level = ""
+        reasons.append("invalid_assembly_level")
 
-    # TSV: required cols and bijection Accession <-> Path
-    for col in ("Accession", "Path"):
-        if col not in tsv_df.columns:
-            die(f"input_list.tsv missing required column: '{col}'")
+    gcode = try_parse_int_like(row["gcode"])
+    if gcode not in (4, 11):
+        reasons.append("invalid_gcode")
 
-    dup_acc = tsv_df["Accession"][tsv_df["Accession"].duplicated()].unique().tolist()
-    dup_path = tsv_df["Path"][tsv_df["Path"].duplicated()].unique().tolist()
-    if dup_acc:
-        die(f"Duplicate Accession(s) in TSV (first few): {dup_acc[:10]}")
-    if dup_path:
-        die(f"Duplicate Path(s) in TSV (first few): {dup_path[:5]}")
+    checkm2_completeness = try_parse_float_like(row["checkm2_completeness"])
+    if checkm2_completeness is None:
+        reasons.append("missing_checkm2_completeness")
 
-    # Path existence
-    for acc, p in zip(tsv_df["Accession"], tsv_df["Path"], strict=True):
-        p_str = str(p).strip()
-        if not p_str or p_str.upper() == "NA":
-            die(f"Empty or 'NA' Path for Accession '{acc}' in input_list.tsv")
-        if not Path(p_str).exists():
-            die(f"Path does not exist for Accession '{acc}': {p_str}")
+    checkm2_contamination = try_parse_float_like(row["checkm2_contamination"])
+    if checkm2_contamination is None:
+        reasons.append("missing_checkm2_contamination")
 
-    # CSV: presence of columns
-    if "Accession" not in csv_df.columns:
-        die("metadata CSV missing 'Accession' column.")
-    missing_cols = [c for c in REQUIRED_NONEMPTY_COLS if c not in csv_df.columns]
-    if missing_cols:
-        die(f"Metadata CSV missing required columns: {missing_cols}")
+    n50 = try_parse_int_like(row["n50"])
+    if n50 is None:
+        reasons.append("missing_n50")
 
-    # Identity / coverage: matrix ⊆ TSV ∩ CSV (extras warn)
-    mat_acc = set(matrix_names)
-    tsv_acc = set(tsv_df["Accession"])
-    csv_acc = set(csv_df["Accession"])
+    scaffolds = try_parse_int_like(row["scaffolds"])
+    if scaffolds is None:
+        reasons.append("missing_scaffolds")
 
-    missing_in_tsv = sorted(mat_acc - tsv_acc)
-    missing_in_csv = sorted(mat_acc - csv_acc)
-    if missing_in_tsv or missing_in_csv:
+    genome_size = try_parse_int_like(row["genome_size"])
+    if genome_size is None:
+        reasons.append("missing_genome_size")
 
-        def head(xs: list[str], n: int = 20) -> list[str]:
-            return xs[:n]
+    busco_str = row[busco_column].strip()
+    busco_parsed = try_parse_busco(busco_str)
+    if busco_parsed is None:
+        reasons.append(f"missing_{busco_column}")
 
-        die(
-            "Matrix accessions must exist in both TSV and CSV.\n"
-            f"  In matrix not in TSV (first 20): {head(missing_in_tsv)}\n"
-            f"  In matrix not in CSV (first 20): {head(missing_in_csv)}"
-        )
+    if reasons:
+        return None, reasons
 
-    extras_tsv = sorted(tsv_acc - mat_acc)
-    extras_csv = sorted(csv_acc - mat_acc)
-    if extras_tsv:
-        logging.warning(
-            "Ignoring %d TSV accession(s) not present in the ANI matrix (first 20): %s",
-            len(extras_tsv),
-            extras_tsv[:20],
-        )
-    if extras_csv:
-        logging.warning(
-            "Ignoring %d CSV accession(s) not present in the ANI matrix (first 20): %s",
-            len(extras_csv),
-            extras_csv[:20],
-        )
-
-    # Assembly_Name equality (tolerate spaces<->underscores)
-    if "Assembly_Name" in tsv_df.columns and "Assembly_Name" in csv_df.columns:
-        t_map = tsv_df.set_index("Accession")["Assembly_Name"].to_dict()
-        c_map = csv_df.set_index("Accession")["Assembly_Name"].to_dict()
-        bad: list[tuple[str, str, str]] = []
-        ignored_count = 0
-        for acc in matrix_names:
-            a_raw = (t_map.get(acc, "") or "").strip()
-            b_raw = (c_map.get(acc, "") or "").strip()
-            if not a_raw or not b_raw:
-                continue
-            if a_raw == b_raw:
-                continue
-            if _canon_space_underscore(a_raw) == _canon_space_underscore(b_raw):
-                logging.info(
-                    "Assembly_Name differs only by space/underscore; ignoring (Acc=%s): TSV='%s' CSV='%s'",
-                    acc,
-                    a_raw,
-                    b_raw,
-                )
-                ignored_count += 1
-            else:
-                bad.append((acc, a_raw, b_raw))
-        if bad:
-            die(f"Assembly_Name mismatch between TSV and CSV (first 10): {bad[:10]}")
-        if ignored_count:
-            logging.info(
-                "Ignored %d Assembly_Name difference(s) due to space/underscore normalization.",
-                ignored_count,
-            )
-
-    # Organism_Name equality (tolerate spaces<->underscores)
-    if "Organism_Name" in tsv_df.columns and "Organism_Name" in csv_df.columns:
-        t_map = tsv_df.set_index("Accession")["Organism_Name"].to_dict()
-        c_map = csv_df.set_index("Accession")["Organism_Name"].to_dict()
-        bad: list[tuple[str, str, str]] = []
-        ignored_count = 0
-        for acc in matrix_names:
-            a_raw = (t_map.get(acc, "") or "").strip()
-            b_raw = (c_map.get(acc, "") or "").strip()
-            if not a_raw or not b_raw:
-                continue
-            if a_raw == b_raw:
-                continue
-            if _canon_space_underscore(a_raw) == _canon_space_underscore(b_raw):
-                logging.info(
-                    "Organism_Name differs only by space/underscore; ignoring (Acc=%s): TSV='%s' CSV='%s'",
-                    acc,
-                    a_raw,
-                    b_raw,
-                )
-                ignored_count += 1
-            else:
-                bad.append((acc, a_raw, b_raw))
-        if bad:
-            die(f"Organism_Name mismatch between TSV and CSV (first 10): {bad[:10]}")
-        if ignored_count:
-            logging.info(
-                "Ignored %d Organism_Name difference(s) due to space/underscore normalization.",
-                ignored_count,
-            )
-
-    return tsv_df, csv_df
-
-
-# --------------------------------------------------------------------------- #
-# Genome metadata building
-# --------------------------------------------------------------------------- #
-def build_genome_metadata(
-    names: list[str],
-    tsv: "pd.DataFrame",
-    csv_df: "pd.DataFrame",
-) -> dict[str, Genome]:
-    """
-    Construct per-genome metadata records used for ranking and filters.
-    For each accession:
-      - Enforces required fields to be non-empty/non-'NA'
-      - Normalizes Assembly_Level
-      - Validates Gcode and selects appropriate CheckM2 Completeness/Contamination fields
-      - Parses N50, Scaffolds, Genome_Size, BUSCO, and Path
-    """
-    csv_idx = csv_df.set_index("Accession", drop=False)
-    tsv_idx = tsv.set_index("Accession", drop=False)
-
-    meta: dict[str, Genome] = {}
-    for acc in names:
-        if acc not in csv_idx.index or acc not in tsv_idx.index:
-            die(f"Accession '{acc}' missing from TSV or CSV after alignment.")
-
-        row = csv_idx.loc[acc].to_dict()
-
-        # Required non-empty columns (not 'NA')
-        for col in REQUIRED_NONEMPTY_COLS:
-            val = str(row.get(col, "")).strip()
-            if val == "" or val.upper() == "NA":
-                die(f"Required column '{col}' empty or 'NA' for accession '{acc}'")
-
-        # Normalize Assembly_Level
-        asm_level = normalize_assembly_level(str(row["Assembly_Level"]), acc=acc)
-
-        # Gcode & metrics chosen by Gcode
-        gcode = parse_int_like(row["Gcode"], "Gcode", acc)
-        if gcode not in (4, 11):
-            die(f"Gcode must be 4 or 11 for accession '{acc}', got: {gcode}")
-        comp_col = "Completeness_gcode4" if gcode == 4 else "Completeness_gcode11"
-        cont_col = "Contamination_gcode4" if gcode == 4 else "Contamination_gcode11"
-
-        # Ensure chosen columns exist and non-empty/non-'NA'
-        for col in (comp_col, cont_col):
-            if col not in csv_idx.columns:
-                die(f"Metadata CSV missing required column '{col}' for accession '{acc}'")
-            val = str(row.get(col, "")).strip()
-            if val == "" or val.upper() == "NA":
-                die(f"Required column '{col}' empty or 'NA' for accession '{acc}'")
-
-        org_name = str(csv_idx.loc[acc].get("Organism_Name", "") or "")
-        checkm2 = parse_float_like(row[comp_col], comp_col, acc)
-        contam = parse_float_like(row[cont_col], cont_col, acc)
-        n50 = parse_int_like(row["N50"], "N50", acc)
-        scaffolds = parse_int_like(row["Scaffolds"], "Scaffolds", acc)
-        genome_size = parse_int_like(row["Genome_Size"], "Genome_Size", acc)
-        busco_str = str(row["BUSCO_bacillota_odb12"])
-        busco_c, busco_m = parse_busco(busco_str, acc)
-        path = str(tsv_idx.loc[acc]["Path"])
-
-        meta[acc] = Genome(
+    busco_c, busco_m = busco_parsed
+    organism_name = row.get("organism_name", "").strip()
+    assert gcode is not None
+    assert checkm2_completeness is not None
+    assert checkm2_contamination is not None
+    assert n50 is not None
+    assert scaffolds is not None
+    assert genome_size is not None
+    return (
+        Genome(
             Accession=acc,
-            Organism_Name=org_name,
+            Organism_Name=organism_name,
             Gcode=gcode,
-            CheckM2_Completeness=checkm2,
-            CheckM2_Contamination=contam,
+            CheckM2_Completeness=checkm2_completeness,
+            CheckM2_Contamination=checkm2_contamination,
             N50=n50,
             Scaffolds=scaffolds,
             Genome_Size=genome_size,
             BUSCO_str=busco_str,
             BUSCO_C=busco_c,
             BUSCO_M=busco_m,
-            Assembly_Level=asm_level,
-            Assembly_Rank=ASSEMBLY_RANK[asm_level],
-            Path=path,
+            Assembly_Level=assembly_level,
+            Assembly_Rank=ASSEMBLY_RANK[assembly_level],
+            Path=path_str,
+        ),
+        [],
+    )
+
+
+def load_ani_metadata(
+    ani_metadata: Path,
+    matrix_names: list[str],
+    *,
+    busco_column: str,
+) -> tuple[dict[str, Genome], list[str]]:
+    """
+    Load and validate the ANI-ready metadata TSV emitted by build_fastani_inputs.
+
+    Rows with missing ANI-scoring metadata are excluded with a warning so the
+    clustering step can continue on the remaining eligible subset. Returns the
+    accession-to-Genome mapping plus the matrix-ordered list of eligible
+    accessions that remain after filtering.
+    """
+    if not ani_metadata.is_file():
+        die(f"ANI metadata TSV not found: {ani_metadata}")
+
+    with ani_metadata.open("rt", encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        if reader.fieldnames is None:
+            die(f"ANI metadata TSV is empty or missing a header: {ani_metadata}")
+
+        header_map: dict[str, str] = {}
+        for original in reader.fieldnames:
+            normalized = normalize_header(original)
+            if normalized in header_map:
+                die(
+                    "ANI metadata TSV contains duplicate normalized column names: "
+                    f"'{original}' and '{header_map[normalized]}'"
+                )
+            header_map[normalized] = original
+
+        normalized_busco_column = normalize_header(busco_column)
+        missing_cols = sorted((REQUIRED_METADATA_COLS | {normalized_busco_column}) - set(header_map))
+        if missing_cols:
+            die(
+                "ANI metadata TSV is missing required column(s): "
+                f"{missing_cols}. Requested BUSCO column: '{busco_column}'."
+            )
+
+        metadata: dict[str, Genome] = {}
+        excluded: dict[str, list[str]] = {}
+        for row_number, raw_row in enumerate(reader, start=2):
+            row = {
+                normalize_header(key): str(value or "").strip()
+                for key, value in raw_row.items()
+                if key is not None
+            }
+            acc = row.get("accession", "").strip()
+            if is_missing_value(acc):
+                die(f"ANI metadata TSV has an empty accession at line {row_number}")
+            if acc in metadata or acc in excluded:
+                die(f"Duplicate accession '{acc}' in ANI metadata TSV")
+
+            genome, reasons = build_genome_from_row(
+                row,
+                acc=acc,
+                busco_column=normalized_busco_column,
+            )
+            if genome is None:
+                excluded[acc] = reasons
+                logging.warning(
+                    "Excluding accession '%s' from ANI clustering due to: %s",
+                    acc,
+                    ";".join(reasons),
+                )
+                continue
+            metadata[acc] = genome
+
+    matrix_accessions = set(matrix_names)
+    metadata_accessions = set(metadata)
+    excluded_accessions = set(excluded)
+
+    missing_rows = sorted(matrix_accessions - metadata_accessions - excluded_accessions)
+    if missing_rows:
+        die(
+            "ANI matrix contains accession(s) missing from ANI metadata TSV: "
+            f"{missing_rows[:20]}"
         )
 
-    return meta
+    extra_rows = sorted((metadata_accessions | excluded_accessions) - matrix_accessions)
+    if extra_rows:
+        logging.warning(
+            "Ignoring %d ANI metadata accession(s) not present in the ANI matrix (first 20): %s",
+            len(extra_rows),
+            extra_rows[:20],
+        )
+
+    eligible_names = [name for name in matrix_names if name in metadata]
+    if not eligible_names:
+        die("No ANI-eligible samples remain after filtering ANI metadata")
+
+    return metadata, eligible_names
+
+
+def subset_matrix(
+    names: list[str],
+    ani: "np.ndarray",
+    eligible_names: list[str],
+    name_to_idx: dict[str, int],
+) -> tuple[list[str], "np.ndarray", dict[str, int]]:
+    """
+    Restrict the ANI matrix to the accessions that survived metadata filtering.
+
+    Preserves matrix order so downstream clustering and output generation remain
+    aligned with the filtered accession list.
+    """
+    import numpy as np  # local import for type name
+
+    if len(eligible_names) == len(names):
+        return names, ani, name_to_idx
+
+    indices = [name_to_idx[name] for name in eligible_names]
+    subset = ani[np.ix_(indices, indices)]
+    subset_name_to_idx = {name: idx for idx, name in enumerate(eligible_names)}
+    logging.info(
+        "Proceeding with %d ANI-eligible sample(s) after metadata filtering.",
+        len(eligible_names),
+    )
+    return eligible_names, subset, subset_name_to_idx
 
 
 # --------------------------------------------------------------------------- #
@@ -738,8 +734,14 @@ def cluster_complete_linkage(
     """
     Complete-linkage clustering on an ANI matrix.
     Distances: d = 1 - ANI/100, with NA treated as max distance 1.0.
-    Cut at distance 1 - threshold (so all pairs in a cluster have ANI ≥ threshold).
+    Cut at distance 1 - threshold (so all pairs in a cluster have ANI >= threshold).
     """
+    if len(names) == 1:
+        logging.info(
+            "Single ANI-eligible sample detected; treating it as a singleton cluster."
+        )
+        return {1: [0]}
+
     # local import for type name
     import numpy as np
     from scipy.cluster.hierarchy import linkage, fcluster
@@ -763,10 +765,10 @@ def cluster_complete_linkage(
         clusters[lab].append(idx)  # clusters: cluster_num = list of sample_idx that belong to
 
     logging.info(
-        "Formed %d complete-linkage clusters at ANI ≥ %.2f%%.", len(clusters), threshold * 100.0
+        "Formed %d complete-linkage clusters at ANI >= %.2f%%.", len(clusters), threshold * 100.0
     )
 
-    # Post-check: every pair in each cluster must be finite ANI ≥ threshold
+    # Post-check: every pair in each cluster must be finite ANI >= threshold
     # Checked by the values in the matrix (e.g. ani[0, 1] = ANI distance between sample idx 0 and 1)
     for lab, idxs in clusters.items():
         for i in range(len(idxs)):
@@ -777,7 +779,7 @@ def cluster_complete_linkage(
                     die(
                         f"Post-check failed: cluster label {lab} contains pair "
                         f"({names[a]}, {names[b]}) with ANI={val} "
-                        f"(must be non-NA and ≥ {threshold*100:.2f})."
+                        f"(must be non-NA and >= {threshold*100:.2f})."
                     )
 
     return clusters
@@ -800,17 +802,17 @@ def select_representative_for_indices(
       A: Assembly rank / 3
       Q: CheckM2: (completeness - 5*contamination)/100 -> winsorize 5-95% -> min-max
       B: BUSCO:   (BUSCO_C - 1*BUSCO_M)/100 -> winsorize 5-95% -> min-max
-      N: N50:     log10(x+1) -> winsorize 5–95% if n>=8 -> min–max
-      S: Scaffolds: log10(x+1) -> winsorize 5–95% if n>=8 -> min–max -> invert
+      N: N50:     log10(x+1) -> winsorize 5-95% if n>=8 -> min-max
+      S: Scaffolds: log10(x+1) -> winsorize 5-95% if n>=8 -> min-max -> invert
       C: ANI centrality within cluster:
            - for each genome i, compute mean ANI to all other members;
-           - if max(mean_i) − min(mean_i) < 0.05, treat the cluster as
+           - if max(mean_i) - min(mean_i) < 0.05, treat the cluster as
              homogeneous and set C_i = 0.5 for all members;
            - otherwise rescale the mean ANI values so the minimum becomes 0
              and the maximum becomes 1;
            singleton clusters get C=1.
 
-    Ties (|difference of score| ≤ _EPS) are broken by:
+    Ties (|difference of score| <= _EPS) are broken by:
       1) higher assembly rank,
       2) BUSCO: higher C, then lower M,
       3) CheckM2: lower contamination, then higher completeness
@@ -834,7 +836,7 @@ def select_representative_for_indices(
 
     ## Helpers ================================================================
     def winsorize(arr: list[float]) -> np.ndarray:
-        """winsorize within cluster at 5–95% only if cluster is reasonably sized"""
+        """winsorize within cluster at 5-95% only if cluster is reasonably sized"""
         if n < 8:  # guard for tiny clusters
             return np.asarray(arr, dtype=float)
         a = np.asarray(arr, dtype=float)
@@ -1269,8 +1271,8 @@ def run_pipeline(args: argparse.Namespace, threads: int) -> None:
 
     Steps:
       1) Load ANI matrix.
-      2) Load and validate TSV/CSV tables.
-      3) Build per-genome metadata.
+      2) Load ANI-ready metadata and exclude rows missing ANI-scoring inputs.
+      3) Subset the matrix to ANI-eligible samples.
       4) Complete-linkage clustering.
       5) Parallel representative selection.
       6) Assign cluster IDs.
@@ -1285,15 +1287,15 @@ def run_pipeline(args: argparse.Namespace, threads: int) -> None:
     # 1) ANI matrix
     names, ani, name_to_idx = load_matrix(args.ani_matrix)
 
-    # 2) Tables + structural checks
-    tsv, csv_df = load_and_check_tables(
-        input_list=args.input_list,
-        metadata=args.metadata,
+    # 2) ANI metadata + structural checks
+    meta, eligible_names = load_ani_metadata(
+        ani_metadata=args.ani_metadata,
         matrix_names=names,
+        busco_column=args.busco_column,
     )
 
-    # 3) Build per-genome metadata
-    meta = build_genome_metadata(names, tsv, csv_df)
+    # 3) Subset the matrix to ANI-eligible samples
+    names, ani, name_to_idx = subset_matrix(names, ani, eligible_names, name_to_idx)
 
     # 4) Complete-linkage clustering
     clusters = cluster_complete_linkage(ani, names, threshold)
@@ -1334,7 +1336,7 @@ def run_pipeline(args: argparse.Namespace, threads: int) -> None:
     write_outputs(args.outdir, cluster_rows, reps_rows)
 
 
-def main() -> None:
+def main() -> int:
     """
     Entry point: parse arguments, configure logging and threading, then run pipeline.
     """
@@ -1354,14 +1356,9 @@ def main() -> None:
     # Cap BLAS/OpenMP/numexpr before heavy imports:
     set_thread_envs(threads)
 
-    # Heavy imports (fail fast if libraries are missing)
-    import numpy as np
-    import pandas as pd
-    from scipy.cluster.hierarchy import linkage, fcluster
-    from scipy.spatial.distance import squareform
-
     run_pipeline(args, threads)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
