@@ -6,16 +6,22 @@
 - Keep orchestration in Nextflow DSL2. Put parsing, summarisation, validation, and merge logic in small Python CLIs under `bin/`.
 - Every new Python function must have a docstring. Prefer small `main()` entrypoints and end CLIs with `sys.exit(main())`.
 - Every Nextflow module must have explicit inputs, explicit named outputs, and a `stub` section for testability.
+- Add unit tests for every new or materially changed Python CLI. Cover at least one success path and one spec-relevant degraded or failure path.
 - For scaffold-only tasks, create placeholders that fail fast in normal execution rather than partial or speculative logic.
 - Do not silently replace, chmod, or rewrite existing scripts unless the task requires changing them.
 - Reuse and adapt existing project logic when the spec says to do so, especially `bin/cluster_ani.py`.
+- For sample-level tool failures that the design spec marks as non-fatal, write explicit output rows with `NA` and status/warning fields instead of exiting nonzero.
+- Prefer one-row-per-sample TSV summaries with stable column names for downstream joins. Keep extra status or warning fields outside the master-table contract unless the spec requires them in the final table.
+- Keep per-sample summariser CLIs sample-scoped when possible and let Nextflow handle cohort aggregation unless the spec explicitly requires cohort logic inside the CLI.
 - Preserve metadata columns exactly as provided and in original order. Append derived columns only after the metadata block.
 - Keep the locked output contracts centered on `master_table.csv`, `sample_status.tsv`, and `tool_and_db_versions.tsv`.
 - Use `assets/master_table_append_columns.txt` and `assets/sample_status_columns.txt` as the maintained column-order references once they exist.
+- Keep emitted BUSCO summary values compatible with downstream `cluster_ani.py` parsing unless that interface is deliberately changed everywhere together.
 - Preserve `params.busco_lineages` order. The first lineage controls ANI representative scoring.
 - Do not add PADLOC or eggNOG results to the master table unless the design spec is changed.
 - Only add `docker/<tool>/Dockerfile` when BioContainers do not adequately cover that tool.
 - Prefer BioContainers first, custom Dockerfiles second, and expose database paths and other runtime resources as Nextflow params.
 - Keep published sample-facing names based on original accession. Use internal IDs only for tool-safe internal filenames and prefixes.
+- When filling metadata for `is_new=true` samples missing from the metadata table, prefer `NA` defaults plus normalized supplemental values from validated sample inputs when available.
 - Preserve sample-level failure tolerance where the spec requires it. Hard-fail only on the pipeline-level conditions defined in the design spec.
 - When adding or changing rules because of repeated mistakes, update this file in the same task.
