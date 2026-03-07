@@ -97,6 +97,35 @@ class ClusterAniHelperTestCase(unittest.TestCase):
             ],
         )
 
+    def test_load_ani_metadata_supports_distinct_matrix_name_column(self) -> None:
+        """Match PHYLIP matrix rows via a dedicated matrix-name column."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            genome_path = tmpdir / "genome.fna"
+            genome_path.write_text(">a\nACGT\n", encoding="utf-8")
+            metadata_tsv = tmpdir / "ani_metadata.tsv"
+            metadata_tsv.write_text(
+                "\n".join(
+                    [
+                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\tBUSCO_bacillota_odb12",
+                        f"ACC1\tfastani_inputs/ACC1.fasta\t{genome_path}\tScaffold\t11\t95\t1.5\t50000\t4\t1000000\tC:96.5%[S:95.0%,D:1.5%],F:2.0%,M:1.5%,n:220",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            metadata, eligible_names = cluster_ani.load_ani_metadata(
+                ani_metadata=metadata_tsv,
+                matrix_names=["fastani_inputs/ACC1.fasta"],
+                busco_column="BUSCO_bacillota_odb12",
+                matrix_name_column="matrix_name",
+            )
+
+            self.assertEqual(eligible_names, ["fastani_inputs/ACC1.fasta"])
+            self.assertIn("fastani_inputs/ACC1.fasta", metadata)
+            self.assertEqual(metadata["fastani_inputs/ACC1.fasta"].Accession, "ACC1")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -123,6 +123,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--matrix-name-column",
+        default="accession",
+        help=(
+            "Column in --ani-metadata used to match PHYLIP matrix row names. "
+            "Default: accession."
+        ),
+    )
+    p.add_argument(
         "-t",
         "--threshold",
         required=False,
@@ -606,14 +614,15 @@ def load_ani_metadata(
     matrix_names: list[str],
     *,
     busco_column: str,
+    matrix_name_column: str,
 ) -> tuple[dict[str, Genome], list[str]]:
     """
     Load and validate the ANI-ready metadata TSV emitted by build_fastani_inputs.
 
     Rows with missing ANI-scoring metadata are excluded with a warning so the
     clustering step can continue on the remaining eligible subset. Returns the
-    accession-to-Genome mapping plus the matrix-ordered list of eligible
-    accessions that remain after filtering.
+    matrix-name-to-Genome mapping plus the matrix-ordered list of eligible
+    matrix names that remain after filtering.
     """
     if not ani_metadata.is_file():
         die(f"ANI metadata TSV not found: {ani_metadata}")
@@ -634,7 +643,11 @@ def load_ani_metadata(
             header_map[normalized] = original
 
         normalized_busco_column = normalize_header(busco_column)
-        missing_cols = sorted((REQUIRED_METADATA_COLS | {normalized_busco_column}) - set(header_map))
+        normalized_matrix_name_column = normalize_header(matrix_name_column)
+        missing_cols = sorted(
+            (REQUIRED_METADATA_COLS | {normalized_busco_column, normalized_matrix_name_column})
+            - set(header_map)
+        )
         if missing_cols:
             die(
                 "ANI metadata TSV is missing required column(s): "
@@ -643,6 +656,7 @@ def load_ani_metadata(
 
         metadata: dict[str, Genome] = {}
         excluded: dict[str, list[str]] = {}
+        seen_accessions: set[str] = set()
         for row_number, raw_row in enumerate(reader, start=2):
             row = {
                 normalize_header(key): str(value or "").strip()
@@ -652,8 +666,19 @@ def load_ani_metadata(
             acc = row.get("accession", "").strip()
             if is_missing_value(acc):
                 die(f"ANI metadata TSV has an empty accession at line {row_number}")
-            if acc in metadata or acc in excluded:
+            matrix_name = row.get(normalized_matrix_name_column, "").strip()
+            if is_missing_value(matrix_name):
+                die(
+                    "ANI metadata TSV has an empty matrix-name value at line "
+                    f"{row_number}. Requested matrix column: '{matrix_name_column}'."
+                )
+            if matrix_name in metadata or matrix_name in excluded:
+                die(
+                    f"Duplicate matrix-name value '{matrix_name}' in ANI metadata TSV"
+                )
+            if acc in seen_accessions:
                 die(f"Duplicate accession '{acc}' in ANI metadata TSV")
+            seen_accessions.add(acc)
 
             genome, reasons = build_genome_from_row(
                 row,
@@ -661,14 +686,14 @@ def load_ani_metadata(
                 busco_column=normalized_busco_column,
             )
             if genome is None:
-                excluded[acc] = reasons
+                excluded[matrix_name] = reasons
                 logging.warning(
                     "Excluding accession '%s' from ANI clustering due to: %s",
                     acc,
                     ";".join(reasons),
                 )
                 continue
-            metadata[acc] = genome
+            metadata[matrix_name] = genome
 
     matrix_accessions = set(matrix_names)
     metadata_accessions = set(metadata)
@@ -830,8 +855,8 @@ def select_representative_for_indices(
     _EPS = 1e-6  # tie tolerance for scores
 
     dbg: list[str] = []
-    accs = [names[i] for i in idxs]
-    infos = [meta[a] for a in accs]
+    matrix_names = [names[i] for i in idxs]
+    infos = [meta[name] for name in matrix_names]
     n = len(infos)
 
     ## Helpers ================================================================
@@ -924,8 +949,8 @@ def select_representative_for_indices(
     ## Score per candidate ====================================================
 
     # Compute normalized total score and collect component breakdowns for DEBUG
-    scored: list[tuple[str, float, dict[str, float], Genome]] = []
-    for i_loc, g in enumerate(infos):
+    scored: list[tuple[str, str, float, dict[str, float], Genome]] = []
+    for i_loc, (matrix_name, g) in enumerate(zip(matrix_names, infos, strict=True)):
         comps = {
             "A": float(A_vals[i_loc]),
             "Q": float(Q_vals[i_loc]),
@@ -947,20 +972,20 @@ def select_representative_for_indices(
 
         g.Score = float(total)
 
-        scored.append((g.Accession, float(total), comps, g))
+        scored.append((matrix_name, g.Accession, float(total), comps, g))
 
     # Emit per-candidate debug lines
     dbg.append(
         f"Cluster size={n}; profile={score_profile}; weights:"
         f" A={wA}, Q={wQ}, B={wB}, N={wN}, S={wS}, C={wC}"
     )
-    for acc, total, c, g in sorted(scored, key=lambda x: (-x[1], x[0])):
+    for _matrix_name, accession, total, c, g in sorted(scored, key=lambda x: (-x[2], x[1])):
         dbg.append(
             "  %s: score=%.6f | A=%.3f Q=%.3f(q_raw=%.3f) B=%.3f(b_raw=%.3f)"
             " N=%.3f S=%.3f C=%.3f | asm=%s(rank=%d) busco(C=%.2f,M=%.2f)"
             " checkm2=%.2f contam=%.2f scaffolds=%d n50=%d"
             % (
-                acc,
+                accession,
                 total,
                 c["A"],
                 c["Q"],
@@ -982,26 +1007,32 @@ def select_representative_for_indices(
         )
 
     # Primary selection by score
-    scored.sort(key=lambda x: (-x[1], x[0]))
-    top_score = scored[0][1]
-    tied = [acc for acc, s, _, _ in scored if abs(s - top_score) <= _EPS]
+    scored.sort(key=lambda x: (-x[2], x[1]))
+    top_score = scored[0][2]
+    tied = [matrix_name for matrix_name, _accession, score, _comps, _genome in scored if abs(score - top_score) <= _EPS]
     if len(tied) == 1:
-        dbg.append(f"Chosen by score alone: {tied[0]} (score={top_score:.6f})")
+        dbg.append(f"Chosen by score alone: {meta[tied[0]].Accession} (score={top_score:.6f})")
         return n, tied[0], dbg
 
     ## Tie cascade ============================================================
-    acc2gen = {g.Accession: g for _, _, _, g in scored}
+    matrix_name_to_genome = {matrix_name: g for matrix_name, _accession, _score, _comps, g in scored}
 
     def reduce_tie(
-        acc_list: list[str], key_fn, desc: str, prefer_lower: bool = False
+        matrix_name_list: list[str], key_fn, desc: str, prefer_lower: bool = False
     ) -> list[str]:
-        if len(acc_list) <= 1:
-            return acc_list
-        vals = [key_fn(acc2gen[a]) for a in acc_list]
+        if len(matrix_name_list) <= 1:
+            return matrix_name_list
+        vals = [key_fn(matrix_name_to_genome[matrix_name]) for matrix_name in matrix_name_list]
         best = (min if prefer_lower else max)(vals)
-        winners = [a for a, v in zip(acc_list, vals, strict=True) if v == best]
-        if len(winners) < len(acc_list):
-            dbg.append(f"Tie-break by {desc}: {len(acc_list)} -> {len(winners)} (best={best}).")
+        winners = [
+            matrix_name
+            for matrix_name, value in zip(matrix_name_list, vals, strict=True)
+            if value == best
+        ]
+        if len(winners) < len(matrix_name_list):
+            dbg.append(
+                f"Tie-break by {desc}: {len(matrix_name_list)} -> {len(winners)} (best={best})."
+            )
         return winners
 
     # 1) higher assembly rank
@@ -1018,13 +1049,15 @@ def select_representative_for_indices(
     tied = reduce_tie(tied, lambda g: g.Scaffolds, "Scaffolds (fewer)", True)
     tied = reduce_tie(tied, lambda g: g.N50, "N50 (higher)")
 
-    rep_acc = sorted(tied)[0]
+    rep_acc = sorted(tied, key=lambda matrix_name: matrix_name_to_genome[matrix_name].Accession)[0]
     if len(tied) > 1:
         dbg.append(
-            f"Final tie among {len(tied)} candidate(s); picking lexicographically smallest: {rep_acc}"
+            "Final tie among "
+            f"{len(tied)} candidate(s); picking lexicographically smallest: "
+            f"{matrix_name_to_genome[rep_acc].Accession}"
         )
     else:
-        dbg.append(f"Chosen by tie cascade: {rep_acc}")
+        dbg.append(f"Chosen by tie cascade: {matrix_name_to_genome[rep_acc].Accession}")
 
     return n, rep_acc, dbg
 
@@ -1042,7 +1075,7 @@ def select_representatives_for_clusters(
 
     Returns:
         A list of tuples:
-          (cluster_size, rep_acc, original_label, idxs, debug_lines)
+          (cluster_size, rep_matrix_name, original_label, idxs, debug_lines)
     """
     results: list[tuple[int, str, int, list[int], list[str]]] = []
     with ThreadPoolExecutor(max_workers=threads) as ex:
@@ -1152,33 +1185,35 @@ def build_cluster_rows(
 
     rows: list[tuple[str, str, str, str, str, str]] = []
     for cid, idxs in idxs_by_cid.items():
-        rep_acc = rep_by_cid[cid]
-        rep_idx = name_to_idx[rep_acc]
-        for idx in sorted(idxs, key=lambda k: names[k]):
-            acc = names[idx]
-            path = meta[acc].Path
-            score = meta[acc].Score
+        rep_matrix_name = rep_by_cid[cid]
+        rep_idx = name_to_idx[rep_matrix_name]
+        for idx in sorted(idxs, key=lambda k: meta[names[k]].Accession):
+            matrix_name = names[idx]
+            genome = meta[matrix_name]
+            path = genome.Path
+            score = genome.Score
 
-            is_rep = "yes" if acc == rep_acc else "no"
-            if acc == rep_acc:
+            is_rep = "yes" if matrix_name == rep_matrix_name else "no"
+            if matrix_name == rep_matrix_name:
                 ani_to_rep = "100.0000"
             else:
                 v = ani[idx, rep_idx]
                 if np.isnan(v):
                     die(
                         f"Internal error: NA ANI inside complete-link cluster {cid} "
-                        f"between '{acc}' and representative '{rep_acc}'"
+                        f"between '{genome.Accession}' and representative "
+                        f"'{meta[rep_matrix_name].Accession}'"
                     )
                 ani_to_rep = f"{v:.4f}"
 
             if score is None:
                 die(
-                    f"Internal error: composite score not set for accession '{acc}' "
+                    f"Internal error: composite score not set for accession '{genome.Accession}' "
                     f"in cluster {cid}"
                 )
             score_str = f"{score:.6f}"
 
-            rows.append((acc, cid, is_rep, ani_to_rep, score_str, path))
+            rows.append((genome.Accession, cid, is_rep, ani_to_rep, score_str, path))
     return rows
 
 
@@ -1196,13 +1231,13 @@ def build_representative_rows(
     """
     rows: list[tuple[str, str, str, str, str, str, str, str, str]] = []
     for cid, idxs in idxs_by_cid.items():
-        rep_acc = rep_by_cid[cid]
-        g = meta[rep_acc]
+        rep_matrix_name = rep_by_cid[cid]
+        g = meta[rep_matrix_name]
         org_out = re.sub(r"\s+", "_", (g.Organism_Name or "").strip())
         rows.append(
             (
                 cid,
-                rep_acc,
+                g.Accession,
                 org_out,
                 f"{g.CheckM2_Completeness:.2f}",
                 f"{g.CheckM2_Contamination:.2f}",
@@ -1292,6 +1327,7 @@ def run_pipeline(args: argparse.Namespace, threads: int) -> None:
         ani_metadata=args.ani_metadata,
         matrix_names=names,
         busco_column=args.busco_column,
+        matrix_name_column=args.matrix_name_column,
     )
 
     # 3) Subset the matrix to ANI-eligible samples
