@@ -1,0 +1,1 @@
+stub eggnog db placeholder

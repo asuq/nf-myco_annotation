@@ -6,7 +6,9 @@ include { BUSCO_DATASET_PREP } from './subworkflows/local/busco_dataset_prep'
 include { COHORT_16S } from './subworkflows/local/cohort_16s'
 include { COHORT_ANI } from './subworkflows/local/cohort_ani'
 include { COHORT_TAXONOMY } from './subworkflows/local/cohort_taxonomy'
+include { FINAL_OUTPUTS } from './subworkflows/local/final_outputs'
 include { INPUT_VALIDATION_AND_STAGING } from './subworkflows/local/input_validation_and_staging'
+include { PER_SAMPLE_ANNOTATION } from './subworkflows/local/per_sample_annotation'
 include { PER_SAMPLE_QC } from './subworkflows/local/per_sample_qc'
 
 workflow {
@@ -23,8 +25,7 @@ workflow {
         error "params.busco_lineages must be a non-empty list."
     }
 
-    log.warn 'This phase wires validation, staging, taxonomy expansion, 16S summarisation, BUSCO parsing, and the ANI cohort branch.'
-    log.warn 'Prokka, CRISPRCasFinder, PADLOC, eggNOG, and final table/status aggregation remain intentionally unwired here.'
+    log.warn 'PADLOC and eggNOG outputs are retained in sample folders but are intentionally excluded from master_table.tsv.'
 
     sampleCsv = Channel.fromPath(params.sample_csv, checkIfExists: true)
     metadata = Channel.fromPath(params.metadata, checkIfExists: true)
@@ -39,6 +40,10 @@ workflow {
         BUSCO_DATASET_PREP.out.datasets,
     )
     COHORT_16S(PER_SAMPLE_QC.out.barrnap)
+    PER_SAMPLE_ANNOTATION(
+        INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
+        PER_SAMPLE_QC.out.gcode_qc,
+    )
     COHORT_ANI(
         INPUT_VALIDATION_AND_STAGING.out.validated_samples,
         metadata,
@@ -47,13 +52,36 @@ workflow {
         COHORT_16S.out.sample_summaries,
         PER_SAMPLE_QC.out.busco_summaries,
     )
+    FINAL_OUTPUTS(
+        INPUT_VALIDATION_AND_STAGING.out.validated_samples,
+        metadata,
+        COHORT_TAXONOMY.out.taxonomy,
+        PER_SAMPLE_QC.out.gcode_qc,
+        COHORT_16S.out.sample_summaries,
+        COHORT_ANI.out.parsed_busco,
+        PER_SAMPLE_ANNOTATION.out.ccfinder_summary,
+        COHORT_ANI.out.clusters,
+        INPUT_VALIDATION_AND_STAGING.out.versions
+            .mix(BUSCO_DATASET_PREP.out.versions)
+            .mix(COHORT_TAXONOMY.out.versions)
+            .mix(PER_SAMPLE_QC.out.versions)
+            .mix(COHORT_16S.out.versions)
+            .mix(PER_SAMPLE_ANNOTATION.out.versions)
+            .mix(COHORT_ANI.out.versions),
+        workflow.nextflow.version.toString(),
+        workflow.manifest.version ?: 'NA',
+        workflow.commitId ?: 'NA',
+        workflow.containerEngine ?: 'none',
+    )
 
     versions = INPUT_VALIDATION_AND_STAGING.out.versions
         .mix(BUSCO_DATASET_PREP.out.versions)
         .mix(COHORT_TAXONOMY.out.versions)
         .mix(PER_SAMPLE_QC.out.versions)
         .mix(COHORT_16S.out.versions)
+        .mix(PER_SAMPLE_ANNOTATION.out.versions)
         .mix(COHORT_ANI.out.versions)
+        .mix(FINAL_OUTPUTS.out.versions)
 
     emit:
     validated_samples = INPUT_VALIDATION_AND_STAGING.out.validated_samples
@@ -72,6 +100,11 @@ workflow {
     busco_datasets = BUSCO_DATASET_PREP.out.datasets
     busco = PER_SAMPLE_QC.out.busco
     busco_summaries = PER_SAMPLE_QC.out.busco_summaries
+    prokka = PER_SAMPLE_ANNOTATION.out.prokka
+    ccfinder = PER_SAMPLE_ANNOTATION.out.ccfinder
+    ccfinder_summary = PER_SAMPLE_ANNOTATION.out.ccfinder_summary
+    padloc = PER_SAMPLE_ANNOTATION.out.padloc
+    eggnog = PER_SAMPLE_ANNOTATION.out.eggnog
     parsed_busco_summaries = COHORT_ANI.out.parsed_busco
     fastani_inputs = COHORT_ANI.out.fastani_inputs
     fastani_paths = COHORT_ANI.out.fastani_paths
@@ -82,5 +115,8 @@ workflow {
     fastani_log = COHORT_ANI.out.fastani_log
     ani_clusters = COHORT_ANI.out.clusters
     ani_representatives = COHORT_ANI.out.representatives
+    master_table = FINAL_OUTPUTS.out.master_table
+    sample_status = FINAL_OUTPUTS.out.sample_status
+    tool_and_db_versions = FINAL_OUTPUTS.out.versions_table
     versions = versions
 }

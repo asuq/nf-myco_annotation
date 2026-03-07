@@ -19,7 +19,7 @@ process BUILD_FASTANI_INPUTS {
     path staged_fastas
     path checkm2_summaries
     path sixteen_s_statuses
-    path busco_summaries
+    path busco_tables
 
     output:
     path 'fastani_inputs', emit: fastani_inputs
@@ -30,6 +30,8 @@ process BUILD_FASTANI_INPUTS {
 
     script:
     def primaryBuscoColumn = params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}"
+    def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
+    def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
     """
     python3 "${projectDir}/bin/build_fastani_inputs.py" \
         --validated-samples "${validated_samples}" \
@@ -37,7 +39,7 @@ process BUILD_FASTANI_INPUTS {
         --staged-manifest "${staged_manifest}" \
         --checkm2 "${checkm2_summaries}" \
         --16s-status "${sixteen_s_statuses}" \
-        --busco "${busco_summaries}" \
+        ${buscoArgs} \
         --primary-busco-column "${primaryBuscoColumn}" \
         --outdir .
 

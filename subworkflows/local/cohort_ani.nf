@@ -50,14 +50,9 @@ workflow COHORT_ANI {
             newLine: true,
         )
 
-    combined_busco = SUMMARISE_BUSCO.out.summary
+    busco_tables = SUMMARISE_BUSCO.out.summary
         .map { meta, lineage, summary -> summary }
-        .collectFile(
-            name: 'busco_summaries.tsv',
-            keepHeader: true,
-            skip: 1,
-            newLine: true,
-        )
+        .collect()
 
     BUILD_FASTANI_INPUTS(
         validated_samples,
@@ -66,7 +61,7 @@ workflow COHORT_ANI {
         staged_fasta_files,
         combined_checkm2,
         combined_16s,
-        combined_busco,
+        busco_tables,
     )
     FASTANI(BUILD_FASTANI_INPUTS.out.fastani_inputs, BUILD_FASTANI_INPUTS.out.paths)
     CLUSTER_ANI(FASTANI.out.matrix, BUILD_FASTANI_INPUTS.out.metadata)
