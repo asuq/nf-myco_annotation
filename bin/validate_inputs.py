@@ -15,6 +15,7 @@ from typing import Sequence
 
 
 LOGGER = logging.getLogger(__name__)
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
 REQUIRED_SAMPLE_COLUMNS = (
     "accession",
@@ -32,6 +33,7 @@ ACCESSION_MAP_COLUMNS = (
     "metadata_present",
 )
 VALIDATION_WARNING_COLUMNS = ("accession", "warning_code", "message")
+DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 TRUE_TOKENS = {"true", "t", "yes", "y", "1"}
 FALSE_TOKENS = {"false", "f", "no", "n", "0"}
@@ -139,6 +141,12 @@ def sanitise_accession(accession: str) -> str:
     previous_was_underscore = False
     for char in accession:
         if char.isascii() and (char.isalnum() or char == "_"):
+            if char == "_":
+                if previous_was_underscore:
+                    continue
+                characters.append(char)
+                previous_was_underscore = True
+                continue
             characters.append(char)
             previous_was_underscore = False
             continue
@@ -417,6 +425,71 @@ def build_warning_rows(warnings: Sequence[ValidationWarning]) -> list[dict[str, 
     ]
 
 
+def load_sample_status_columns(path: Path = DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET) -> list[str]:
+    """Load the ordered sample-status columns from the maintained asset file."""
+    if not path.is_file():
+        raise ValidationError(f"Missing sample-status column asset: {path}")
+
+    columns = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not columns:
+        raise ValidationError(f"Sample-status column asset is empty: {path}")
+    if len(set(columns)) != len(columns):
+        raise ValidationError(f"Sample-status column asset contains duplicates: {path}")
+    return columns
+
+
+def build_initial_sample_status_row(
+    record: SampleRecord,
+    warnings: Sequence[ValidationWarning],
+    sample_status_columns: Sequence[str],
+) -> dict[str, str]:
+    """Build the initial sample-status row emitted immediately after validation."""
+    row: dict[str, str] = {}
+    for column in sample_status_columns:
+        if column.endswith("_status") or column == "ani_included":
+            row[column] = "na"
+        elif column in {"gcode", "low_quality"}:
+            row[column] = "NA"
+        else:
+            row[column] = ""
+
+    row["accession"] = record.values["accession"]
+    row["internal_id"] = record.internal_id
+    row["is_new"] = record.values["is_new"]
+    row["validation_status"] = "done"
+    row["warnings"] = ";".join(
+        dict.fromkeys(warning.warning_code for warning in warnings)
+    )
+    row["notes"] = "; ".join(
+        dict.fromkeys(warning.message for warning in warnings)
+    )
+    return row
+
+
+def build_initial_sample_status_rows(
+    records: Sequence[SampleRecord],
+    warnings: Sequence[ValidationWarning],
+    sample_status_columns: Sequence[str],
+) -> list[dict[str, str]]:
+    """Build one initial sample-status row per validated sample."""
+    warnings_by_accession: dict[str, list[ValidationWarning]] = defaultdict(list)
+    for warning in warnings:
+        warnings_by_accession[warning.accession].append(warning)
+
+    return [
+        build_initial_sample_status_row(
+            record=record,
+            warnings=warnings_by_accession.get(record.values["accession"], []),
+            sample_status_columns=sample_status_columns,
+        )
+        for record in records
+    ]
+
+
 def run_validation(sample_csv: Path, metadata: Path, outdir: Path) -> None:
     """Validate inputs and write the expected downstream TSV outputs."""
     sample_header, sample_rows = read_delimited_table(sample_csv, delimiter=",")
@@ -431,6 +504,7 @@ def run_validation(sample_csv: Path, metadata: Path, outdir: Path) -> None:
         sample_rows=sample_rows,
         metadata_index=metadata_index,
     )
+    sample_status_columns = load_sample_status_columns()
 
     write_tsv(
         outdir / "validated_samples.tsv",
@@ -446,6 +520,15 @@ def run_validation(sample_csv: Path, metadata: Path, outdir: Path) -> None:
         outdir / "validation_warnings.tsv",
         VALIDATION_WARNING_COLUMNS,
         build_warning_rows(warnings),
+    )
+    write_tsv(
+        outdir / "sample_status.tsv",
+        sample_status_columns,
+        build_initial_sample_status_rows(
+            records=validated_records,
+            warnings=warnings,
+            sample_status_columns=sample_status_columns,
+        ),
     )
 
 
