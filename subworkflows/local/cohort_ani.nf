@@ -4,8 +4,8 @@ include { FASTANI } from '../../modules/local/fastani'
 include { CLUSTER_ANI } from '../../modules/local/cluster_ani'
 
 /*
- * Build the ANI-eligible cohort, run all-vs-all FastANI, and cluster the
- * eligible subset using the existing cluster_ani.py implementation.
+ * Build the ANI-eligible cohort, run all-vs-all FastANI, and emit stable ANI
+ * cluster memberships for downstream representative selection.
  */
 workflow COHORT_ANI {
     take:
@@ -81,6 +81,5 @@ workflow COHORT_ANI {
     fastani_raw = FASTANI.out.raw_output
     fastani_log = FASTANI.out.log
     clusters = CLUSTER_ANI.out.clusters
-    representatives = CLUSTER_ANI.out.representatives
     versions = versions
 }

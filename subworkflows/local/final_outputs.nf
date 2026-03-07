@@ -15,6 +15,8 @@ workflow FINAL_OUTPUTS {
     busco_summaries
     ccfinder_summaries
     ani_clusters
+    ani_metadata
+    ani_matrix
     version_files
     nextflow_version
     pipeline_version
@@ -68,6 +70,8 @@ workflow FINAL_OUTPUTS {
         collected_busco,
         combined_ccfinder,
         ani_clusters,
+        ani_metadata,
+        ani_matrix,
     )
 
     collected_versions = version_files
@@ -85,6 +89,7 @@ workflow FINAL_OUTPUTS {
     emit:
     master_table = BUILD_MASTER_TABLE.out.master_table
     sample_status = BUILD_MASTER_TABLE.out.sample_status
+    ani_representatives = BUILD_MASTER_TABLE.out.ani_representatives
     versions_table = COLLECT_VERSIONS.out.versions_table
     versions = BUILD_MASTER_TABLE.out.versions
 }

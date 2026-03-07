@@ -61,6 +61,8 @@ workflow {
         COHORT_ANI.out.parsed_busco,
         PER_SAMPLE_ANNOTATION.out.ccfinder_summary,
         COHORT_ANI.out.clusters,
+        COHORT_ANI.out.ani_metadata,
+        COHORT_ANI.out.fastani_matrix,
         INPUT_VALIDATION_AND_STAGING.out.versions
             .mix(BUSCO_DATASET_PREP.out.versions)
             .mix(COHORT_TAXONOMY.out.versions)
@@ -114,7 +116,7 @@ workflow {
     fastani_raw = COHORT_ANI.out.fastani_raw
     fastani_log = COHORT_ANI.out.fastani_log
     ani_clusters = COHORT_ANI.out.clusters
-    ani_representatives = COHORT_ANI.out.representatives
+    ani_representatives = FINAL_OUTPUTS.out.ani_representatives
     master_table = FINAL_OUTPUTS.out.master_table
     sample_status = FINAL_OUTPUTS.out.sample_status
     tool_and_db_versions = FINAL_OUTPUTS.out.versions_table
