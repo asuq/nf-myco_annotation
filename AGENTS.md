@@ -1,0 +1,7 @@
+- docs/design_spec.md is the source of truth for pipeline behaviour.
+- Codex must read it before proposing edits.
+- Work in phases, not one giant patch.
+- Prefer small Python CLIs in bin/ for parsing/merging logic and keep orchestration in Nextflow DSL2.
+- Preserve metadata columns verbatim and append derived columns after them.
+- Use sample_status.tsv and tool_and_db_versions.tsv.
+- For repeated mistakes, update AGENTS.md.
