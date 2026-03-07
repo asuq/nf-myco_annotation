@@ -24,6 +24,7 @@ STATUS_COLUMNS = (
 )
 TRUE_TOKENS = {"true", "t", "yes", "y", "1"}
 FALSE_TOKENS = {"false", "f", "no", "n", "0"}
+MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="false",
         help="Whether the sample is atypical and should be excluded from cohort 16S.",
     )
+    parser.add_argument(
+        "--atypical-warnings",
+        help=(
+            "Optional metadata Atypical_Warnings value. When provided, it overrides "
+            "--is-atypical using the design-spec atypical rule."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -94,6 +102,23 @@ def normalise_boolean(value: str) -> bool:
     if token in FALSE_TOKENS:
         return False
     raise ValueError(f"Invalid boolean value: {value!r}")
+
+
+def is_missing(value: str | None) -> bool:
+    """Return True when a metadata-like scalar should be treated as missing."""
+    if value is None:
+        return True
+    return value.strip().lower() in MISSING_VALUE_TOKENS
+
+
+def determine_is_atypical(
+    is_atypical_value: str,
+    atypical_warnings: str | None,
+) -> bool:
+    """Resolve atypical status from either the explicit flag or metadata warnings."""
+    if atypical_warnings is None:
+        return normalise_boolean(is_atypical_value)
+    return not is_missing(atypical_warnings)
 
 
 def parse_gff_hits(path: Path) -> list[tuple[bool, bool, float]]:
@@ -295,7 +320,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         rrna_gff=args.rrna_gff,
         rrna_fasta=args.rrna_fasta,
         outdir=args.outdir,
-        is_atypical=normalise_boolean(args.is_atypical),
+        is_atypical=determine_is_atypical(
+            is_atypical_value=args.is_atypical,
+            atypical_warnings=args.atypical_warnings,
+        ),
     )
     LOGGER.info("Wrote 16S summary for %s.", args.accession)
     return 0
