@@ -1,0 +1,46 @@
+"""Tests for the master-table output contract."""
+
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BIN_DIR = ROOT / "bin"
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
+
+import master_table_contract  # noqa: E402
+
+
+class MasterTableContractTestCase(unittest.TestCase):
+    """Verify the locked derived-column order and asset consistency."""
+
+    def test_default_contract_matches_repository_asset(self) -> None:
+        """Keep the asset file aligned with the default code contract."""
+        master_table_contract.validate_default_append_columns_asset()
+        self.assertEqual(
+            master_table_contract.read_append_columns_asset(),
+            master_table_contract.build_append_columns(),
+        )
+
+    def test_build_master_table_columns_supports_custom_busco_order(self) -> None:
+        """Insert BUSCO columns in caller-provided lineage order."""
+        columns = master_table_contract.build_master_table_columns(
+            metadata_columns=["Accession", "Tax_ID"],
+            busco_lineages=["lineage_a", "lineage_b", "lineage_c"],
+        )
+
+        self.assertEqual(columns[:2], ["Accession", "Tax_ID"])
+        self.assertIn("BUSCO_lineage_a", columns)
+        self.assertIn("BUSCO_lineage_b", columns)
+        self.assertIn("BUSCO_lineage_c", columns)
+        self.assertLess(columns.index("BUSCO_lineage_a"), columns.index("BUSCO_lineage_b"))
+        self.assertLess(columns.index("BUSCO_lineage_b"), columns.index("BUSCO_lineage_c"))
+        self.assertEqual(columns[-4:], list(master_table_contract.ANI_COLUMNS))
+
+
+if __name__ == "__main__":
+    unittest.main()
