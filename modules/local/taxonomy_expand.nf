@@ -11,6 +11,12 @@ process TAXONOMY_EXPAND {
     path 'taxonomy_expanded.tsv', emit: taxonomy
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "TAXONOMY_EXPAND is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > taxonomy_expanded.tsv
@@ -18,11 +24,5 @@ process TAXONOMY_EXPAND {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "TAXONOMY_EXPAND is a placeholder module." >&2
-    exit 1
     '''
 }

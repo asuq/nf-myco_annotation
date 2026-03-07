@@ -10,6 +10,12 @@ process BARRNAP {
     tuple val(meta), path('rrna.fa'), emit: fasta
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "BARRNAP is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > rrna.gff
@@ -18,11 +24,5 @@ process BARRNAP {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "BARRNAP is a placeholder module." >&2
-    exit 1
     '''
 }

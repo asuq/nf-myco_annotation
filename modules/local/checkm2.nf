@@ -11,6 +11,12 @@ process CHECKM2 {
     tuple val(meta), val(translation_table), path('quality_report.tsv'), emit: quality_report
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "CHECKM2 is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p checkm2_output
@@ -19,11 +25,5 @@ process CHECKM2 {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "CHECKM2 is a placeholder module." >&2
-    exit 1
     '''
 }

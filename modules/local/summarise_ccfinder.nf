@@ -11,6 +11,12 @@ process SUMMARISE_CCFINDER {
     path 'ccfinder_crisprs.tsv', emit: crisprs
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "SUMMARISE_CCFINDER is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > ccfinder_strains.tsv
@@ -20,11 +26,5 @@ process SUMMARISE_CCFINDER {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "SUMMARISE_CCFINDER is a placeholder module." >&2
-    exit 1
     '''
 }

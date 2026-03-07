@@ -10,6 +10,12 @@ process PROKKA {
     tuple val(meta), path('prokka'), emit: outdir
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "PROKKA is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p prokka
@@ -18,11 +24,5 @@ process PROKKA {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "PROKKA is a placeholder module." >&2
-    exit 1
     '''
 }

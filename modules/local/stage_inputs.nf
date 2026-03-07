@@ -10,6 +10,12 @@ process STAGE_INPUTS {
     tuple val(meta), path('staged.fasta.fai'), emit: fai, optional: true
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "STAGE_INPUTS is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > staged.fasta
@@ -18,11 +24,5 @@ process STAGE_INPUTS {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "STAGE_INPUTS is a placeholder module." >&2
-    exit 1
     '''
 }

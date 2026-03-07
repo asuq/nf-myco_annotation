@@ -11,6 +11,12 @@ process PREPARE_PADLOC_INPUTS {
     path 'padloc_input.faa', emit: faa
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "PREPARE_PADLOC_INPUTS is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > padloc_input.gff
@@ -19,11 +25,5 @@ process PREPARE_PADLOC_INPUTS {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "PREPARE_PADLOC_INPUTS is a placeholder module." >&2
-    exit 1
     '''
 }

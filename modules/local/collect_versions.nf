@@ -8,14 +8,14 @@ process COLLECT_VERSIONS {
     output:
     path 'tool_and_db_versions.tsv', emit: versions_table
 
-    stub:
-    '''
-    : > tool_and_db_versions.tsv
-    '''
-
     script:
     '''
     echo "COLLECT_VERSIONS is a placeholder module." >&2
     exit 1
+    '''
+
+    stub:
+    '''
+    : > tool_and_db_versions.tsv
     '''
 }

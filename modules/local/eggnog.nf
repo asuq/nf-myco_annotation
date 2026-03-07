@@ -10,6 +10,12 @@ process EGGNOG {
     tuple val(meta), path('eggnog_annotations.tsv'), emit: annotations
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "EGGNOG is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p eggnog
@@ -18,11 +24,5 @@ process EGGNOG {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "EGGNOG is a placeholder module." >&2
-    exit 1
     '''
 }

@@ -10,6 +10,12 @@ process FASTANI {
     path 'fastani.tsv', emit: raw_output
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "FASTANI is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > fastani.matrix
@@ -18,11 +24,5 @@ process FASTANI {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "FASTANI is a placeholder module." >&2
-    exit 1
     '''
 }

@@ -11,6 +11,12 @@ process CLUSTER_ANI {
     path 'representatives.tsv', emit: representatives
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "CLUSTER_ANI is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > cluster.tsv
@@ -19,11 +25,5 @@ process CLUSTER_ANI {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "CLUSTER_ANI is a placeholder module." >&2
-    exit 1
     '''
 }

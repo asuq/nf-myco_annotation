@@ -12,6 +12,12 @@ process SUMMARISE_16S {
     path 'all_best_16S_manifest.tsv', emit: cohort_manifest
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "SUMMARISE_16S is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > best_16S.fna
@@ -22,11 +28,5 @@ process SUMMARISE_16S {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "SUMMARISE_16S is a placeholder module." >&2
-    exit 1
     '''
 }

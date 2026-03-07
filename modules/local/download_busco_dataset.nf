@@ -10,6 +10,12 @@ process DOWNLOAD_BUSCO_DATASET {
     tuple val(lineage), path('download.log'), emit: log
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "DOWNLOAD_BUSCO_DATASET is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p busco_dataset
@@ -18,11 +24,5 @@ process DOWNLOAD_BUSCO_DATASET {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "DOWNLOAD_BUSCO_DATASET is a placeholder module." >&2
-    exit 1
     '''
 }

@@ -10,6 +10,12 @@ process PADLOC {
     path 'padloc', emit: outdir
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "PADLOC is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p padloc
@@ -18,11 +24,5 @@ process PADLOC {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "PADLOC is a placeholder module." >&2
-    exit 1
     '''
 }

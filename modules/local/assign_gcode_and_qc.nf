@@ -10,6 +10,12 @@ process ASSIGN_GCODE_AND_QC {
     path 'gcode_qc.tsv', emit: summary
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "ASSIGN_GCODE_AND_QC is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > gcode_qc.tsv
@@ -17,11 +23,5 @@ process ASSIGN_GCODE_AND_QC {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "ASSIGN_GCODE_AND_QC is a placeholder module." >&2
-    exit 1
     '''
 }

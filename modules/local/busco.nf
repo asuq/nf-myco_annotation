@@ -12,6 +12,12 @@ process BUSCO {
     tuple val(meta), val(lineage), path('short_summary.json'), emit: summary
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "BUSCO is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p busco_output
@@ -20,11 +26,5 @@ process BUSCO {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "BUSCO is a placeholder module." >&2
-    exit 1
     '''
 }

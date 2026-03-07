@@ -11,6 +11,12 @@ process BUILD_FASTANI_INPUTS {
     path 'ani_exclusions.tsv', emit: exclusions
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "BUILD_FASTANI_INPUTS is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > fastani_paths.txt
@@ -20,11 +26,5 @@ process BUILD_FASTANI_INPUTS {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "BUILD_FASTANI_INPUTS is a placeholder module." >&2
-    exit 1
     '''
 }

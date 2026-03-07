@@ -11,6 +11,12 @@ process CCFINDER {
     tuple val(meta), path('result.json'), emit: result_json
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "CCFINDER is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     mkdir -p ccfinder
@@ -19,11 +25,5 @@ process CCFINDER {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "CCFINDER is a placeholder module." >&2
-    exit 1
     '''
 }

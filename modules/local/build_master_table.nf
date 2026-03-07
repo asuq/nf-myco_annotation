@@ -9,6 +9,12 @@ process BUILD_MASTER_TABLE {
     path 'master_table.csv', emit: master_table
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "BUILD_MASTER_TABLE is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > master_table.csv
@@ -16,11 +22,5 @@ process BUILD_MASTER_TABLE {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "BUILD_MASTER_TABLE is a placeholder module." >&2
-    exit 1
     '''
 }

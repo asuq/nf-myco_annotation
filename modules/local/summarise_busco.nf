@@ -9,6 +9,12 @@ process SUMMARISE_BUSCO {
     path 'busco_summary.tsv', emit: summary
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "SUMMARISE_BUSCO is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > busco_summary.tsv
@@ -16,11 +22,5 @@ process SUMMARISE_BUSCO {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "SUMMARISE_BUSCO is a placeholder module." >&2
-    exit 1
     '''
 }

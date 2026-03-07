@@ -12,6 +12,12 @@ process VALIDATE_INPUTS {
     path 'validation_warnings.tsv', emit: validation_warnings
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "VALIDATE_INPUTS is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > validated_samples.tsv
@@ -21,11 +27,5 @@ process VALIDATE_INPUTS {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "VALIDATE_INPUTS is a placeholder module." >&2
-    exit 1
     '''
 }

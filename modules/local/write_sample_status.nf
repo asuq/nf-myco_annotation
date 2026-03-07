@@ -9,6 +9,12 @@ process WRITE_SAMPLE_STATUS {
     path 'sample_status.tsv', emit: sample_status
     path 'versions.yml', emit: versions
 
+    script:
+    '''
+    echo "WRITE_SAMPLE_STATUS is a placeholder module." >&2
+    exit 1
+    '''
+
     stub:
     '''
     : > sample_status.tsv
@@ -16,11 +22,5 @@ process WRITE_SAMPLE_STATUS {
     "${task.process}":
       placeholder: "true"
     EOF
-    '''
-
-    script:
-    '''
-    echo "WRITE_SAMPLE_STATUS is a placeholder module." >&2
-    exit 1
     '''
 }
