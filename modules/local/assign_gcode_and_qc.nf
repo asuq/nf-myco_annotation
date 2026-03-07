@@ -3,6 +3,13 @@
  */
 process ASSIGN_GCODE_AND_QC {
     tag "${meta.accession}"
+    label 'process_single'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/checkm2" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(checkm2_gcode4_report), path(checkm2_gcode11_report)

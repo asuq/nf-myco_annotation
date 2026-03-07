@@ -3,6 +3,13 @@
  */
 process STAGE_INPUTS {
     tag "${meta.accession}"
+    label 'process_single'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/staged" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(genome)

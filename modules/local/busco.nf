@@ -4,6 +4,13 @@
  */
 process BUSCO {
     tag "${meta.accession} / ${lineage}"
+    label 'process_medium'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/busco/${lineage}" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(genome), val(lineage), path(dataset_dir)

@@ -3,11 +3,10 @@ include { CHECKM2 as CHECKM2_GCODE4 } from '../../modules/local/checkm2'
 include { CHECKM2 as CHECKM2_GCODE11 } from '../../modules/local/checkm2'
 include { ASSIGN_GCODE_AND_QC } from '../../modules/local/assign_gcode_and_qc'
 include { BUSCO } from '../../modules/local/busco'
-include { SUMMARISE_BUSCO } from '../../modules/local/summarise_busco'
 
 /*
- * Run the per-sample QC branch: Barrnap, paired CheckM2 runs, and BUSCO across
- * the configured lineage datasets.
+ * Run the per-sample QC branch limited to Barrnap, paired CheckM2 runs, gcode
+ * assignment, and raw BUSCO offline executions across the configured lineages.
  */
 workflow PER_SAMPLE_QC {
     take:
@@ -49,18 +48,19 @@ workflow PER_SAMPLE_QC {
         }
 
     BUSCO(busco_jobs)
-    SUMMARISE_BUSCO(BUSCO.out.summary)
 
     versions = BARRNAP.out.versions
         .mix(CHECKM2_GCODE4.out.versions)
         .mix(CHECKM2_GCODE11.out.versions)
         .mix(ASSIGN_GCODE_AND_QC.out.versions)
         .mix(BUSCO.out.versions)
-        .mix(SUMMARISE_BUSCO.out.versions)
 
     emit:
     barrnap = BARRNAP.out.results
-    checkm2 = ASSIGN_GCODE_AND_QC.out.summary
-    busco = SUMMARISE_BUSCO.out.summary
+    checkm2_gcode4 = CHECKM2_GCODE4.out.results
+    checkm2_gcode11 = CHECKM2_GCODE11.out.results
+    gcode_qc = ASSIGN_GCODE_AND_QC.out.summary
+    busco = BUSCO.out.results
+    busco_summaries = BUSCO.out.summary
     versions = versions
 }

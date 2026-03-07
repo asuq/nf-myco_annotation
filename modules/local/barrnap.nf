@@ -4,6 +4,13 @@
  */
 process BARRNAP {
     tag "${meta.accession}"
+    label 'process_medium'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/barrnap" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
     tuple val(meta), path(genome)
