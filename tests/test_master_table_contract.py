@@ -41,6 +41,18 @@ class MasterTableContractTestCase(unittest.TestCase):
         self.assertLess(columns.index("BUSCO_lineage_b"), columns.index("BUSCO_lineage_c"))
         self.assertEqual(columns[-4:], list(master_table_contract.ANI_COLUMNS))
 
+    def test_normalise_busco_lineages_rejects_duplicates(self) -> None:
+        """Fail when BUSCO lineage names repeat after normalisation."""
+        with self.assertRaises(ValueError):
+            master_table_contract.normalise_busco_lineages(
+                ["bacillota_odb12", "bacillota_odb12"]
+            )
+
+    def test_build_master_table_columns_rejects_metadata_overlap(self) -> None:
+        """Fail when metadata columns collide with derived output columns."""
+        with self.assertRaises(ValueError):
+            master_table_contract.build_master_table_columns(["Accession", "Gcode"])
+
 
 if __name__ == "__main__":
     unittest.main()

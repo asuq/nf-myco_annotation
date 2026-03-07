@@ -236,6 +236,189 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertFalse(output.exists())
 
+    def test_main_rejects_duplicate_internal_ids_in_validated_samples(self) -> None:
+        """Fail when the validated manifest maps two rows to the same internal ID."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tdup_id",
+                        "ACC2\ttrue\tScaffold\t/path/two.fna\tdup_id",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\nACC1\t123\n",
+            )
+            output = tmpdir / "master_table.csv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_main_rejects_metadata_with_both_accession_header_variants(self) -> None:
+        """Fail when metadata contains both `accession` and `Accession` key columns."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "accession\tAccession\tTax_ID",
+                        "ACC1\tACC1\t123",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "master_table.csv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_main_rejects_duplicate_busco_lineage_inputs(self) -> None:
+        """Fail when the same BUSCO lineage column is supplied more than once."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\nACC1\t123\n",
+            )
+            busco_one = self.write_text_file(
+                tmpdir / "busco_1.tsv",
+                "\n".join(
+                    [
+                        "accession\tBUSCO_bacillota_odb12",
+                        "ACC1\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+                    ]
+                )
+                + "\n",
+            )
+            busco_two = self.write_text_file(
+                tmpdir / "busco_2.tsv",
+                "\n".join(
+                    [
+                        "accession\tBUSCO_bacillota_odb12",
+                        "ACC1\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:200",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "master_table.csv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--busco",
+                    str(busco_one),
+                    "--busco",
+                    str(busco_two),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_main_rejects_append_contract_drift(self) -> None:
+        """Fail when the provided append-column contract no longer matches the code contract."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\nACC1\t123\n",
+            )
+            append_columns = self.write_text_file(
+                tmpdir / "append_columns.txt",
+                "\n".join(
+                    master_table_contract.build_append_columns()[:-1]
+                    + ["Unexpected_Column"]
+                )
+                + "\n",
+            )
+            output = tmpdir / "master_table.csv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(append_columns),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

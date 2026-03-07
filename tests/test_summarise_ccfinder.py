@@ -179,6 +179,56 @@ class SummariseCCFinderTestCase(unittest.TestCase):
             self.assertEqual(read_tsv(outdir / "ccfinder_contigs.tsv"), [])
             self.assertEqual(read_tsv(outdir / "ccfinder_crisprs.tsv"), [])
 
+    def test_main_generates_fallback_ids_and_invalid_entry_warning(self) -> None:
+        """Handle missing IDs and skip malformed retained CRISPR entries with a warning."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            result_json = self.write_json(
+                tmpdir / "result.json",
+                {
+                    "Sequences": [
+                        {
+                            "Length": 400,
+                            "Crisprs": [
+                                {
+                                    "Evidence_Level": 4,
+                                    "Start": 10,
+                                    "End": 50,
+                                    "Spacers": 2,
+                                },
+                                {
+                                    "Evidence_Level": 4,
+                                    "Start": 80,
+                                    "End": 60,
+                                    "Spacers": 1,
+                                },
+                            ],
+                        }
+                    ]
+                },
+            )
+            outdir = tmpdir / "out"
+
+            summarise_ccfinder.main(
+                [
+                    "--accession",
+                    "ACC4",
+                    "--result-json",
+                    str(result_json),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            strain_row = read_tsv(outdir / "ccfinder_strains.tsv")[0]
+            contig_row = read_tsv(outdir / "ccfinder_contigs.tsv")[0]
+            crispr_row = read_tsv(outdir / "ccfinder_crisprs.tsv")[0]
+
+            self.assertEqual(strain_row["CRISPRS"], "1")
+            self.assertEqual(strain_row["warnings"], "invalid_crispr_entry")
+            self.assertEqual(contig_row["contig_id"], "contig_1")
+            self.assertEqual(crispr_row["crispr_id"], "contig_1_crispr_1")
+
 
 if __name__ == "__main__":
     unittest.main()

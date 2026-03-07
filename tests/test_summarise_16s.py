@@ -164,6 +164,82 @@ class Summarise16STestCase(unittest.TestCase):
                 "",
             )
 
+    def test_main_uses_gff_order_as_final_tie_break(self) -> None:
+        """Prefer the first GFF hit when score and length remain tied."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                "\n".join(
+                    [
+                        "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA",
+                        "contig1\tbarrnap\trRNA\t200\t299\t5.0\t+\t.\tName=16S_rRNA",
+                    ]
+                )
+                + "\n",
+            )
+            fasta = self.write_text_file(
+                tmpdir / "rrna.fa",
+                "\n".join(
+                    [
+                        ">hit1 16S ribosomal RNA",
+                        "A" * 100,
+                        ">hit2 16S ribosomal RNA",
+                        "C" * 100,
+                    ]
+                )
+                + "\n",
+            )
+            outdir = tmpdir / "out"
+
+            summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC4",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["best_16S_header"], "hit1 16S ribosomal RNA")
+
+    def test_main_reports_no_when_no_16s_hits_exist(self) -> None:
+        """Emit `No` and no cohort inclusion when Barrnap found only non-16S rRNA."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=23S_rRNA\n",
+            )
+            fasta = self.write_text_file(
+                tmpdir / "rrna.fa",
+                ">hit1 23S ribosomal RNA\n" + "A" * 100 + "\n",
+            )
+            outdir = tmpdir / "out"
+
+            summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC5",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["16S"], "No")
+            self.assertEqual(status_row["best_16S_header"], "NA")
+            self.assertEqual(status_row["include_in_all_best_16S"], "false")
+
 
 if __name__ == "__main__":
     unittest.main()

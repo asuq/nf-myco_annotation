@@ -138,6 +138,69 @@ class SummariseBuscoTestCase(unittest.TestCase):
             self.assertEqual(row["busco_status"], "failed")
             self.assertEqual(row["warnings"], "busco_summary_failed")
 
+    def test_main_builds_busco_string_from_counts(self) -> None:
+        """Reconstruct percentages from count-style machine-readable fields."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            summary = self.write_json(
+                tmpdir / "short_summary.json",
+                {
+                    "results": {
+                        "Complete": 193,
+                        "SingleCopy": 190,
+                        "Duplicated": 3,
+                        "Fragmented": 4,
+                        "Missing": 3,
+                        "n_markers_total": 200,
+                    }
+                },
+            )
+            output = tmpdir / "summary.tsv"
+
+            summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC4",
+                    "--summary",
+                    str(summary),
+                    "--lineage",
+                    "bacillota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            row = read_tsv_row(output)
+            self.assertEqual(
+                row["BUSCO_bacillota_odb12"],
+                "C:96.5%[S:95.0%,D:1.5%],F:2.0%,M:1.5%,n:200",
+            )
+
+    def test_main_marks_invalid_json_payload_as_failed(self) -> None:
+        """Emit a failed row when the summary file is not valid JSON."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            summary = tmpdir / "short_summary.json"
+            summary.write_text("{not-json", encoding="utf-8")
+            output = tmpdir / "summary.tsv"
+
+            summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC5",
+                    "--summary",
+                    str(summary),
+                    "--lineage",
+                    "bacillota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            row = read_tsv_row(output)
+            self.assertEqual(row["BUSCO_bacillota_odb12"], "NA")
+            self.assertEqual(row["busco_status"], "failed")
+
 
 if __name__ == "__main__":
     unittest.main()
