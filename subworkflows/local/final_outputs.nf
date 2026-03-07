@@ -1,5 +1,6 @@
 include { BUILD_MASTER_TABLE } from '../../modules/local/build_master_table'
 include { COLLECT_VERSIONS } from '../../modules/local/collect_versions'
+include { SELECT_ANI_REPRESENTATIVES } from '../../modules/local/select_ani_representatives'
 
 /*
  * Build the final cohort tables from the keyed per-sample summaries and gather
@@ -60,6 +61,12 @@ workflow FINAL_OUTPUTS {
         .map { meta, lineage, summary -> summary }
         .collect()
 
+    SELECT_ANI_REPRESENTATIVES(
+        ani_clusters,
+        ani_metadata,
+        ani_matrix,
+    )
+
     BUILD_MASTER_TABLE(
         validated_samples,
         metadata,
@@ -69,13 +76,14 @@ workflow FINAL_OUTPUTS {
         combined_16s,
         collected_busco,
         combined_ccfinder,
-        ani_clusters,
-        ani_metadata,
-        ani_matrix,
+        SELECT_ANI_REPRESENTATIVES.out.ani_summary,
     )
 
-    collected_versions = version_files
+    final_versions = SELECT_ANI_REPRESENTATIVES.out.versions
         .mix(BUILD_MASTER_TABLE.out.versions)
+
+    collected_versions = version_files
+        .mix(final_versions)
         .collect()
 
     COLLECT_VERSIONS(
@@ -89,7 +97,7 @@ workflow FINAL_OUTPUTS {
     emit:
     master_table = BUILD_MASTER_TABLE.out.master_table
     sample_status = BUILD_MASTER_TABLE.out.sample_status
-    ani_representatives = BUILD_MASTER_TABLE.out.ani_representatives
+    ani_representatives = SELECT_ANI_REPRESENTATIVES.out.ani_representatives
     versions_table = COLLECT_VERSIONS.out.versions_table
-    versions = BUILD_MASTER_TABLE.out.versions
+    versions = final_versions
 }
