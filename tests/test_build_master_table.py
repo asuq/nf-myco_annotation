@@ -361,8 +361,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 "missing_busco_mycoplasmatota_odb12_summary",
             )
 
-    def test_main_selects_ani_representatives_from_clusters_during_final_build(self) -> None:
-        """Derive ANI representative columns from cluster memberships, metadata, and matrix."""
+    def test_main_consumes_precomputed_ani_summary_during_final_build(self) -> None:
+        """Join ANI fields from a precomputed ANI summary TSV."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             validated_samples = self.write_text_file(
@@ -420,42 +420,19 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
-            ani_clusters = self.write_text_file(
-                tmpdir / "cluster.tsv",
+            ani_summary = self.write_text_file(
+                tmpdir / "ani_summary.tsv",
                 "\n".join(
                     [
-                        "Accession\tCluster_ID\tMatrix_Name",
-                        "ACC1\tC000001\tfastani_inputs/ACC1.fasta",
-                        "ACC2\tC000001\tfastani_inputs/ACC2.fasta",
-                    ]
-                )
-                + "\n",
-            )
-            ani_metadata = self.write_text_file(
-                tmpdir / "ani_metadata.tsv",
-                "\n".join(
-                    [
-                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\torganism_name\tBUSCO_bacillota_odb12",
-                        "ACC1\tfastani_inputs/ACC1.fasta\tfastani_inputs/ACC1.fasta\tComplete Genome\t11\t97\t1\t100000\t1\t900000\tOne\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
-                        "ACC2\tfastani_inputs/ACC2.fasta\tfastani_inputs/ACC2.fasta\tScaffold\t11\t93\t2\t50000\t5\t850000\tTwo\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200",
-                    ]
-                )
-                + "\n",
-            )
-            ani_matrix = self.write_text_file(
-                tmpdir / "fastani.matrix",
-                "\n".join(
-                    [
-                        "2",
-                        "fastani_inputs/ACC1.fasta",
-                        "fastani_inputs/ACC2.fasta 97.2500",
+                        "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore",
+                        "ACC1\tC000001\tyes\t100.0000\t7.500000",
+                        "ACC2\tC000001\tno\t97.2500\t3.750000",
                     ]
                 )
                 + "\n",
             )
             master_output = tmpdir / "master_table.tsv"
             status_output = tmpdir / "sample_status.tsv"
-            representatives_output = tmpdir / "ani_representatives.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -471,14 +448,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(status_16s),
                     "--busco",
                     str(busco),
-                    "--ani-clusters",
-                    str(ani_clusters),
-                    "--ani-metadata",
-                    str(ani_metadata),
-                    "--ani-matrix",
-                    str(ani_matrix),
-                    "--ani-representatives-output",
-                    str(representatives_output),
+                    "--ani",
+                    str(ani_summary),
                     "--output",
                     str(master_output),
                     "--sample-status-output",
@@ -489,7 +460,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             _, master_rows = read_tsv_rows(master_output)
             _, status_rows = read_tsv_rows(status_output)
-            _, representative_rows = read_tsv_rows(representatives_output)
             master_by_accession = {row["Accession"]: row for row in master_rows}
             status_by_accession = {row["accession"]: row for row in status_rows}
 
@@ -503,8 +473,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["ANI_to_Representative"], "97.2500")
             self.assertNotEqual(master_by_accession["ACC2"]["Score"], "NA")
 
-            self.assertEqual(representative_rows[0]["Cluster_ID"], "C000001")
-            self.assertEqual(representative_rows[0]["Representative_Accession"], "ACC1")
             self.assertEqual(status_by_accession["ACC1"]["ani_included"], "true")
             self.assertEqual(status_by_accession["ACC2"]["ani_included"], "true")
 
