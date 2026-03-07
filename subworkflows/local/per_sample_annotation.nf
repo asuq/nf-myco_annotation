@@ -1,7 +1,6 @@
 include { PROKKA } from '../../modules/local/prokka'
 include { CCFINDER } from '../../modules/local/ccfinder'
 include { SUMMARISE_CCFINDER } from '../../modules/local/summarise_ccfinder'
-include { PREPARE_PADLOC_INPUTS } from '../../modules/local/prepare_padloc_inputs'
 include { PADLOC } from '../../modules/local/padloc'
 include { EGGNOG } from '../../modules/local/eggnog'
 
@@ -25,14 +24,12 @@ workflow PER_SAMPLE_ANNOTATION {
     PROKKA(annotation_candidates)
     CCFINDER(annotation_candidates)
     SUMMARISE_CCFINDER(CCFINDER.out.result_json)
-    PREPARE_PADLOC_INPUTS(PROKKA.out.padloc_inputs)
-    PADLOC(PREPARE_PADLOC_INPUTS.out.inputs)
+    PADLOC(PROKKA.out.padloc_inputs)
     EGGNOG(PROKKA.out.eggnog_inputs)
 
     versions = PROKKA.out.versions
         .mix(CCFINDER.out.versions)
         .mix(SUMMARISE_CCFINDER.out.versions)
-        .mix(PREPARE_PADLOC_INPUTS.out.versions)
         .mix(PADLOC.out.versions)
         .mix(EGGNOG.out.versions)
 

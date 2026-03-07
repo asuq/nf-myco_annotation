@@ -1,38 +1,41 @@
 /*
- * Run PADLOC via a user-configurable command template to avoid hard-coding the
- * wrong invocation while still producing a real module wrapper.
+ * Run PADLOC with the locked inline GFF cleanup so the wrapper keeps a single
+ * module boundary around both preparation and execution.
  */
 process PADLOC {
     tag "${meta.accession}"
+    label 'process_medium'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/padloc" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+    )
 
     input:
-    tuple val(meta), path(clean_gff), path(faa)
+    tuple val(meta), path(gff), path(faa)
 
     output:
     tuple val(meta), path('padloc'), path('padloc.log'), emit: results
     path 'versions.yml', emit: versions
 
     script:
-    def commandTemplate = (params.padloc_command_template ?: '').replace("'", "'\"'\"'")
+    def extraArgs = (params.padloc_extra_args ?: '').toString()
     """
-    if [[ -z '${commandTemplate}' ]]; then
-        echo "params.padloc_command_template is required for PADLOC." >&2
-        exit 1
-    fi
+    awk '
+        BEGIN { in_fasta = 0 }
+        /^##FASTA/ { in_fasta = 1 }
+        in_fasta == 0 {
+            gsub(/gnl\\|Prokka\\|/, "")
+            print
+        }
+    ' "${gff}" > padloc_input.gff
 
-    gff_path=\$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())' "${clean_gff}")
-    faa_path=\$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())' "${faa}")
-    outdir_path="\$PWD/padloc"
-    gff_escaped=\$(printf '%q' "\${gff_path}")
-    faa_escaped=\$(printf '%q' "\${faa_path}")
-    outdir_escaped=\$(printf '%q' "\${outdir_path}")
-    command_template='${commandTemplate}'
-    command_template="\${command_template//\\{gff\\}/\${gff_escaped}}"
-    command_template="\${command_template//\\{faa\\}/\${faa_escaped}}"
-    command_template="\${command_template//\\{outdir\\}/\${outdir_escaped}}"
+    cp "${faa}" padloc_input.faa
 
     set +e
-    eval "\${command_template}" > padloc.log 2>&1
+    padloc --faa padloc_input.faa --gff padloc_input.gff --cpu ${task.cpus} --outdir "\$PWD/padloc" ${extraArgs} \
+        > padloc.log 2>&1
     exit_code=\$?
     set -e
 
@@ -41,18 +44,28 @@ process PADLOC {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      invocation_mode: "template"
+      transform: "strip_prokka_prefix_and_fasta_tail"
+      padloc: "$(padloc --help 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 
     stub:
     '''
+    cat <<'EOF' > padloc_input.gff
+    ##gff-version 3
+    contig1	Prokka	CDS	1	30	.	+	0	ID=gene_1
+    EOF
+    cat <<'EOF' > padloc_input.faa
+    >sample_a_1
+    MAAAAAAAAA
+    EOF
     mkdir -p padloc
     : > padloc/placeholder.txt
     : > padloc.log
     cat <<'EOF' > versions.yml
     "${task.process}":
-      invocation_mode: "stub"
+      transform: "stub"
+      padloc: "stub"
     EOF
     '''
 }
