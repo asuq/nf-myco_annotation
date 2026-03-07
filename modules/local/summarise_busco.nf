@@ -1,26 +1,41 @@
 /*
- * Placeholder for BUSCO summary parsing.
+ * Parse one BUSCO machine-readable summary into a stable single-row TSV.
  */
 process SUMMARISE_BUSCO {
+    tag "${meta.accession} / ${lineage}"
+
     input:
-    path busco_summaries
+    tuple val(meta), val(lineage), path(busco_summary_json)
 
     output:
-    path 'busco_summary.tsv', emit: summary
+    tuple val(meta), val(lineage), path('busco_summary.tsv'), emit: summary
     path 'versions.yml', emit: versions
 
     script:
-    '''
-    echo "SUMMARISE_BUSCO is a placeholder module." >&2
-    exit 1
-    '''
+    """
+    python3 "${projectDir}/bin/summarise_busco.py" \
+        --accession "${meta.accession}" \
+        --summary "${busco_summary_json}" \
+        --lineage "${lineage}" \
+        --output busco_summary.tsv
+
+    cat <<EOF > versions.yml
+    "${task.process}":
+      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      script: "bin/summarise_busco.py"
+    EOF
+    """
 
     stub:
     '''
-    : > busco_summary.tsv
+    cat <<'EOF' > busco_summary.tsv
+    accession	lineage	BUSCO_bacillota_odb12	busco_status	warnings
+    sample_a	bacillota_odb12	C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200	done
+    EOF
     cat <<'EOF' > versions.yml
     "${task.process}":
-      placeholder: "true"
+      python: "stub"
+      script: "bin/summarise_busco.py"
     EOF
     '''
 }

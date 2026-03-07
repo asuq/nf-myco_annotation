@@ -10,5 +10,5 @@ include { COHORT_ANI } from './subworkflows/local/cohort_ani'
 
 workflow {
     log.warn 'PADLOC outputs are produced but not merged into the master table in v1.'
-    log.warn 'This repository currently contains the pipeline skeleton only.'
+    log.warn 'Several DSL2 wrappers are now wired, but staging, taxonomy, annotation, sample-status, and final version collection remain incomplete.'
 }

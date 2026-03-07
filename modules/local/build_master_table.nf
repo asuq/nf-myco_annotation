@@ -1,26 +1,58 @@
 /*
- * Placeholder for final master-table assembly.
+ * Assemble the final master table from the validated manifest, metadata block,
+ * and the stable derived-summary tables collected earlier in the workflow.
  */
 process BUILD_MASTER_TABLE {
+    tag "master_table"
+
     input:
-    path table_inputs
+    path validated_samples
+    path metadata
+    path append_columns
+    path taxonomy
+    path checkm2
+    path sixteen_s_status
+    path busco_tables
+    path ccfinder_strains
+    path ani
 
     output:
     path 'master_table.csv', emit: master_table
     path 'versions.yml', emit: versions
 
     script:
-    '''
-    echo "BUILD_MASTER_TABLE is a placeholder module." >&2
-    exit 1
-    '''
+    def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
+    def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' ')
+    """
+    python3 "${projectDir}/bin/build_master_table.py" \
+        --validated-samples "${validated_samples}" \
+        --metadata "${metadata}" \
+        --append-columns "${append_columns}" \
+        --taxonomy "${taxonomy}" \
+        --checkm2 "${checkm2}" \
+        --16s-status "${sixteen_s_status}" \
+        ${buscoArgs} \
+        --ccfinder-strains "${ccfinder_strains}" \
+        --ani "${ani}" \
+        --output master_table.csv
+
+    cat <<EOF > versions.yml
+    "${task.process}":
+      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      script: "bin/build_master_table.py"
+    EOF
+    """
 
     stub:
     '''
-    : > master_table.csv
+    cat <<'EOF' > master_table.csv
+    Accession,Tax_ID,16S,Gcode,Low_quality,Cluster_ID
+    sample_a,123,Yes,4,false,cluster_1
+    EOF
     cat <<'EOF' > versions.yml
     "${task.process}":
-      placeholder: "true"
+      python: "stub"
+      script: "bin/build_master_table.py"
     EOF
     '''
 }

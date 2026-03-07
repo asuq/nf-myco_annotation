@@ -1,27 +1,41 @@
 /*
- * Placeholder for CheckM2 summarisation, gcode assignment, and QC status.
+ * Merge paired CheckM2 reports into a single per-sample QC summary.
  */
 process ASSIGN_GCODE_AND_QC {
+    tag "${meta.accession}"
+
     input:
-    path checkm2_gcode4
-    path checkm2_gcode11
+    tuple val(meta), path(checkm2_gcode4_report), path(checkm2_gcode11_report)
 
     output:
-    path 'gcode_qc.tsv', emit: summary
+    tuple val(meta), path('checkm2_summary.tsv'), emit: summary
     path 'versions.yml', emit: versions
 
     script:
-    '''
-    echo "ASSIGN_GCODE_AND_QC is a placeholder module." >&2
-    exit 1
-    '''
+    """
+    python3 "${projectDir}/bin/summarise_checkm2.py" \
+        --accession "${meta.accession}" \
+        --gcode4-report "${checkm2_gcode4_report}" \
+        --gcode11-report "${checkm2_gcode11_report}" \
+        --output checkm2_summary.tsv
+
+    cat <<EOF > versions.yml
+    "${task.process}":
+      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      script: "bin/summarise_checkm2.py"
+    EOF
+    """
 
     stub:
     '''
-    : > gcode_qc.tsv
+    cat <<'EOF' > checkm2_summary.tsv
+    accession	Completeness_gcode4	Completeness_gcode11	Contamination_gcode4	Contamination_gcode11	Coding_Density_gcode4	Coding_Density_gcode11	Average_Gene_Length_gcode4	Average_Gene_Length_gcode11	Total_Coding_Sequences_gcode4	Total_Coding_Sequences_gcode11	Gcode	Low_quality	checkm2_status	warnings
+    sample_a	95	82	2	1	0.9	0.8	900	850	800	780	4	false	done
+    EOF
     cat <<'EOF' > versions.yml
     "${task.process}":
-      placeholder: "true"
+      python: "stub"
+      script: "bin/summarise_checkm2.py"
     EOF
     '''
 }
