@@ -54,12 +54,16 @@ workflow {
     )
     FINAL_OUTPUTS(
         INPUT_VALIDATION_AND_STAGING.out.validated_samples,
+        INPUT_VALIDATION_AND_STAGING.out.sample_status,
         metadata,
         COHORT_TAXONOMY.out.taxonomy,
         PER_SAMPLE_QC.out.gcode_qc,
         COHORT_16S.out.sample_summaries,
         COHORT_ANI.out.parsed_busco,
         PER_SAMPLE_ANNOTATION.out.ccfinder_summary,
+        PER_SAMPLE_ANNOTATION.out.prokka,
+        PER_SAMPLE_ANNOTATION.out.padloc,
+        PER_SAMPLE_ANNOTATION.out.eggnog,
         COHORT_ANI.out.clusters,
         COHORT_ANI.out.ani_metadata,
         COHORT_ANI.out.fastani_matrix,

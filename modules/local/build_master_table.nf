@@ -10,7 +10,7 @@ process BUILD_MASTER_TABLE {
         mode: 'copy',
         overwrite: true,
         saveAs: { filename ->
-            filename in ['master_table.tsv', 'sample_status.tsv']
+            filename in ['master_table.tsv']
                 ? filename
                 : null
         },
@@ -29,7 +29,6 @@ process BUILD_MASTER_TABLE {
 
     output:
     path 'master_table.tsv', emit: master_table
-    path 'sample_status.tsv', emit: sample_status
     path 'versions.yml', emit: versions
 
     script:
@@ -46,8 +45,7 @@ process BUILD_MASTER_TABLE {
         ${buscoArgs} \
         --ccfinder-strains "${ccfinder_strains}" \
         --ani "${ani_summary}" \
-        --output master_table.tsv \
-        --sample-status-output sample_status.tsv
+        --output master_table.tsv
 
     cat <<EOF > versions.yml
     "${task.process}":
@@ -61,10 +59,6 @@ process BUILD_MASTER_TABLE {
     cat <<'EOF' > master_table.tsv
     Accession	Tax_ID	16S	Gcode	Low_quality	Cluster_ID
     sample_a	123	Yes	4	false	cluster_1
-    EOF
-    cat <<'EOF' > sample_status.tsv
-    accession	internal_id	is_new	validation_status	taxonomy_status	barrnap_status	checkm2_gcode4_status	checkm2_gcode11_status	gcode_status	gcode	low_quality	busco_bacillota_odb12_status	busco_mycoplasmatota_odb12_status	prokka_status	ccfinder_status	padloc_status	eggnog_status	ani_included	ani_exclusion_reason	warnings	notes
-    sample_a	sample_a	false	done	done	done	done	done	done	4	false	done	done	na	done	na	na	true
     EOF
     cat <<'EOF' > versions.yml
     "${task.process}":
