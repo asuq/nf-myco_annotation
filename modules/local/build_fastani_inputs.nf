@@ -33,7 +33,7 @@ process BUILD_FASTANI_INPUTS {
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
     """
-    python3 "${projectDir}/bin/build_fastani_inputs.py" \
+    build_fastani_inputs.py \
         --validated-samples "${validated_samples}" \
         --metadata "${metadata}" \
         --staged-manifest "${staged_manifest}" \

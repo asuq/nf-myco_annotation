@@ -29,7 +29,7 @@ process SELECT_ANI_REPRESENTATIVES {
     script:
     def aniScoreProfile = params.ani_score_profile ?: 'default'
     """
-    python3 "${projectDir}/bin/select_ani_representatives.py" \
+    select_ani_representatives.py \
         --ani-clusters "${ani_clusters}" \
         --ani-metadata "${ani_metadata}" \
         --ani-matrix "${ani_matrix}" \

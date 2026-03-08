@@ -17,7 +17,7 @@ process SUMMARISE_16S {
     script:
     def isAtypical = (meta.is_atypical ?: false).toString()
     """
-    python3 "${projectDir}/bin/summarise_16s.py" \
+    summarise_16s.py \
         --accession "${meta.accession}" \
         --rrna-gff "${rrna_gff}" \
         --rrna-fasta "${rrna_fasta}" \

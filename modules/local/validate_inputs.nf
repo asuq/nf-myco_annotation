@@ -28,7 +28,7 @@ process VALIDATE_INPUTS {
 
     script:
     """
-    python3 "${projectDir}/bin/validate_inputs.py" \
+    validate_inputs.py \
         --sample-csv "${sample_csv}" \
         --metadata "${metadata}" \
         --outdir .

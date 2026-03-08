@@ -13,7 +13,7 @@ process SUMMARISE_BUSCO {
 
     script:
     """
-    python3 "${projectDir}/bin/summarise_busco.py" \
+    summarise_busco.py \
         --accession "${meta.accession}" \
         --summary "${busco_summary_json}" \
         --lineage "${lineage}" \

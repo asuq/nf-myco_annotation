@@ -22,7 +22,7 @@ process SUMMARISE_CCFINDER {
 
     script:
     """
-    python3 "${projectDir}/bin/summarise_ccfinder.py" \
+    summarise_ccfinder.py \
         --accession "${meta.accession}" \
         --result-json "${result_json}" \
         --outdir .

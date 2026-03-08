@@ -36,7 +36,7 @@ process BUILD_MASTER_TABLE {
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
     """
-    python3 "${projectDir}/bin/build_master_table.py" \
+    build_master_table.py \
         --validated-samples "${validated_samples}" \
         --metadata "${metadata}" \
         --append-columns "${append_columns}" \

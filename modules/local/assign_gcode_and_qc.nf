@@ -20,7 +20,7 @@ process ASSIGN_GCODE_AND_QC {
 
     script:
     """
-    python3 "${projectDir}/bin/summarise_checkm2.py" \
+    summarise_checkm2.py \
         --accession "${meta.accession}" \
         --gcode4-report "${checkm2_gcode4_report}" \
         --gcode11-report "${checkm2_gcode11_report}" \

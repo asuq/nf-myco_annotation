@@ -24,7 +24,7 @@ process TAXONOMY_EXPAND {
 
     script:
     """
-    python3 "${projectDir}/bin/taxonomy_expand.py" \
+    taxonomy_expand.py \
         --validated-samples "${validated_samples}" \
         --metadata "${metadata}" \
         --taxdump "${taxdump}" \

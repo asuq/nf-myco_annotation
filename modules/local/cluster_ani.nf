@@ -22,7 +22,7 @@ process CLUSTER_ANI {
     script:
     def aniThreshold = params.ani_threshold ?: 0.95
     """
-    python3 "${projectDir}/bin/cluster_ani.py" \
+    cluster_ani.py \
         --ani-matrix "${ani_matrix}" \
         --ani-metadata "${ani_metadata}" \
         --matrix-name-column matrix_name \
