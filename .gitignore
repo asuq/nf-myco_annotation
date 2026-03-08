@@ -45,6 +45,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
+# Databases
+db/
+
 # Logs
 logs/
 *.log
