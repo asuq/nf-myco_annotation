@@ -11,6 +11,7 @@ work/
 
 # Nextflow outputs
 results/
+results-local/
 output/
 publish/
 
@@ -54,6 +55,9 @@ temp/
 *.tmp
 *.swp
 *.bak
+
+# Local real-data smoke tests
+assets/testdata/local/
 
 # IDE
 .vscode/
