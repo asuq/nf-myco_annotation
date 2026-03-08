@@ -27,6 +27,10 @@ DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "sour
 DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
 DEFAULT_LOCAL_PROFILE = "local,docker"
 DEFAULT_SLURM_PROFILE = "slurm,apptainer"
+REAL_RUN_NOTE = (
+    "CRISPRCasFinder uses params.ccfinder_container from pipeline config; "
+    "the acceptance harness does not override it."
+)
 DOWNLOAD_COLUMNS = ("source_accession", "sha256", "fasta_path")
 SOURCE_STATS_COLUMNS = (
     "source_accession",
@@ -1088,16 +1092,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "local",
         parents=[common_parser, real_parser],
         help="Run the real-data local acceptance cohort.",
+        description=(
+            "Run the real-data local acceptance cohort. "
+            f"{REAL_RUN_NOTE}"
+        ),
     )
     subparsers.add_parser(
         "slurm",
         parents=[common_parser, real_parser],
         help="Run the real-data SLURM acceptance cohort.",
+        description=(
+            "Run the real-data SLURM acceptance cohort. "
+            f"{REAL_RUN_NOTE}"
+        ),
     )
     subparsers.add_parser(
         "all",
         parents=[common_parser, real_parser],
         help="Run prepare, unit, stub, local, and SLURM layers in sequence.",
+        description=(
+            "Run prepare, unit, stub, local, and SLURM layers in sequence. "
+            f"{REAL_RUN_NOTE}"
+        ),
     )
     return parser.parse_args(argv)
 
