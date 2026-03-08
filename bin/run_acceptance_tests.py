@@ -625,8 +625,6 @@ def validate_real_run_args(args: argparse.Namespace) -> None:
         missing.append("--checkm2-db")
     if not args.eggnog_db:
         missing.append("--eggnog-db")
-    if not args.ccfinder_container:
-        missing.append("--ccfinder-container")
     if not args.prepare_busco_datasets and not args.busco_download_dir:
         missing.append("--busco-download-dir or --prepare-busco-datasets")
     if missing:
@@ -662,8 +660,6 @@ def build_nextflow_command(
         str(Path(args.checkm2_db).resolve()),
         "--eggnog_db",
         str(Path(args.eggnog_db).resolve()),
-        "--ccfinder_container",
-        args.ccfinder_container,
         "--outdir",
         str(outdir),
     ]
@@ -1047,11 +1043,6 @@ def build_real_run_parser() -> argparse.ArgumentParser:
         help="Allow the pipeline to prepare BUSCO lineage datasets itself.",
     )
     parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
-    parser.add_argument(
-        "--ccfinder-container",
-        default=None,
-        help="Container image reference for CRISPRCasFinder.",
-    )
     parser.add_argument(
         "--local-profile",
         default=DEFAULT_LOCAL_PROFILE,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import gzip
 import sys
@@ -391,6 +392,64 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             )
 
             run_acceptance_tests.assert_metadata_contract(master_path, metadata_path)
+
+    def test_validate_real_run_args_does_not_require_ccfinder_container(self) -> None:
+        """Allow real-run validation to pass without a harness CCFINDER flag."""
+        args = argparse.Namespace(
+            taxdump=Path("/tmp/taxdump"),
+            checkm2_db=Path("/tmp/checkm2"),
+            eggnog_db=Path("/tmp/eggnog"),
+            prepare_busco_datasets=False,
+            busco_download_dir=Path("/tmp/busco"),
+        )
+
+        run_acceptance_tests.validate_real_run_args(args)
+
+    def test_build_nextflow_command_does_not_inject_ccfinder_container(self) -> None:
+        """Build Nextflow commands without a CCFINDER override parameter."""
+        args = argparse.Namespace(
+            taxdump=Path("/tmp/taxdump"),
+            checkm2_db=Path("/tmp/checkm2"),
+            eggnog_db=Path("/tmp/eggnog"),
+            resume=False,
+            prepare_busco_datasets=False,
+            busco_download_dir=Path("/tmp/busco"),
+            slurm_queue=None,
+            slurm_account=None,
+            slurm_cluster_options=None,
+            apptainer_cache_dir=None,
+            apptainer_run_options=None,
+        )
+        cohort = run_acceptance_tests.PreparedCohort(
+            work_root=Path("/tmp/work"),
+            sample_csv=Path("/tmp/sample_sheet.csv"),
+            metadata_tsv=Path("/tmp/metadata.tsv"),
+            source_stats_tsv=Path("/tmp/source_stats.tsv"),
+            checksums_tsv=Path("/tmp/download_checksums.tsv"),
+            cohort_plan=(),
+            source_stats={},
+        )
+
+        command = run_acceptance_tests.build_nextflow_command(
+            profile="local,docker",
+            work_dir=Path("/tmp/work-dir"),
+            outdir=Path("/tmp/results"),
+            cohort=cohort,
+            args=args,
+        )
+
+        self.assertNotIn("--ccfinder_container", command)
+
+    def test_parse_args_rejects_removed_ccfinder_container_flag(self) -> None:
+        """Reject the removed CCFINDER flag as an unknown argument."""
+        with self.assertRaises(SystemExit):
+            run_acceptance_tests.parse_args(
+                [
+                    "local",
+                    "--ccfinder-container",
+                    "quay.io/example/crisprcasfinder:tag",
+                ]
+            )
 
 
 if __name__ == "__main__":
