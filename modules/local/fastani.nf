@@ -4,7 +4,7 @@
  */
 process FASTANI {
     tag "fastani"
-    label 'process_medium'
+    label 'process_high'
     publishDir(
         { "${params.outdir}/cohort/fastani" },
         mode: 'copy',

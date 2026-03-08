@@ -4,6 +4,7 @@
  */
 process SUMMARISE_16S {
     tag "${meta.accession}"
+    label 'process_single'
 
     input:
     tuple val(meta), path(rrna_gff), path(rrna_fasta), path(barrnap_log)
