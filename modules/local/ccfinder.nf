@@ -20,8 +20,7 @@ process CCFINDER {
     path 'versions.yml', emit: versions
 
     script:
-    def ccfinderRoot = (params.ccfinder_root ?: '/usr/local/CRISPRCasFinder').toString()
-    def macsyfinderCpus = params.ccfinder_cpu_macsyfinder ?: 30
+    def ccfinderRoot = '/usr/local/CRISPRCasFinder'
     def extraArgs = (params.ccfinder_extra_args ?: '').toString()
     """
     ccfinder_root='${ccfinderRoot}'
@@ -38,7 +37,7 @@ process CCFINDER {
         -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
         -DIRrepeat "\${ccfinder_root}/supplementary_files/repeatDirection.tsv" \
         -CASFinder "\${ccfinder_root}/CasFinder-2.0.3" \
-        -cpuMacSyFinder ${macsyfinderCpus} -cpuProkka ${task.cpus} \
+        -cpuMacSyFinder ${task.cpus} -cpuProkka ${task.cpus} \
         -log -html -levelMin 2 \
         -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \
         ${extraArgs} \
