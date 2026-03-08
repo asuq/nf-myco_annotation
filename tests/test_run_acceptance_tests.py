@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import gzip
+import io
 import sys
 import tempfile
 import unittest
@@ -30,6 +32,24 @@ def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 class RunAcceptanceTestsTestCase(unittest.TestCase):
     """Exercise cohort preparation and stable assertion helpers."""
+
+    def make_real_run_args(self, **overrides: object) -> argparse.Namespace:
+        """Build one Namespace matching the real-run parser defaults used in tests."""
+        defaults = {
+            "taxdump": Path("/tmp/taxdump"),
+            "checkm2_db": Path("/tmp/checkm2"),
+            "eggnog_db": Path("/tmp/eggnog"),
+            "resume": False,
+            "prepare_busco_datasets": False,
+            "busco_download_dir": Path("/tmp/busco"),
+            "slurm_queue": None,
+            "slurm_account": None,
+            "slurm_cluster_options": None,
+            "apptainer_cache_dir": None,
+            "apptainer_run_options": None,
+        }
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
 
     def write_text_file(self, path: Path, content: str) -> Path:
         """Write text to a file and return the path."""
@@ -393,33 +413,15 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
             run_acceptance_tests.assert_metadata_contract(master_path, metadata_path)
 
-    def test_validate_real_run_args_does_not_require_ccfinder_container(self) -> None:
-        """Allow real-run validation to pass without a harness CCFINDER flag."""
-        args = argparse.Namespace(
-            taxdump=Path("/tmp/taxdump"),
-            checkm2_db=Path("/tmp/checkm2"),
-            eggnog_db=Path("/tmp/eggnog"),
-            prepare_busco_datasets=False,
-            busco_download_dir=Path("/tmp/busco"),
-        )
+    def test_validate_real_run_args_uses_pipeline_ccfinder_container(self) -> None:
+        """Allow real runs without any harness-level CCFINDER override."""
+        args = self.make_real_run_args()
 
         run_acceptance_tests.validate_real_run_args(args)
 
-    def test_build_nextflow_command_does_not_inject_ccfinder_container(self) -> None:
-        """Build Nextflow commands without a CCFINDER override parameter."""
-        args = argparse.Namespace(
-            taxdump=Path("/tmp/taxdump"),
-            checkm2_db=Path("/tmp/checkm2"),
-            eggnog_db=Path("/tmp/eggnog"),
-            resume=False,
-            prepare_busco_datasets=False,
-            busco_download_dir=Path("/tmp/busco"),
-            slurm_queue=None,
-            slurm_account=None,
-            slurm_cluster_options=None,
-            apptainer_cache_dir=None,
-            apptainer_run_options=None,
-        )
+    def test_build_nextflow_command_uses_pipeline_ccfinder_container(self) -> None:
+        """Build Nextflow commands without any harness CCFINDER parameter."""
+        args = self.make_real_run_args()
         cohort = run_acceptance_tests.PreparedCohort(
             work_root=Path("/tmp/work"),
             sample_csv=Path("/tmp/sample_sheet.csv"),
@@ -440,16 +442,19 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
         self.assertNotIn("--ccfinder_container", command)
 
-    def test_parse_args_rejects_removed_ccfinder_container_flag(self) -> None:
-        """Reject the removed CCFINDER flag as an unknown argument."""
-        with self.assertRaises(SystemExit):
-            run_acceptance_tests.parse_args(
-                [
-                    "local",
-                    "--ccfinder-container",
-                    "quay.io/example/crisprcasfinder:tag",
-                ]
-            )
+    def test_parse_args_rejects_ccfinder_override_flag(self) -> None:
+        """Reject a harness-level CCFINDER override flag."""
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit):
+                run_acceptance_tests.parse_args(
+                    [
+                        "local",
+                        "--ccfinder-container",
+                        "quay.io/example/crisprcasfinder:tag",
+                    ]
+                )
+        self.assertIn("unrecognized arguments", stderr.getvalue())
 
 
 if __name__ == "__main__":
