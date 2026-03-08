@@ -1,0 +1,683 @@
+"""Tests for the final authoritative sample-status writer."""
+
+from __future__ import annotations
+
+import csv
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BIN_DIR = ROOT / "bin"
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
+
+import build_sample_status  # noqa: E402
+
+
+def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    """Read a TSV file into a header and row dictionaries."""
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames is not None
+        return reader.fieldnames, list(reader)
+
+
+class BuildSampleStatusTestCase(unittest.TestCase):
+    """Cover the authoritative status-writer contract and failure modes."""
+
+    def write_text_file(self, path: Path, content: str) -> Path:
+        """Write a UTF-8 text file and return its path."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def write_tsv_rows(
+        self,
+        path: Path,
+        header: list[str],
+        rows: list[dict[str, str]],
+    ) -> Path:
+        """Write TSV rows with a fixed header and return the path."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=header, delimiter="\t")
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+        return path
+
+    def make_initial_status_row(
+        self,
+        *,
+        accession: str,
+        internal_id: str,
+        is_new: str,
+        warnings: str = "",
+        notes: str = "",
+        **overrides: str,
+    ) -> dict[str, str]:
+        """Build one seed status row matching the locked sample-status contract."""
+        columns = [
+            line.strip()
+            for line in (ROOT / "assets" / "sample_status_columns.txt").read_text(
+                encoding="utf-8"
+            ).splitlines()
+            if line.strip()
+        ]
+        row: dict[str, str] = {}
+        for column in columns:
+            if column.endswith("_status") or column == "ani_included":
+                row[column] = "na"
+            elif column in {"gcode", "low_quality"}:
+                row[column] = "NA"
+            else:
+                row[column] = ""
+        row["accession"] = accession
+        row["internal_id"] = internal_id
+        row["is_new"] = is_new
+        row["validation_status"] = "done"
+        row["warnings"] = warnings
+        row["notes"] = notes
+        row.update(overrides)
+        return row
+
+    def test_main_builds_authoritative_status_with_stable_order(self) -> None:
+        """Preserve seed warnings while overlaying downstream status columns."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\torganism_name\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tKnown one\tid_1",
+                        "ACC2\ttrue\tScaffold\t/path/two.fna\tCandidate two\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(
+                    accession="ACC1",
+                    internal_id="id_1",
+                    is_new="false",
+                    warnings="internal_id_collision_resolved",
+                ),
+                self.make_initial_status_row(
+                    accession="ACC2",
+                    internal_id="id_2",
+                    is_new="true",
+                    warnings="missing_metadata_for_new_sample",
+                    notes="New sample metadata missing; unavailable fields filled with NA.",
+                ),
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings",
+                        "ACC1\t123\tKnown one\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            taxonomy = self.write_text_file(
+                tmpdir / "taxonomy.tsv",
+                "\n".join(
+                    [
+                        "Tax_ID\tsuperkingdom\tphylum\tclass\torder\tfamily\tgenus\tspecies",
+                        "123\tBacteria\tFirmicutes\tMollicutes\tMycoplasmatales\tMycoplasmataceae\tMycoplasma\tsp1",
+                    ]
+                )
+                + "\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "\n".join(
+                    [
+                        "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings",
+                        "ACC1\t95\t80\t2\t1\t0.9\t0.8\t900\t850\t800\t780\t4\tfalse\tdone\t",
+                        "ACC2\t70\t72\t5\t4\t0.7\t0.71\t700\t710\t600\t610\tNA\tNA\tdone\tgcode_na",
+                    ]
+                )
+                + "\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC1\tYes\th1\t1500\ttrue\t",
+                        "ACC2\tNo\tNA\tNA\tfalse\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco_one = self.write_text_file(
+                tmpdir / "busco_b.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings",
+                        "ACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t",
+                        "ACC2\tbacillota_odb12\tNA\tfailed\tbusco_summary_failed",
+                    ]
+                )
+                + "\n",
+            )
+            busco_two = self.write_text_file(
+                tmpdir / "busco_m.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_mycoplasmatota_odb12\tbusco_status\twarnings",
+                        "ACC1\tmycoplasmatota_odb12\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:180\tdone\t",
+                        "ACC2\tmycoplasmatota_odb12\tNA\tfailed\tbusco_summary_failed",
+                    ]
+                )
+                + "\n",
+            )
+            ccfinder = self.write_text_file(
+                tmpdir / "ccfinder.tsv",
+                "\n".join(
+                    [
+                        "accession\tCRISPRS\tSPACERS_SUM\tCRISPR_FRAC\tccfinder_status\twarnings",
+                        "ACC1\t2\t7\t0.1\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            prokka_manifest = self.write_text_file(
+                tmpdir / "prokka_manifest.tsv",
+                "accession\texit_code\tgff_size\tfaa_size\nACC1\t0\t100\t50\n",
+            )
+            padloc_manifest = self.write_text_file(
+                tmpdir / "padloc_manifest.tsv",
+                "accession\texit_code\tresult_file_count\nACC1\t0\t2\n",
+            )
+            eggnog_manifest = self.write_text_file(
+                tmpdir / "eggnog_manifest.tsv",
+                "accession\texit_code\tannotations_size\tresult_file_count\nACC1\t0\t10\t2\n",
+            )
+            ani = self.write_text_file(
+                tmpdir / "ani.tsv",
+                "\n".join(
+                    [
+                        "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore",
+                        "ACC1\tcluster_1\tyes\t100\t0.95",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--taxonomy",
+                    str(taxonomy),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco_one),
+                    "--busco",
+                    str(busco_two),
+                    "--ccfinder-strains",
+                    str(ccfinder),
+                    "--prokka-manifest",
+                    str(prokka_manifest),
+                    "--padloc-manifest",
+                    str(padloc_manifest),
+                    "--eggnog-manifest",
+                    str(eggnog_manifest),
+                    "--ani",
+                    str(ani),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--columns",
+                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            header, rows = read_tsv_rows(output)
+            self.assertEqual(
+                header,
+                [
+                    line.strip()
+                    for line in (ROOT / "assets" / "sample_status_columns.txt").read_text(
+                        encoding="utf-8"
+                    ).splitlines()
+                    if line.strip()
+                ],
+            )
+            by_accession = {row["accession"]: row for row in rows}
+
+            self.assertEqual(by_accession["ACC1"]["taxonomy_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["barrnap_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["checkm2_gcode4_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["gcode"], "4")
+            self.assertEqual(by_accession["ACC1"]["ccfinder_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["prokka_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["padloc_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["eggnog_status"], "done")
+            self.assertEqual(by_accession["ACC1"]["ani_included"], "true")
+            self.assertEqual(
+                by_accession["ACC1"]["warnings"],
+                "internal_id_collision_resolved",
+            )
+
+            self.assertEqual(by_accession["ACC2"]["gcode_status"], "failed")
+            self.assertEqual(by_accession["ACC2"]["gcode"], "NA")
+            self.assertEqual(by_accession["ACC2"]["prokka_status"], "skipped")
+            self.assertEqual(by_accession["ACC2"]["padloc_status"], "skipped")
+            self.assertEqual(by_accession["ACC2"]["eggnog_status"], "skipped")
+            self.assertEqual(by_accession["ACC2"]["ccfinder_status"], "skipped")
+            self.assertEqual(by_accession["ACC2"]["ani_included"], "false")
+            self.assertEqual(
+                by_accession["ACC2"]["ani_exclusion_reason"],
+                "gcode_na;no_16s;missing_primary_busco",
+            )
+            self.assertEqual(
+                by_accession["ACC2"]["warnings"],
+                "missing_metadata_for_new_sample;gcode_na;busco_summary_failed",
+            )
+            self.assertEqual(
+                by_accession["ACC2"]["notes"],
+                "New sample metadata missing; unavailable fields filled with NA.",
+            )
+
+    def test_main_marks_missing_annotation_manifests_as_failed(self) -> None:
+        """Fail gcode-qualified annotation statuses when manifest rows are missing."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\nACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(
+                    accession="ACC1",
+                    internal_id="id_1",
+                    is_new="false",
+                )
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\nACC1\t123\tOne\tNA\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings\nACC1\t80\t95\t3\t1\t0.8\t0.95\t800\t950\t700\t920\t11\tfalse\tdone\t\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\nACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t\n",
+            )
+            ccfinder = self.write_text_file(
+                tmpdir / "ccfinder.tsv",
+                "accession\tCRISPRS\tSPACERS_SUM\tCRISPR_FRAC\tccfinder_status\twarnings\nACC1\t2\t7\t0.1\tdone\t\n",
+            )
+            prokka_manifest = self.write_text_file(
+                tmpdir / "prokka_manifest.tsv",
+                "accession\texit_code\tgff_size\tfaa_size\n",
+            )
+            padloc_manifest = self.write_text_file(
+                tmpdir / "padloc_manifest.tsv",
+                "accession\texit_code\tresult_file_count\n",
+            )
+            eggnog_manifest = self.write_text_file(
+                tmpdir / "eggnog_manifest.tsv",
+                "accession\texit_code\tannotations_size\tresult_file_count\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco),
+                    "--ccfinder-strains",
+                    str(ccfinder),
+                    "--prokka-manifest",
+                    str(prokka_manifest),
+                    "--padloc-manifest",
+                    str(padloc_manifest),
+                    "--eggnog-manifest",
+                    str(eggnog_manifest),
+                    "--columns",
+                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, rows = read_tsv_rows(output)
+            row = rows[0]
+            self.assertEqual(row["prokka_status"], "failed")
+            self.assertEqual(row["padloc_status"], "failed")
+            self.assertEqual(row["eggnog_status"], "failed")
+            self.assertEqual(
+                row["warnings"],
+                "missing_prokka_result;missing_padloc_result;missing_eggnog_result",
+            )
+
+    def test_main_marks_annotation_failures_from_logs_and_outputs(self) -> None:
+        """Use exit codes and output presence to mark annotation failures."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\nACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(
+                    accession="ACC1",
+                    internal_id="id_1",
+                    is_new="false",
+                )
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\nACC1\t123\tOne\tNA\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings\nACC1\t80\t95\t3\t1\t0.8\t0.95\t800\t950\t700\t920\t11\tfalse\tdone\t\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\nACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t\n",
+            )
+            ccfinder = self.write_text_file(
+                tmpdir / "ccfinder.tsv",
+                "accession\tCRISPRS\tSPACERS_SUM\tCRISPR_FRAC\tccfinder_status\twarnings\nACC1\t2\t7\t0.1\tdone\t\n",
+            )
+            prokka_manifest = self.write_text_file(
+                tmpdir / "prokka_manifest.tsv",
+                "accession\texit_code\tgff_size\tfaa_size\nACC1\t0\t0\t50\n",
+            )
+            padloc_manifest = self.write_text_file(
+                tmpdir / "padloc_manifest.tsv",
+                "accession\texit_code\tresult_file_count\nACC1\t1\t0\n",
+            )
+            eggnog_manifest = self.write_text_file(
+                tmpdir / "eggnog_manifest.tsv",
+                "accession\texit_code\tannotations_size\tresult_file_count\nACC1\t0\t0\t1\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco),
+                    "--ccfinder-strains",
+                    str(ccfinder),
+                    "--prokka-manifest",
+                    str(prokka_manifest),
+                    "--padloc-manifest",
+                    str(padloc_manifest),
+                    "--eggnog-manifest",
+                    str(eggnog_manifest),
+                    "--columns",
+                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, rows = read_tsv_rows(output)
+            row = rows[0]
+            self.assertEqual(row["prokka_status"], "failed")
+            self.assertEqual(row["padloc_status"], "failed")
+            self.assertEqual(row["eggnog_status"], "failed")
+            self.assertEqual(
+                row["warnings"],
+                "missing_prokka_outputs;padloc_failed;eggnog_failed",
+            )
+
+    def test_main_uses_explicit_primary_busco_column_and_atypical_exception(self) -> None:
+        """Use the configured primary BUSCO lineage and allow the locked exception."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                        "ACC2\tfalse\tNA\t/path/two.fna\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(accession="ACC1", internal_id="id_1", is_new="false"),
+                self.make_initial_status_row(accession="ACC2", internal_id="id_2", is_new="false"),
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings",
+                        "ACC1\t123\tOne\tunverified source organism",
+                        "ACC2\t456\tTwo\tmultiple source names",
+                    ]
+                )
+                + "\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "\n".join(
+                    [
+                        "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings",
+                        "ACC1\t80\t95\t3\t1\t0.8\t0.95\t800\t950\t700\t920\t11\tfalse\tdone\t",
+                        "ACC2\t80\t94\t3\t1\t0.8\t0.94\t800\t940\t700\t910\t11\tfalse\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC1\tYes\th1\t1500\ttrue\t",
+                        "ACC2\tYes\th2\t1500\ttrue\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco_bacillota = self.write_text_file(
+                tmpdir / "busco_b.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\nACC2\tbacillota_odb12\tC:97.0%[S:97.0%,D:0.0%],F:1.0%,M:2.0%,n:200\tdone\t\n",
+            )
+            busco_mycoplasmatota = self.write_text_file(
+                tmpdir / "busco_m.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_mycoplasmatota_odb12\tbusco_status\twarnings",
+                        "ACC1\tmycoplasmatota_odb12\tC:99.0%[S:99.0%,D:0.0%],F:0.0%,M:1.0%,n:180\tdone\t",
+                        "ACC2\tmycoplasmatota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:180\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            ccfinder = self.write_text_file(
+                tmpdir / "ccfinder.tsv",
+                "\n".join(
+                    [
+                        "accession\tCRISPRS\tSPACERS_SUM\tCRISPR_FRAC\tccfinder_status\twarnings",
+                        "ACC1\t2\t7\t0.1\tdone\t",
+                        "ACC2\t1\t2\t0.05\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            prokka_manifest = self.write_text_file(
+                tmpdir / "prokka_manifest.tsv",
+                "accession\texit_code\tgff_size\tfaa_size\nACC1\t0\t100\t50\nACC2\t0\t100\t50\n",
+            )
+            padloc_manifest = self.write_text_file(
+                tmpdir / "padloc_manifest.tsv",
+                "accession\texit_code\tresult_file_count\nACC1\t0\t2\nACC2\t0\t2\n",
+            )
+            eggnog_manifest = self.write_text_file(
+                tmpdir / "eggnog_manifest.tsv",
+                "accession\texit_code\tannotations_size\tresult_file_count\nACC1\t0\t10\t2\nACC2\t0\t10\t2\n",
+            )
+            ani = self.write_text_file(
+                tmpdir / "ani.tsv",
+                "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore\nACC1\tcluster_1\tyes\t100\t0.95\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco_bacillota),
+                    "--busco",
+                    str(busco_mycoplasmatota),
+                    "--ccfinder-strains",
+                    str(ccfinder),
+                    "--prokka-manifest",
+                    str(prokka_manifest),
+                    "--padloc-manifest",
+                    str(padloc_manifest),
+                    "--eggnog-manifest",
+                    str(eggnog_manifest),
+                    "--ani",
+                    str(ani),
+                    "--primary-busco-column",
+                    "BUSCO_mycoplasmatota_odb12",
+                    "--columns",
+                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, rows = read_tsv_rows(output)
+            by_accession = {row["accession"]: row for row in rows}
+            self.assertEqual(by_accession["ACC1"]["ani_included"], "true")
+            self.assertEqual(by_accession["ACC1"]["ani_exclusion_reason"], "")
+            self.assertEqual(by_accession["ACC2"]["ani_included"], "false")
+            self.assertEqual(by_accession["ACC2"]["ani_exclusion_reason"], "atypical")
+
+    def test_main_rejects_initial_status_identity_mismatch(self) -> None:
+        """Hard-fail when the seed status table disagrees with validated samples."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\nACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(
+                    accession="ACC1",
+                    internal_id="other_id",
+                    is_new="false",
+                )
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\nACC1\t123\tOne\tNA\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--columns",
+                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -35,8 +35,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
-    def test_main_builds_master_table_and_sample_status_with_stable_order(self) -> None:
-        """Preserve metadata order, append locked columns, and emit sample status."""
+    def test_main_builds_master_table_with_stable_order(self) -> None:
+        """Preserve metadata order and append the locked derived columns."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             validated_samples = self.write_text_file(
@@ -135,7 +135,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 + "\n",
             )
             master_output = tmpdir / "master_table.tsv"
-            status_output = tmpdir / "sample_status.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -161,28 +160,22 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(ani),
                     "--output",
                     str(master_output),
-                    "--sample-status-output",
-                    str(status_output),
                 ]
             )
 
             self.assertEqual(exit_code, 0)
 
             master_header, master_rows = read_tsv_rows(master_output)
-            status_header, status_rows = read_tsv_rows(status_output)
             expected_master_header = master_table_contract.build_master_table_columns(
                 ["Accession", "Tax_ID", "Organism_Name", "Atypical_Warnings"]
             )
 
             self.assertEqual(master_header, expected_master_header)
-            self.assertEqual(status_header, build_master_table.load_sample_status_columns())
             self.assertNotIn("PADLOC", master_header)
             self.assertNotIn("eggNOG", master_header)
             self.assertEqual(len(master_rows), 2)
-            self.assertEqual(len(status_rows), 2)
 
             master_by_accession = {row["Accession"]: row for row in master_rows}
-            status_by_accession = {row["accession"]: row for row in status_rows}
 
             self.assertEqual(master_by_accession["ACC1"]["Tax_ID"], "123")
             self.assertEqual(master_by_accession["ACC1"]["superkingdom"], "Bacteria")
@@ -197,33 +190,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["superkingdom"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["CRISPRS"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "NA")
-
-            self.assertEqual(status_by_accession["ACC1"]["ani_included"], "true")
-            self.assertEqual(status_by_accession["ACC1"]["ccfinder_status"], "done")
-            self.assertEqual(status_by_accession["ACC1"]["busco_bacillota_odb12_status"], "done")
-            self.assertEqual(
-                status_by_accession["ACC1"]["busco_mycoplasmatota_odb12_status"],
-                "done",
-            )
-
-            self.assertEqual(status_by_accession["ACC2"]["validation_status"], "done")
-            self.assertEqual(status_by_accession["ACC2"]["taxonomy_status"], "na")
-            self.assertEqual(status_by_accession["ACC2"]["gcode_status"], "failed")
-            self.assertEqual(status_by_accession["ACC2"]["prokka_status"], "skipped")
-            self.assertEqual(status_by_accession["ACC2"]["ccfinder_status"], "skipped")
-            self.assertEqual(status_by_accession["ACC2"]["ani_included"], "false")
-            self.assertEqual(
-                status_by_accession["ACC2"]["ani_exclusion_reason"],
-                "gcode_na;no_16s;missing_primary_busco",
-            )
-            self.assertEqual(
-                status_by_accession["ACC2"]["warnings"],
-                "gcode_na;busco_summary_failed;missing_metadata_for_new_sample",
-            )
-            self.assertEqual(
-                status_by_accession["ACC2"]["notes"],
-                "New sample metadata missing; unavailable fields filled with NA.",
-            )
 
     def test_main_uses_keyed_joins_and_marks_missing_joins(self) -> None:
         """Join by accession only and propagate missing derived rows as NA."""
@@ -294,7 +260,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 + "\n",
             )
             master_output = tmpdir / "master_table.tsv"
-            status_output = tmpdir / "sample_status.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -314,16 +279,12 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(busco_two),
                     "--output",
                     str(master_output),
-                    "--sample-status-output",
-                    str(status_output),
                 ]
             )
 
             self.assertEqual(exit_code, 0)
             _, master_rows = read_tsv_rows(master_output)
-            _, status_rows = read_tsv_rows(status_output)
             master_by_accession = {row["Accession"]: row for row in master_rows}
-            status_by_accession = {row["accession"]: row for row in status_rows}
 
             self.assertEqual(master_by_accession["ACC1"]["Gcode"], "4")
             self.assertEqual(master_by_accession["ACC1"]["16S"], "Yes")
@@ -340,26 +301,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 "C:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200",
             )
             self.assertEqual(master_by_accession["ACC2"]["BUSCO_mycoplasmatota_odb12"], "NA")
-
-            self.assertEqual(status_by_accession["ACC1"]["busco_bacillota_odb12_status"], "failed")
-            self.assertEqual(
-                status_by_accession["ACC1"]["busco_mycoplasmatota_odb12_status"],
-                "done",
-            )
-            self.assertEqual(
-                status_by_accession["ACC1"]["warnings"],
-                "missing_busco_bacillota_odb12_summary",
-            )
-
-            self.assertEqual(status_by_accession["ACC2"]["busco_bacillota_odb12_status"], "done")
-            self.assertEqual(
-                status_by_accession["ACC2"]["busco_mycoplasmatota_odb12_status"],
-                "failed",
-            )
-            self.assertEqual(
-                status_by_accession["ACC2"]["warnings"],
-                "missing_busco_mycoplasmatota_odb12_summary",
-            )
 
     def test_main_consumes_precomputed_ani_summary_during_final_build(self) -> None:
         """Join ANI fields from a precomputed ANI summary TSV."""
@@ -432,7 +373,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 + "\n",
             )
             master_output = tmpdir / "master_table.tsv"
-            status_output = tmpdir / "sample_status.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -452,16 +392,12 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(ani_summary),
                     "--output",
                     str(master_output),
-                    "--sample-status-output",
-                    str(status_output),
                 ]
             )
 
             self.assertEqual(exit_code, 0)
             _, master_rows = read_tsv_rows(master_output)
-            _, status_rows = read_tsv_rows(status_output)
             master_by_accession = {row["Accession"]: row for row in master_rows}
-            status_by_accession = {row["accession"]: row for row in status_rows}
 
             self.assertEqual(master_by_accession["ACC1"]["Cluster_ID"], "C000001")
             self.assertEqual(master_by_accession["ACC1"]["Is_Representative"], "yes")
@@ -472,9 +408,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["Is_Representative"], "no")
             self.assertEqual(master_by_accession["ACC2"]["ANI_to_Representative"], "97.2500")
             self.assertNotEqual(master_by_accession["ACC2"]["Score"], "NA")
-
-            self.assertEqual(status_by_accession["ACC1"]["ani_included"], "true")
-            self.assertEqual(status_by_accession["ACC2"]["ani_included"], "true")
 
     def test_main_handles_new_genome_with_sparse_metadata(self) -> None:
         """Fill missing metadata with NA while preserving supplemental new-sample values."""
@@ -495,7 +428,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\n",
             )
             master_output = tmpdir / "master_table.tsv"
-            status_output = tmpdir / "sample_status.tsv"
 
             exit_code = build_master_table.main(
                 [
@@ -507,14 +439,11 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(ROOT / "assets" / "master_table_append_columns.txt"),
                     "--output",
                     str(master_output),
-                    "--sample-status-output",
-                    str(status_output),
                 ]
             )
 
             self.assertEqual(exit_code, 0)
             _, master_rows = read_tsv_rows(master_output)
-            _, status_rows = read_tsv_rows(status_output)
 
             self.assertEqual(len(master_rows), 1)
             self.assertEqual(master_rows[0]["Accession"], "ACC_NEW")
@@ -524,17 +453,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_rows[0]["Gcode"], "NA")
             self.assertEqual(master_rows[0]["BUSCO_bacillota_odb12"], "NA")
             self.assertEqual(master_rows[0]["CRISPRS"], "NA")
-
-            self.assertEqual(len(status_rows), 1)
-            self.assertEqual(status_rows[0]["accession"], "ACC_NEW")
-            self.assertEqual(status_rows[0]["validation_status"], "done")
-            self.assertEqual(status_rows[0]["warnings"], "missing_metadata_for_new_sample")
-            self.assertEqual(
-                status_rows[0]["notes"],
-                "New sample metadata missing; unavailable fields filled with NA.",
-            )
-            self.assertEqual(status_rows[0]["barrnap_status"], "na")
-            self.assertEqual(status_rows[0]["ani_included"], "na")
 
     def test_main_rejects_duplicate_accessions_in_validated_manifest(self) -> None:
         """Fail when validated_samples.tsv contains duplicate accession rows."""
