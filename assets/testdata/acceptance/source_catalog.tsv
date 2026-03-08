@@ -1,0 +1,5 @@
+source_accession	organism_name	tax_id	assembly_level	source_url
+GCA_000027325.1	Mycoplasmoides genitalium G37	243273	Complete Genome	https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/027/325/GCA_000027325.1_ASM2732v1/GCA_000027325.1_ASM2732v1_genomic.fna.gz
+GCA_000027345.1	Mycoplasmoides pneumoniae M129	272634	Complete Genome	https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/027/345/GCA_000027345.1_ASM2734v1/GCA_000027345.1_ASM2734v1_genomic.fna.gz
+GCF_000005845.2	Escherichia coli str. K-12 substr. MG1655	511145	Complete Genome	https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz
+GCA_000014485.1	Streptococcus thermophilus LMD-9	767462	Complete Genome	https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/014/485/GCA_000014485.1_ASM1448v1/GCA_000014485.1_ASM1448v1_genomic.fna.gz
