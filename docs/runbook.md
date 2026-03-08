@@ -57,7 +57,9 @@ Real-data `local`, `slurm`, and `all` runs require:
 - `--checkm2-db`
 - `--busco-download-dir` or `--prepare-busco-datasets`
 - `--eggnog-db`
-- `--ccfinder-container`
+
+These acceptance runs assume `params.ccfinder_container` is already configured
+in the pipeline.
 
 Example local acceptance run:
 
@@ -66,8 +68,7 @@ python3 bin/run_acceptance_tests.py local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
-  --eggnog-db /path/to/eggnog-db \
-  --ccfinder-container quay.io/example/crisprcasfinder:tag
+  --eggnog-db /path/to/eggnog-db
 ```
 
 Example SLURM acceptance run:
@@ -78,7 +79,6 @@ python3 bin/run_acceptance_tests.py slurm \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
   --eggnog-db /path/to/eggnog-db \
-  --ccfinder-container quay.io/example/crisprcasfinder:tag \
   --slurm-queue short \
   --slurm-account my_account
 ```
