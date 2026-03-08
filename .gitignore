@@ -1,1 +1,75 @@
-.codex
+# Nextflow runtime
+work/
+.nextflow/
+.nextflow.*
+.nextflow.log*
+.nxf*
+.timeline*
+.trace*
+.report*
+.dag.*
+
+# Nextflow outputs
+results/
+output/
+publish/
+
+# Containers / environments
+*.img
+*.sif
+*.simg
+.env
+.env.*
+.venv/
+venv/
+conda/
+.mamba/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artefacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp
+*.bak
+
+# IDE
+.vscode/
+.idea/
+.codex/
+.codex_cache/
+.codex_worktrees/
+
+# macOS / Linux noise
+.DS_Store
+*.DS_Store
+Thumbs.db
+
+# Credentials / tokens
+*.key
+*.pem
+*.crt
+secrets/
+credentials/
