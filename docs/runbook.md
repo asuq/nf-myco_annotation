@@ -36,6 +36,53 @@ nextflow run . -profile test -stub-run
 This validates the DSL wiring, channel contracts, publish locations, and final
 table/version outputs without requiring external databases or tool containers.
 
+## Acceptance harness
+
+Use `bin/run_acceptance_tests.py` for the layered acceptance workflow:
+
+- `prepare`: download or reuse the tracked acceptance source genomes and build a generated cohort under `assets/testdata/local/acceptance/`
+- `unit`: run the Python unit-test layer for fine-grained and minor edge cases
+- `stub`: run the full-pipeline `-stub-run` smoke test
+- `local`: run the generated positive cohort with `-profile local,docker`
+- `slurm`: run the same cohort with `-profile slurm,apptainer` and compare its stable outputs against the latest successful local run
+- `all`: run `prepare`, `unit`, `stub`, `local`, and `slurm` in sequence
+
+Tracked cohort descriptors live under `assets/testdata/acceptance/`. Large
+downloads, generated manifests, and run artefacts stay under the ignored local
+tree `assets/testdata/local/acceptance/`.
+
+Real-data `local`, `slurm`, and `all` runs require:
+
+- `--taxdump`
+- `--checkm2-db`
+- `--busco-download-dir` or `--prepare-busco-datasets`
+- `--eggnog-db`
+- `--ccfinder-container`
+
+Example local acceptance run:
+
+```bash
+python3 bin/run_acceptance_tests.py local \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2-db /path/to/checkm2-db \
+  --busco-download-dir /path/to/busco-lineages \
+  --eggnog-db /path/to/eggnog-db \
+  --ccfinder-container quay.io/example/crisprcasfinder:tag
+```
+
+Example SLURM acceptance run:
+
+```bash
+python3 bin/run_acceptance_tests.py slurm \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2-db /path/to/checkm2-db \
+  --busco-download-dir /path/to/busco-lineages \
+  --eggnog-db /path/to/eggnog-db \
+  --ccfinder-container quay.io/example/crisprcasfinder:tag \
+  --slurm-queue short \
+  --slurm-account my_account
+```
+
 ## Example real runs
 
 Local:
