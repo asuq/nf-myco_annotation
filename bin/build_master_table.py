@@ -108,11 +108,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Path to the final master_table.tsv output.",
     )
-    parser.add_argument(
-        "--sample-status-output",
-        type=Path,
-        help="Optional path to the final sample_status.tsv output.",
-    )
     return parser.parse_args(argv)
 
 
@@ -443,308 +438,6 @@ def find_column_by_normalised_name(
     return None
 
 
-def derive_taxonomy_status(
-    metadata_row: dict[str, str],
-    taxonomy_index: dict[str, dict[str, str]],
-    taxonomy_requested: bool,
-) -> tuple[str, list[str]]:
-    """Return taxonomy status and any warning tokens for one sample."""
-    if not taxonomy_requested:
-        return "na", []
-    tax_id_column = find_column_by_normalised_name(tuple(metadata_row), "tax_id")
-    if tax_id_column is None:
-        return "na", []
-    tax_id = metadata_row.get(tax_id_column, "NA")
-    if is_missing(tax_id):
-        return "na", []
-    if tax_id in taxonomy_index:
-        return "done", []
-    return "failed", ["taxonomy_missing"]
-
-
-def has_non_na_values(row: dict[str, str], columns: Sequence[str]) -> bool:
-    """Return True when any requested column contains a non-NA value."""
-    return any(not is_missing(row.get(column)) for column in columns)
-
-
-def derive_checkm2_statuses(
-    accession: str,
-    checkm2_index: dict[str, dict[str, str]],
-    checkm2_requested: bool,
-) -> tuple[str, str, str, list[str]]:
-    """Return CheckM2/gcode status columns and warning tokens."""
-    if not checkm2_requested:
-        return "na", "na", "na", []
-    row = checkm2_index.get(accession)
-    if row is None:
-        return "failed", "failed", "failed", ["missing_checkm2_summary"]
-
-    warnings = split_tokens(row.get("warnings", ""))
-    gcode4_columns = [column for column in CHECKM2_COLUMNS if column.endswith("_gcode4")]
-    gcode11_columns = [column for column in CHECKM2_COLUMNS if column.endswith("_gcode11")]
-    has_gcode4 = has_non_na_values(row, gcode4_columns)
-    has_gcode11 = has_non_na_values(row, gcode11_columns)
-
-    gcode4_status = "failed" if "checkm2_gcode4_failed" in warnings or not has_gcode4 else "done"
-    gcode11_status = (
-        "failed" if "checkm2_gcode11_failed" in warnings or not has_gcode11 else "done"
-    )
-
-    gcode_value = row.get("Gcode", "NA") or "NA"
-    gcode_status = "done" if gcode_value in {"4", "11"} else "failed"
-    return gcode4_status, gcode11_status, gcode_status, warnings
-
-
-def derive_barrnap_status(
-    accession: str,
-    sixteen_s_index: dict[str, dict[str, str]],
-    sixteen_s_requested: bool,
-) -> tuple[str, list[str]]:
-    """Return Barrnap status and warning tokens for one sample."""
-    if not sixteen_s_requested:
-        return "na", []
-    row = sixteen_s_index.get(accession)
-    if row is None:
-        return "failed", ["missing_16s_summary"]
-    warnings = split_tokens(row.get("warnings", ""))
-    status_value = row.get("16S", "NA") or "NA"
-    if status_value == "NA":
-        return "failed", warnings or ["invalid_barrnap_output"]
-    return "done", warnings
-
-
-def derive_busco_statuses(
-    accession: str,
-    busco_index: dict[str, dict[str, BuscoLineageSummary]],
-    provided_busco_columns: set[str],
-    sample_status_columns: Sequence[str],
-) -> tuple[dict[str, str], list[str]]:
-    """Return BUSCO lineage status columns and warning tokens for one sample."""
-    status_values = {
-        column: "na"
-        for column in sample_status_columns
-        if column.startswith("busco_") and column.endswith("_status")
-    }
-    warnings: list[str] = []
-    sample_busco = busco_index.get(accession, {})
-
-    for status_column in status_values:
-        lineage = status_column.removeprefix("busco_").removesuffix("_status")
-        busco_column = f"BUSCO_{lineage}"
-        if busco_column not in provided_busco_columns:
-            continue
-        summary = sample_busco.get(busco_column)
-        if summary is None:
-            status_values[status_column] = "failed"
-            warnings.append(f"missing_{busco_column.lower()}_summary")
-            continue
-        status_values[status_column] = summary.status if summary.status else "done"
-        warnings.extend(split_tokens(summary.warnings))
-    return status_values, warnings
-
-
-def derive_ccfinder_status(
-    accession: str,
-    ccfinder_index: dict[str, dict[str, str]],
-    ccfinder_requested: bool,
-    gcode_value: str,
-) -> tuple[str, list[str]]:
-    """Return CRISPRCasFinder status and warning tokens for one sample."""
-    row = ccfinder_index.get(accession)
-    if row is not None:
-        warnings = split_tokens(row.get("warnings", ""))
-        status = row.get("ccfinder_status", "") or "done"
-        return status, warnings
-    if gcode_value == "NA":
-        return ("skipped", []) if ccfinder_requested else ("na", [])
-    if not ccfinder_requested:
-        return "na", []
-    return "failed", ["missing_ccfinder_summary"]
-
-
-def detect_atypical_flags(metadata_row: dict[str, str]) -> tuple[bool, bool]:
-    """Return the atypical and exception flags from the preserved metadata block."""
-    atypical_column = find_column_by_normalised_name(tuple(metadata_row), "Atypical_Warnings")
-    if atypical_column is None:
-        return False, False
-    atypical_value = metadata_row.get(atypical_column, "")
-    if is_missing(atypical_value):
-        return False, False
-    lowered = atypical_value.casefold()
-    return True, "unverified source organism" in lowered
-
-
-def derive_ani_decision(
-    accession: str,
-    master_row: dict[str, str],
-    metadata_row: dict[str, str],
-    ani_index: dict[str, dict[str, str]],
-    ani_requested: bool,
-    primary_busco_column: str | None,
-) -> tuple[str, str]:
-    """Return ANI inclusion status and exclusion reasons for one sample."""
-    if not ani_requested:
-        return "na", ""
-
-    exclusion_reasons: list[str] = []
-    gcode_value = master_row.get("Gcode", "NA") or "NA"
-    low_quality_value = master_row.get("Low_quality", "NA") or "NA"
-    sixteen_s_value = master_row.get("16S", "NA") or "NA"
-    is_atypical, is_exception = detect_atypical_flags(metadata_row)
-
-    if gcode_value == "NA":
-        exclusion_reasons.append("gcode_na")
-    if low_quality_value == "true":
-        exclusion_reasons.append("low_quality")
-    elif low_quality_value == "NA" and gcode_value in {"4", "11"}:
-        exclusion_reasons.append("missing_low_quality")
-
-    if sixteen_s_value == "partial":
-        exclusion_reasons.append("partial_16s")
-    elif sixteen_s_value == "No":
-        exclusion_reasons.append("no_16s")
-    elif sixteen_s_value == "NA":
-        exclusion_reasons.append("16s_na")
-
-    if is_atypical and not is_exception:
-        exclusion_reasons.append("atypical")
-
-    if primary_busco_column is not None and is_missing(master_row.get(primary_busco_column)):
-        exclusion_reasons.append("missing_primary_busco")
-
-    if accession in ani_index:
-        if exclusion_reasons:
-            raise MasterTableError(
-                f"ANI summary contains ineligible accession {accession!r}: "
-                + ";".join(exclusion_reasons)
-            )
-        return "true", ""
-
-    if exclusion_reasons:
-        return "false", join_tokens(exclusion_reasons)
-
-    raise MasterTableError(
-        f"ANI summary is missing eligible accession {accession!r}."
-    )
-
-
-def build_sample_status_row(
-    sample_row: dict[str, str],
-    metadata_present: bool,
-    metadata_row: dict[str, str],
-    master_row: dict[str, str],
-    taxonomy_index: dict[str, dict[str, str]],
-    taxonomy_requested: bool,
-    checkm2_index: dict[str, dict[str, str]],
-    checkm2_requested: bool,
-    sixteen_s_index: dict[str, dict[str, str]],
-    sixteen_s_requested: bool,
-    busco_index: dict[str, dict[str, BuscoLineageSummary]],
-    provided_busco_columns: set[str],
-    ccfinder_index: dict[str, dict[str, str]],
-    ccfinder_requested: bool,
-    ani_index: dict[str, dict[str, str]],
-    ani_requested: bool,
-    sample_status_columns: Sequence[str],
-) -> dict[str, str]:
-    """Build one authoritative sample-status row from the keyed final joins."""
-    row: dict[str, str] = {}
-    for column in sample_status_columns:
-        if column.endswith("_status") or column == "ani_included":
-            row[column] = "na"
-        elif column in {"gcode", "low_quality"}:
-            row[column] = "NA"
-        else:
-            row[column] = ""
-
-    accession = sample_row["accession"]
-    row["accession"] = accession
-    row["internal_id"] = sample_row["internal_id"]
-    row["is_new"] = sample_row["is_new"]
-    row["validation_status"] = "done"
-    row["gcode"] = master_row.get("Gcode", "NA") or "NA"
-    row["low_quality"] = master_row.get("Low_quality", "NA") or "NA"
-
-    warnings: list[str] = []
-    notes: list[str] = []
-
-    taxonomy_status, taxonomy_warnings = derive_taxonomy_status(
-        metadata_row=metadata_row,
-        taxonomy_index=taxonomy_index,
-        taxonomy_requested=taxonomy_requested,
-    )
-    row["taxonomy_status"] = taxonomy_status
-    warnings.extend(taxonomy_warnings)
-
-    barrnap_status, barrnap_warnings = derive_barrnap_status(
-        accession=accession,
-        sixteen_s_index=sixteen_s_index,
-        sixteen_s_requested=sixteen_s_requested,
-    )
-    row["barrnap_status"] = barrnap_status
-    warnings.extend(barrnap_warnings)
-
-    (
-        row["checkm2_gcode4_status"],
-        row["checkm2_gcode11_status"],
-        row["gcode_status"],
-        checkm2_warnings,
-    ) = derive_checkm2_statuses(
-        accession=accession,
-        checkm2_index=checkm2_index,
-        checkm2_requested=checkm2_requested,
-    )
-    warnings.extend(checkm2_warnings)
-
-    busco_status_values, busco_warnings = derive_busco_statuses(
-        accession=accession,
-        busco_index=busco_index,
-        provided_busco_columns=provided_busco_columns,
-        sample_status_columns=sample_status_columns,
-    )
-    row.update(busco_status_values)
-    warnings.extend(busco_warnings)
-
-    ccfinder_status, ccfinder_warnings = derive_ccfinder_status(
-        accession=accession,
-        ccfinder_index=ccfinder_index,
-        ccfinder_requested=ccfinder_requested,
-        gcode_value=row["gcode"],
-    )
-    row["ccfinder_status"] = ccfinder_status
-    warnings.extend(ccfinder_warnings)
-
-    if row["gcode"] == "NA":
-        row["prokka_status"] = "skipped" if checkm2_requested else "na"
-        row["padloc_status"] = "skipped" if checkm2_requested else "na"
-        row["eggnog_status"] = "skipped" if checkm2_requested else "na"
-    else:
-        row["prokka_status"] = "na"
-        row["padloc_status"] = "na"
-        row["eggnog_status"] = "na"
-
-    primary_busco_column = next(
-        (column for column in master_row if column.startswith("BUSCO_")),
-        None,
-    )
-    row["ani_included"], row["ani_exclusion_reason"] = derive_ani_decision(
-        accession=accession,
-        master_row=master_row,
-        metadata_row=metadata_row,
-        ani_index=ani_index,
-        ani_requested=ani_requested,
-        primary_busco_column=primary_busco_column,
-    )
-
-    if sample_row.get("is_new") == "true" and not metadata_present:
-        warnings.append("missing_metadata_for_new_sample")
-        notes.append("New sample metadata missing; unavailable fields filled with NA.")
-
-    row["warnings"] = join_tokens(warnings)
-    row["notes"] = join_notes(notes)
-    return row
-
-
 def build_master_row(
     sample_row: dict[str, str],
     metadata_header: Sequence[str],
@@ -811,7 +504,6 @@ def run_build(args: argparse.Namespace) -> None:
     validated_accessions = {row["accession"] for row in validated_samples}
     metadata_header, metadata_key_column, metadata_index = load_metadata(args.metadata)
     append_columns = load_append_columns(args.append_columns)
-    sample_status_columns = load_sample_status_columns()
 
     expected_header = master_table_contract.build_master_table_columns(metadata_header)
     if append_columns != expected_header[len(metadata_header) :]:
@@ -844,18 +536,10 @@ def run_build(args: argparse.Namespace) -> None:
         "ANI summary table",
         validated_accessions,
     )
-    busco_index, provided_busco_columns = load_busco_index(args.busco, validated_accessions)
+    busco_index, _provided_busco_columns = load_busco_index(args.busco, validated_accessions)
 
     rows: list[dict[str, str]] = []
-    sample_status_rows: list[dict[str, str]] = []
     for sample_row in validated_samples:
-        metadata_present = sample_row["accession"] in metadata_index
-        metadata_row = build_metadata_row(
-            sample_row=sample_row,
-            metadata_header=metadata_header,
-            metadata_key_column=metadata_key_column,
-            metadata_index=metadata_index,
-        )
         master_row = build_master_row(
             sample_row=sample_row,
             metadata_header=metadata_header,
@@ -870,35 +554,12 @@ def run_build(args: argparse.Namespace) -> None:
             append_columns=append_columns,
         )
         rows.append(master_row)
-        sample_status_rows.append(
-            build_sample_status_row(
-                sample_row=sample_row,
-                metadata_present=metadata_present,
-                metadata_row=metadata_row,
-                master_row=master_row,
-                taxonomy_index=taxonomy_index,
-                taxonomy_requested=args.taxonomy is not None,
-                checkm2_index=checkm2_index,
-                checkm2_requested=args.checkm2 is not None,
-                sixteen_s_index=sixteen_s_index,
-                sixteen_s_requested=args.sixteen_s_status is not None,
-                busco_index=busco_index,
-                provided_busco_columns=provided_busco_columns,
-                ccfinder_index=ccfinder_index,
-                ccfinder_requested=args.ccfinder_strains is not None,
-                ani_index=ani_index,
-                ani_requested=args.ani is not None,
-                sample_status_columns=sample_status_columns,
-            )
-        )
 
     output_header = [*metadata_header, *append_columns]
     if len(rows) != len({row[metadata_key_column] for row in rows}):
         raise MasterTableError("Final master table contains duplicate accession rows.")
 
     write_tsv(args.output, output_header, rows)
-    sample_status_output = args.sample_status_output or args.output.with_name("sample_status.tsv")
-    write_tsv(sample_status_output, sample_status_columns, sample_status_rows)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
