@@ -58,8 +58,9 @@ Real-data `local`, `slurm`, and `all` runs require:
 - `--busco-download-dir` or `--prepare-busco-datasets`
 - `--eggnog-db`
 
-These acceptance runs assume `params.ccfinder_container` is already configured
-in the pipeline.
+These acceptance runs also assume the CRISPRCasFinder image is already set via
+`params.ccfinder_container` in pipeline config. The harness does not accept a
+separate CCFINDER container argument.
 
 Example local acceptance run:
 
