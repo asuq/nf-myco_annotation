@@ -36,6 +36,13 @@ nextflow run . -profile test -stub-run
 This validates the DSL wiring, channel contracts, publish locations, and final
 table/version outputs without requiring external databases or tool containers.
 
+## Manual wrapper
+
+For a single operator-facing entrypoint, use `bin/run_pipeline_test.sh`.
+
+See `docs/run_pipeline_test.md` for wrapper usage, prerequisites, examples, and
+expected output locations.
+
 ## Acceptance harness
 
 Use `bin/run_acceptance_tests.py` for the layered acceptance workflow:
