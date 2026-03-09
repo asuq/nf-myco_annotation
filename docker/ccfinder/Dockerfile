@@ -39,6 +39,9 @@ RUN set -eux; \
         libdate-calc-perl \
         libdatetime-perl \
         libdigest-md5-perl \
+        libexpat1-dev \
+        libxml-parser-perl \
+        libxml-sax-expat-perl \
         libxml-simple-perl \
         muscle \
         ncbi-blast+ \
@@ -83,6 +86,11 @@ RUN set -eux; \
     rm -rf /tmp/macsyfinder-1.0.5 /tmp/macsyfinder-1.0.5.tar.gz
 
 RUN set -eux; \
+    cpanm --notest \
+        Bio::DB::Fasta \
+        Bio::Seq \
+        Bio::SeqIO \
+        Bio::AlignIO; \
     install -d /opt/perl5; \
     ensure_perl_module() { \
         local perl_module="$1"; \
@@ -91,15 +99,13 @@ RUN set -eux; \
             cpanm --notest -L /opt/perl5 "$@"; \
         fi; \
     }; \
-    ensure_perl_module "Bio::AlignIO" "Bio::AlignIO"; \
-    ensure_perl_module "Bio::SeqIO" "Bio::SeqIO"; \
-    ensure_perl_module "Bio::DB::Fasta" "Bio::DB::Fasta"; \
     ensure_perl_module "Date::Calc" "Date::Calc"; \
     ensure_perl_module "Digest::MD5" "Digest::MD5"; \
     ensure_perl_module "JSON::Parse" "JSON::Parse"; \
     ensure_perl_module "Try::Tiny" "Try::Tiny"; \
     ensure_perl_module "Unix::Sysexits" "Unix::Sysexits"; \
-    ensure_perl_module "XML::Simple" "XML::Simple"
+    ensure_perl_module "XML::Simple" "XML::Simple"; \
+    install -d /usr/local/share/perl/5.26.1 /usr/local/lib/x86_64-linux-gnu/perl/5.26.1
 
 FROM ubuntu:18.04
 
@@ -148,6 +154,8 @@ RUN set -eux; \
         libdate-calc-perl \
         libdatetime-perl \
         libdigest-md5-perl \
+        libxml-parser-perl \
+        libxml-sax-expat-perl \
         libxml-simple-perl \
         muscle \
         ncbi-blast+ \
@@ -160,7 +168,9 @@ RUN set -eux; \
 COPY --from=builder /usr/local/CRISPRCasFinder /usr/local/CRISPRCasFinder
 COPY --from=builder /usr/local/bin/macsyfinder /usr/local/bin/macsyfinder
 COPY --from=builder /usr/local/lib/python2.7 /usr/local/lib/python2.7
+COPY --from=builder /usr/local/lib/x86_64-linux-gnu/perl/5.26.1 /usr/local/lib/x86_64-linux-gnu/perl/5.26.1
 COPY --from=builder /usr/local/share/macsyfinder /usr/local/share/macsyfinder
+COPY --from=builder /usr/local/share/perl/5.26.1 /usr/local/share/perl/5.26.1
 COPY --from=builder /etc/macsyfinder /etc/macsyfinder
 COPY --from=builder /opt/perl5 /opt/perl5
 
@@ -185,6 +195,8 @@ RUN set -eux; \
     test -f /usr/local/CRISPRCasFinder/supplementary_files/repeatDirection.tsv; \
     test -x /usr/local/CRISPRCasFinder/macsyfinder; \
     test -x /usr/local/bin/ccfinder-smoke-test; \
+    test -f /usr/local/share/perl/5.26.1/Bio/DB/IndexedBase.pm; \
+    test -f /usr/local/share/perl/5.26.1/Bio/DB/Fasta.pm; \
     command -v python; \
     command -v vmatch2; \
     command -v mkvtree2; \
@@ -195,6 +207,7 @@ RUN set -eux; \
     grep -F 'my $version = "4.2.30";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
     grep -F 'my $PathVmatch2 = "/usr/local/CRISPRCasFinder/bin/vmatch2";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
     grep -F 'my $PathMacsyfinder = "/usr/local/CRISPRCasFinder/macsyfinder";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
+    test -z "$(perl -MBio::DB::IndexedBase -e 1 2>&1)"; \
     python -c 'import macsypy'; \
     perl /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl -v >/tmp/ccfinder-version.txt; \
     /usr/local/bin/ccfinder-smoke-test
