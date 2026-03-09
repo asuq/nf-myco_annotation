@@ -54,7 +54,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
         self.assertIn("timeline {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/timeline.html\"\n    overwrite = true", config_text)
         self.assertIn("report {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/report.html\"\n    overwrite = true", config_text)
-        self.assertIn("trace {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/trace.txt\"\n    overwrite = true", config_text)
+        self.assertIn("trace {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/trace.tsv\"\n    overwrite = true", config_text)
         self.assertIn("dag {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/dag.html\"\n    overwrite = true", config_text)
 
 
