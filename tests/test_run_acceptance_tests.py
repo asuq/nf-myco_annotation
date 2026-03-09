@@ -420,6 +420,11 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
         run_acceptance_tests.validate_real_run_args(args)
 
+    def test_default_real_profiles_include_debug(self) -> None:
+        """Use the debug profile by default for acceptance real-data runs."""
+        self.assertEqual(run_acceptance_tests.DEFAULT_LOCAL_PROFILE, "debug,local,docker")
+        self.assertEqual(run_acceptance_tests.DEFAULT_SLURM_PROFILE, "debug,slurm,apptainer")
+
     def test_build_nextflow_command_uses_pipeline_ccfinder_container(self) -> None:
         """Build Nextflow commands without any harness CCFINDER parameter."""
         args = self.make_real_run_args()
@@ -453,8 +458,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertNotIn("--ccfinder_container", command)
         self.assertIn("--padloc_db", command)
         self.assertIn(str(Path("/tmp/padloc").resolve()), command)
-        self.assertIn("--eggnog_only_accessions", command)
-        self.assertIn("SRC_MYCO_A", command)
+        self.assertNotIn("--eggnog_only_accessions", command)
 
     def test_parse_args_rejects_ccfinder_override_flag(self) -> None:
         """Reject a harness-level CCFINDER override flag."""

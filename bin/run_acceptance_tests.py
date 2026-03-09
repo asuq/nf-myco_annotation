@@ -25,8 +25,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_WORK_ROOT = ROOT_DIR / "assets" / "testdata" / "local" / "acceptance"
 DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "source_catalog.tsv"
 DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
-DEFAULT_LOCAL_PROFILE = "local,docker"
-DEFAULT_SLURM_PROFILE = "slurm,apptainer"
+DEFAULT_LOCAL_PROFILE = "debug,local,docker"
+DEFAULT_SLURM_PROFILE = "debug,slurm,apptainer"
 REAL_RUN_NOTE = (
     "CRISPRCasFinder uses params.ccfinder_container from pipeline config; "
     "the acceptance harness does not override it."
@@ -672,8 +672,6 @@ def build_nextflow_command(
         str(Path(args.eggnog_db).resolve()),
         "--padloc_db",
         str(Path(args.padloc_db).resolve()),
-        "--eggnog_only_accessions",
-        get_single_role_record(cohort.cohort_plan, "eggnog_smoke_candidate").accession,
         "--outdir",
         str(outdir),
     ]
@@ -769,14 +767,6 @@ def status_contains_token(value: str, token: str) -> bool:
 def records_with_role(plan: Sequence[CohortRecord], role_tag: str) -> list[CohortRecord]:
     """Return all cohort records carrying one role tag."""
     return [record for record in plan if role_tag in record.role_tags]
-
-
-def get_single_role_record(plan: Sequence[CohortRecord], role_tag: str) -> CohortRecord:
-    """Return exactly one cohort record carrying one required role tag."""
-    matches = records_with_role(plan, role_tag)
-    if len(matches) != 1:
-        raise AcceptanceTestError(f"expected_single_{role_tag}")
-    return matches[0]
 
 
 def assert_role_coverage(
