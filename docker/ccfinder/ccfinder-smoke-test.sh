@@ -48,7 +48,6 @@ awk -v output_root="${task_root}" '
     }
 ' "${staged_input}"
 
-set +e
 (
     cd "${run_root}"
     : > index.html
@@ -70,17 +69,8 @@ set +e
         -gcode 11 \
         -quiet
 ) >"${run_log}" 2>&1
-tool_exit_code=$?
-set -e
 
-if grep -Eq "cannot move '.*' to a subdirectory of itself" "${run_log}"; then
-    cat "${run_log}" >&2
-    exit 1
-fi
-
-if (( tool_exit_code != 0 )); then
-    printf 'CRISPRCasFinder smoke run exited with %s while still producing outputs.\n' "${tool_exit_code}" >&2
-fi
-
-find "${tool_output_root}" "${run_root}" -type f -name 'CRISPR-Cas_summary.tsv' | grep -q .
-find "${tool_output_root}" "${run_root}" -type f -name 'result.json' | grep -q .
+find "${tool_output_root}" -type f -name 'CRISPR-Cas_summary.tsv' | grep -q .
+find "${tool_output_root}" -type f -name 'Casfinder_summary_*.tsv' | grep -q .
+find "${tool_output_root}" -type f -name 'rawCas.fna' | grep -q .
+find "${tool_output_root}" -type f -name 'result.json' | grep -q .

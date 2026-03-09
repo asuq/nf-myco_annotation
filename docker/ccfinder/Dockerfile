@@ -1,17 +1,15 @@
-ARG CCFINDER_VERSION=4.3.2
-ARG CCFINDER_REF=release-4.3.2
-ARG MACSYFINDER_VERSION=2.0.*
-ARG CASFINDER_MODEL=CASFinder==3.1.0
+ARG CCFINDER_VERSION=4.2.30
+ARG CCFINDER_REF=release-4.2.20
+ARG MACSYFINDER_VERSION=1.0.5
 ARG VMATCH_URL=http://vmatch.de/distributions/vmatch-2.3.0-Linux_x86_64-64bit.tar.gz
 ARG SINGULARITY_INSPECTOR_IMAGE=quay.io/singularity/singularity:v3.8.2-slim@sha256:2558c93c63aa8f721aae106ff1052dff5442171d7c00aed3e81d0fe62172b118
 
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:18.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CCFINDER_VERSION
 ARG CCFINDER_REF
 ARG MACSYFINDER_VERSION
-ARG CASFINDER_MODEL
 ARG VMATCH_URL
 ARG SINGULARITY_INSPECTOR_IMAGE
 
@@ -21,6 +19,7 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
 COPY CRISPRCasFinder.runtime.patch /tmp/CRISPRCasFinder.runtime.patch
+COPY macsyfinder-1.0.5.tar.gz /tmp/macsyfinder-1.0.5.tar.gz
 
 RUN set -eux; \
     test "$(dpkg --print-architecture)" = "amd64"; \
@@ -37,6 +36,7 @@ RUN set -eux; \
         git \
         hmmer \
         libbio-perl-perl \
+        libdate-calc-perl \
         libdatetime-perl \
         libdigest-md5-perl \
         libxml-simple-perl \
@@ -46,16 +46,18 @@ RUN set -eux; \
         patch \
         perl \
         prodigal \
-        python3 \
-        python3-pip \
-        python3-venv \
+        python \
         wget; \
     rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
     git clone --branch "${CCFINDER_REF}" --depth 1 https://github.com/dcouvin/CRISPRCasFinder.git /usr/local/CRISPRCasFinder; \
     patch -d /usr/local/CRISPRCasFinder -p0 < /tmp/CRISPRCasFinder.runtime.patch; \
-    install -d /usr/local/CRISPRCasFinder/bin; \
+    install -d /usr/local/CRISPRCasFinder/bin /usr/local/CRISPRCasFinder/CasFinder-2.0.4; \
+    ln -sf ../CasFinder-2.0.3/CASprofiles-2.0.3 /usr/local/CRISPRCasFinder/CasFinder-2.0.4/CASprofiles-2.0.4; \
+    ln -sf ../CasFinder-2.0.3/DEF-Class-2.0.3 /usr/local/CRISPRCasFinder/CasFinder-2.0.4/DEF-Class-2.0.4; \
+    ln -sf ../CasFinder-2.0.3/DEF-SubTyping-2.0.3 /usr/local/CRISPRCasFinder/CasFinder-2.0.4/DEF-SubTyping-2.0.4; \
+    ln -sf ../CasFinder-2.0.3/DEF-Typing-2.0.3 /usr/local/CRISPRCasFinder/CasFinder-2.0.4/DEF-Typing-2.0.4; \
     rm -rf /usr/local/CRISPRCasFinder/.git; \
     chmod 755 /usr/local/CRISPRCasFinder /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl
 
@@ -64,22 +66,21 @@ RUN set -eux; \
     tar -xzf /tmp/vmatch.tar.gz -C /tmp; \
     VMATCH_DIR="$(find /tmp -maxdepth 1 -type d -name 'vmatch-*' | head -n 1)"; \
     test -n "${VMATCH_DIR}"; \
-    install -d /opt/vmatch/bin; \
     gcc -Wall -Werror -fPIC -O3 -shared "${VMATCH_DIR}/SELECT/sel392.c" -o /usr/local/CRISPRCasFinder/sel392v2.so; \
-    install -m 0755 "${VMATCH_DIR}/vmatch" /opt/vmatch/bin/vmatch2; \
-    install -m 0755 "${VMATCH_DIR}/mkvtree" /opt/vmatch/bin/mkvtree2; \
-    install -m 0755 "${VMATCH_DIR}/vsubseqselect" /opt/vmatch/bin/vsubseqselect2; \
-    ln -sf vmatch2 /opt/vmatch/bin/vmatch; \
-    ln -sf mkvtree2 /opt/vmatch/bin/mkvtree; \
-    ln -sf vsubseqselect2 /opt/vmatch/bin/vsubseqselect; \
+    install -m 0755 "${VMATCH_DIR}/vmatch" /usr/local/CRISPRCasFinder/bin/vmatch2; \
+    install -m 0755 "${VMATCH_DIR}/mkvtree" /usr/local/CRISPRCasFinder/bin/mkvtree2; \
+    install -m 0755 "${VMATCH_DIR}/vsubseqselect" /usr/local/CRISPRCasFinder/bin/vsubseqselect2; \
+    ln -sf vmatch2 /usr/local/CRISPRCasFinder/bin/vmatch; \
+    ln -sf mkvtree2 /usr/local/CRISPRCasFinder/bin/mkvtree; \
+    ln -sf vsubseqselect2 /usr/local/CRISPRCasFinder/bin/vsubseqselect; \
     rm -rf /tmp/vmatch.tar.gz "${VMATCH_DIR}"
 
 RUN set -eux; \
-    python3 -m venv /opt/macsyfinder-venv; \
-    install -d /opt/macsyfinder-venv/share/macsyfinder/models; \
-    /opt/macsyfinder-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel; \
-    /opt/macsyfinder-venv/bin/pip install --no-cache-dir "macsyfinder==${MACSYFINDER_VERSION}" "gitpython>=3,<4"; \
-    /opt/macsyfinder-venv/bin/macsydata install --target /opt/macsyfinder-venv/share/macsyfinder/models "${CASFINDER_MODEL}"
+    tar -xzf /tmp/macsyfinder-1.0.5.tar.gz -C /tmp; \
+    cd /tmp/macsyfinder-1.0.5; \
+    python setup.py build; \
+    python setup.py install --no-viewer; \
+    rm -rf /tmp/macsyfinder-1.0.5 /tmp/macsyfinder-1.0.5.tar.gz
 
 RUN set -eux; \
     install -d /opt/perl5; \
@@ -93,16 +94,19 @@ RUN set -eux; \
     ensure_perl_module "Bio::AlignIO" "Bio::AlignIO"; \
     ensure_perl_module "Bio::SeqIO" "Bio::SeqIO"; \
     ensure_perl_module "Bio::DB::Fasta" "Bio::DB::Fasta"; \
-    ensure_perl_module "XML::Simple" "XML::Simple"; \
-    ensure_perl_module "Digest::MD5" "Digest::MD5"
+    ensure_perl_module "Date::Calc" "Date::Calc"; \
+    ensure_perl_module "Digest::MD5" "Digest::MD5"; \
+    ensure_perl_module "JSON::Parse" "JSON::Parse"; \
+    ensure_perl_module "Try::Tiny" "Try::Tiny"; \
+    ensure_perl_module "Unix::Sysexits" "Unix::Sysexits"; \
+    ensure_perl_module "XML::Simple" "XML::Simple"
 
-FROM ubuntu:22.04
+FROM ubuntu:18.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CCFINDER_VERSION
 ARG CCFINDER_REF
 ARG MACSYFINDER_VERSION
-ARG CASFINDER_MODEL
 ARG VMATCH_URL
 ARG SINGULARITY_INSPECTOR_IMAGE
 
@@ -113,10 +117,9 @@ LABEL org.opencontainers.image.title="CRISPRCasFinder" \
       org.opencontainers.image.version="${CCFINDER_VERSION}" \
       org.opencontainers.image.source="https://github.com/dcouvin/CRISPRCasFinder" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
-      org.opencontainers.image.base.name="ubuntu:22.04" \
+      org.opencontainers.image.base.name="ubuntu:18.04" \
       io.nf_myco_annotation.ccfinder_ref="${CCFINDER_REF}" \
       io.nf_myco_annotation.macsyfinder_version="${MACSYFINDER_VERSION}" \
-      io.nf_myco_annotation.casfinder_model="${CASFINDER_MODEL}" \
       io.nf_myco_annotation.vmatch_url="${VMATCH_URL}" \
       io.nf_myco_annotation.reference_runtime="CRISPRCasFinder.simg" \
       io.nf_myco_annotation.reference_runtime_version="4.2.30" \
@@ -124,12 +127,11 @@ LABEL org.opencontainers.image.title="CRISPRCasFinder" \
 
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-ENV PATH=/usr/local/CRISPRCasFinder/bin:/opt/perl5/bin:/opt/macsyfinder-venv/bin:/usr/local/bin:${PATH}
+ENV PATH=/usr/local/CRISPRCasFinder/bin:/opt/perl5/bin:/usr/local/bin:${PATH}
 ENV PERL5LIB=/opt/perl5/lib/perl5
 WORKDIR /work
 
 COPY macsyfinder-wrapper.sh /tmp/macsyfinder-wrapper.sh
-COPY mv-compat.sh /tmp/mv-compat.sh
 COPY ccfinder-smoke-test.sh /tmp/ccfinder-smoke-test.sh
 
 RUN set -eux; \
@@ -143,6 +145,7 @@ RUN set -eux; \
         emboss-lib \
         hmmer \
         libbio-perl-perl \
+        libdate-calc-perl \
         libdatetime-perl \
         libdigest-md5-perl \
         libxml-simple-perl \
@@ -151,53 +154,47 @@ RUN set -eux; \
         parallel \
         perl \
         prodigal \
-        python3; \
+        python; \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/CRISPRCasFinder /usr/local/CRISPRCasFinder
-COPY --from=builder /opt/macsyfinder-venv /opt/macsyfinder-venv
+COPY --from=builder /usr/local/bin/macsyfinder /usr/local/bin/macsyfinder
+COPY --from=builder /usr/local/lib/python2.7 /usr/local/lib/python2.7
+COPY --from=builder /usr/local/share/macsyfinder /usr/local/share/macsyfinder
+COPY --from=builder /etc/macsyfinder /etc/macsyfinder
 COPY --from=builder /opt/perl5 /opt/perl5
-COPY --from=builder /opt/vmatch /opt/vmatch
 
 RUN set -eux; \
     install -m 0755 /tmp/macsyfinder-wrapper.sh /usr/local/CRISPRCasFinder/macsyfinder; \
-    install -m 0755 /tmp/mv-compat.sh /usr/local/bin/mv; \
     install -m 0755 /tmp/ccfinder-smoke-test.sh /usr/local/bin/ccfinder-smoke-test; \
-    ln -sf /opt/vmatch/bin/vmatch2 /usr/local/bin/vmatch2; \
-    ln -sf /opt/vmatch/bin/vmatch2 /usr/local/bin/vmatch; \
-    ln -sf /opt/vmatch/bin/mkvtree2 /usr/local/bin/mkvtree2; \
-    ln -sf /opt/vmatch/bin/mkvtree2 /usr/local/bin/mkvtree; \
-    ln -sf /opt/vmatch/bin/vsubseqselect2 /usr/local/bin/vsubseqselect2; \
-    ln -sf /opt/vmatch/bin/vsubseqselect2 /usr/local/bin/vsubseqselect; \
-    ln -sf /opt/vmatch/bin/vmatch2 /usr/local/CRISPRCasFinder/bin/vmatch2; \
-    ln -sf /opt/vmatch/bin/mkvtree2 /usr/local/CRISPRCasFinder/bin/mkvtree2; \
-    ln -sf /opt/vmatch/bin/vsubseqselect2 /usr/local/CRISPRCasFinder/bin/vsubseqselect2; \
-    ln -sf /usr/local/CRISPRCasFinder/macsyfinder /usr/local/bin/macsyfinder; \
+    ln -sf /usr/local/CRISPRCasFinder/bin/vmatch2 /usr/local/bin/vmatch2; \
+    ln -sf /usr/local/CRISPRCasFinder/bin/vmatch /usr/local/bin/vmatch; \
+    ln -sf /usr/local/CRISPRCasFinder/bin/mkvtree2 /usr/local/bin/mkvtree2; \
+    ln -sf /usr/local/CRISPRCasFinder/bin/mkvtree /usr/local/bin/mkvtree; \
+    ln -sf /usr/local/CRISPRCasFinder/bin/vsubseqselect2 /usr/local/bin/vsubseqselect2; \
+    ln -sf /usr/local/CRISPRCasFinder/bin/vsubseqselect /usr/local/bin/vsubseqselect; \
     test -f /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
     test -f /usr/local/CRISPRCasFinder/sel392v2.so; \
+    test -d /usr/local/CRISPRCasFinder/CasFinder-2.0.4; \
+    test -L /usr/local/CRISPRCasFinder/CasFinder-2.0.4/CASprofiles-2.0.4; \
+    test -L /usr/local/CRISPRCasFinder/CasFinder-2.0.4/DEF-Class-2.0.4; \
+    test -L /usr/local/CRISPRCasFinder/CasFinder-2.0.4/DEF-SubTyping-2.0.4; \
+    test -L /usr/local/CRISPRCasFinder/CasFinder-2.0.4/DEF-Typing-2.0.4; \
     test -f /usr/local/CRISPRCasFinder/supplementary_files/CRISPR_crisprdb.csv; \
     test -f /usr/local/CRISPRCasFinder/supplementary_files/Repeat_List.csv; \
     test -f /usr/local/CRISPRCasFinder/supplementary_files/repeatDirection.tsv; \
     test -x /usr/local/CRISPRCasFinder/macsyfinder; \
     test -x /usr/local/bin/ccfinder-smoke-test; \
-    test -d /usr/local/CRISPRCasFinder/CasFinder-2.0.3; \
-    find /opt/macsyfinder-venv/share/macsyfinder/models -maxdepth 4 -type d -name CASFinder | grep -q .; \
-    command -v vmatch; \
+    command -v python; \
     command -v vmatch2; \
-    command -v mkvtree; \
     command -v mkvtree2; \
-    command -v vsubseqselect; \
     command -v vsubseqselect2; \
     command -v muscle; \
-    command -v mv; \
     command -v prodigal; \
-    command -v hmmsearch; \
-    command -v blastn; \
     command -v macsyfinder; \
-    test "$(command -v mv)" = "/usr/local/bin/mv"; \
+    grep -F 'my $version = "4.2.30";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
     grep -F 'my $PathVmatch2 = "/usr/local/CRISPRCasFinder/bin/vmatch2";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
     grep -F 'my $PathMacsyfinder = "/usr/local/CRISPRCasFinder/macsyfinder";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
-    grep -F 'my $so = "/usr/local/CRISPRCasFinder/sel392v2.so";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
-    grep -F 'my $muscle = " muscle -in $file -out $result ";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; \
+    python -c 'import macsypy'; \
     perl /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl -v >/tmp/ccfinder-version.txt; \
     /usr/local/bin/ccfinder-smoke-test
