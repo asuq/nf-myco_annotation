@@ -18,6 +18,17 @@ Optional labels used only in `tool_and_db_versions.tsv`:
 - `--eggnog_db_label`
 - `--padloc_db_label`
 
+Shared helper image requirement:
+
+- `params.python_container` is the single helper image for Python-based tasks
+  such as validation, ANI clustering, ANI representative selection, final
+  status assembly, and version collection
+- it must provide `numpy` and `scipy`
+- the repo-owned Dockerfile for this image lives under
+  `docker/python_helper/Dockerfile`
+- local Docker and HPC Apptainer runs should reuse that one helper image to
+  reduce container pulls
+
 ## Profiles
 
 - `local`: local executor
@@ -147,4 +158,4 @@ columns in the order locked by `assets/master_table_append_columns.txt`.
 
 - PADLOC and eggNOG outputs are retained per sample but are not merged into the final master table.
 - Original accessions remain the published sample-folder names. Internal sanitized IDs are execution-only.
-- Custom process images are intentionally configured by placeholder params; manual image pinning remains user-controlled.
+- The shared Python helper image now includes `numpy` and `scipy` so ANI clustering and representative selection reuse the same helper container as the other Python tasks.

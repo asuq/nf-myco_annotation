@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
+import importlib.util
+import io
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +19,8 @@ if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
 import cluster_ani  # noqa: E402
+
+SCIPY_AVAILABLE = importlib.util.find_spec("scipy") is not None
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -133,6 +139,66 @@ class ClusterAniHelperTestCase(unittest.TestCase):
             self.assertIn("fastani_inputs/ACC1.fasta", metadata)
             self.assertEqual(metadata["fastani_inputs/ACC1.fasta"].Accession, "ACC1")
 
+    def test_main_fails_clearly_when_scipy_is_unavailable(self) -> None:
+        """Report a clear runtime contract failure when SciPy cannot be imported."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            matrix = tmpdir / "fastani.matrix"
+            matrix.write_text(
+                "\n".join(
+                    [
+                        "2",
+                        "fastani_inputs/ACC1.fasta",
+                        "fastani_inputs/ACC2.fasta 97.5000",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            metadata_tsv = tmpdir / "ani_metadata.tsv"
+            metadata_tsv.write_text(
+                "\n".join(
+                    [
+                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\torganism_name\tBUSCO_bacillota_odb12",
+                        "ACC1\tfastani_inputs/ACC1.fasta\tfastani_inputs/ACC1.fasta\tScaffold\t11\t94\t1.5\t49000\t5\t1000000\tOne\tC:97.0%[S:97.0%,D:0.0%],F:2.0%,M:1.0%,n:200",
+                        "ACC2\tfastani_inputs/ACC2.fasta\tfastani_inputs/ACC2.fasta\tScaffold\t11\t95\t1.0\t50000\t4\t1000000\tTwo\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            outdir = tmpdir / "out"
+            stderr = io.StringIO()
+
+            with (
+                contextlib.redirect_stderr(stderr),
+                mock.patch.object(
+                    cluster_ani,
+                    "load_scipy_complete_linkage",
+                    side_effect=cluster_ani.AniInputError(
+                        "SciPy is required for ANI clustering. Build "
+                        "params.python_container with scipy and numpy before "
+                        "running the pipeline."
+                    ),
+                ),
+            ):
+                exit_code = cluster_ani.main(
+                    [
+                        "--ani-matrix",
+                        str(matrix),
+                        "--ani-metadata",
+                        str(metadata_tsv),
+                        "--threshold",
+                        "0.95",
+                        "--outdir",
+                        str(outdir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("SciPy is required for ANI clustering.", stderr.getvalue())
+
+    @unittest.skipUnless(SCIPY_AVAILABLE, "SciPy is required for ANI clustering tests.")
     def test_main_writes_cluster_memberships_without_representatives(self) -> None:
         """Emit stable cluster assignments only from the ANI matrix and metadata."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

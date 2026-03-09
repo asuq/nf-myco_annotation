@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib
 import logging
 import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import NoReturn, Sequence
+from typing import Any, NoReturn, Sequence
 
 from ani_common import (
     AniInputError,
@@ -191,6 +192,19 @@ def set_thread_envs(n_threads: int) -> None:
         os.environ[key] = cap(os.environ.get(key), n_threads)
 
 
+def load_scipy_complete_linkage() -> tuple[Any, Any, Any]:
+    """Load the SciPy helpers required for ANI complete-linkage clustering."""
+    try:
+        hierarchy = importlib.import_module("scipy.cluster.hierarchy")
+        distance = importlib.import_module("scipy.spatial.distance")
+    except ModuleNotFoundError as error:
+        raise AniInputError(
+            "SciPy is required for ANI clustering. Build params.python_container "
+            "with scipy and numpy before running the pipeline."
+        ) from error
+    return hierarchy.fcluster, hierarchy.linkage, distance.squareform
+
+
 def cluster_complete_linkage(
     ani: "np.ndarray",
     names: Sequence[str],
@@ -203,12 +217,7 @@ def cluster_complete_linkage(
 
     import numpy as np
 
-    try:
-        from scipy.cluster.hierarchy import fcluster, linkage
-        from scipy.spatial.distance import squareform
-    except ModuleNotFoundError:
-        logging.info("SciPy is unavailable; using the built-in complete-linkage fallback.")
-        return cluster_complete_linkage_fallback(ani, names, threshold)
+    fcluster, linkage, squareform = load_scipy_complete_linkage()
 
     distance = np.where(np.isnan(ani), 1.0, 1.0 - (ani / 100.0))
     np.fill_diagonal(distance, 0.0)
@@ -239,70 +248,6 @@ def cluster_complete_linkage(
                         )
                     )
     return dict(clusters)
-
-
-def cluster_complete_linkage_fallback(
-    ani: "np.ndarray",
-    names: Sequence[str],
-    threshold: float,
-) -> dict[int, list[int]]:
-    """Cluster by complete linkage without SciPy using deterministic greedy merges."""
-    import numpy as np
-
-    cutoff = threshold * 100.0
-    clusters: list[list[int]] = [[index] for index in range(len(names))]
-
-    def can_merge(left: list[int], right: list[int]) -> bool:
-        """Return True when every cross-cluster ANI passes the threshold."""
-        for left_index in left:
-            for right_index in right:
-                value = ani[left_index, right_index]
-                if np.isnan(value) or value < cutoff:
-                    return False
-        return True
-
-    def complete_link_distance(left: list[int], right: list[int]) -> float:
-        """Return the maximum pairwise distance between two clusters."""
-        max_distance = 0.0
-        for left_index in left:
-            for right_index in right:
-                distance = 1.0 - (float(ani[left_index, right_index]) / 100.0)
-                if distance > max_distance:
-                    max_distance = distance
-        return max_distance
-
-    while True:
-        best_pair: tuple[int, int] | None = None
-        best_key: tuple[float, tuple[str, ...], tuple[str, ...]] | None = None
-        for left_index in range(len(clusters)):
-            for right_index in range(left_index + 1, len(clusters)):
-                left = clusters[left_index]
-                right = clusters[right_index]
-                if not can_merge(left, right):
-                    continue
-                left_accessions = tuple(sorted(names[index] for index in left))
-                right_accessions = tuple(sorted(names[index] for index in right))
-                key = (
-                    complete_link_distance(left, right),
-                    left_accessions,
-                    right_accessions,
-                )
-                if best_key is None or key < best_key:
-                    best_key = key
-                    best_pair = (left_index, right_index)
-        if best_pair is None:
-            break
-
-        left_index, right_index = best_pair
-        merged = sorted(clusters[left_index] + clusters[right_index])
-        clusters = [
-            cluster
-            for index, cluster in enumerate(clusters)
-            if index not in {left_index, right_index}
-        ]
-        clusters.append(merged)
-
-    return {index + 1: cluster for index, cluster in enumerate(clusters)}
 
 
 def assign_cluster_ids(

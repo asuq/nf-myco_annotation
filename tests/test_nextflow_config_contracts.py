@@ -23,12 +23,20 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("ani_score_profile = 'default'", config_text)
         self.assertIn("use_biocontainers = true", config_text)
 
-    def test_python_container_uses_non_slim_image(self) -> None:
-        """Use a helper Python image that provides core process utilities."""
+    def test_python_container_uses_shared_repo_owned_helper_image(self) -> None:
+        """Use one shared helper image that carries the ANI scientific stack."""
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
 
-        self.assertIn("python_container = 'python:3.12'", config_text)
-        self.assertNotIn("python_container = 'python:3.12-slim'", config_text)
+        self.assertIn("python_container = 'quay.io/asuq1617/python-scipy:3.12'", config_text)
+        self.assertNotIn("python_container = 'python:3.12'", config_text)
+
+    def test_python_helper_processes_are_pinned_explicitly(self) -> None:
+        """Keep shared helper processes on the single Python helper image."""
+        config_text = BASE_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("withName: CLUSTER_ANI {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
+        self.assertIn("withName: SELECT_ANI_REPRESENTATIVES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
+        self.assertIn("withName: WRITE_SAMPLE_STATUS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
 
     def test_docker_profile_forces_amd64_ccfinder_on_arm_hosts(self) -> None:
         """Allow Apple Silicon Docker runs to pull the pinned CCFINDER image."""
