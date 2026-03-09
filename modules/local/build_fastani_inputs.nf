@@ -20,6 +20,7 @@ process BUILD_FASTANI_INPUTS {
     path checkm2_summaries
     path sixteen_s_statuses
     path busco_tables, name: 'busco_tables/busco_table??.tsv'
+    path assembly_stats
 
     output:
     path 'fastani_inputs', emit: fastani_inputs
@@ -41,6 +42,7 @@ process BUILD_FASTANI_INPUTS {
         --16s-status "${sixteen_s_statuses}" \
         ${buscoArgs} \
         --primary-busco-column "${primaryBuscoColumn}" \
+        --assembly-stats "${assembly_stats}" \
         --outdir .
 
     cat <<EOF > versions.yml

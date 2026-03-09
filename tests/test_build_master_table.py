@@ -584,6 +584,110 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertFalse(master_output.exists())
 
+    def test_main_backfills_missing_metadata_stats_from_in_house_values(self) -> None:
+        """Backfill missing metadata metrics from computed assembly stats only."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\torganism_name\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tKnown one\tid_1",
+                        "ACC2\ttrue\tComplete Genome\t/path/two.fna\tCandidate two\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tTax_ID\tOrganism_Name\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                        "ACC1\t123\tKnown one\t50000\tNA\tNA\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            assembly_stats = self.write_text_file(
+                tmpdir / "assembly_stats.tsv",
+                "\n".join(
+                    [
+                        "accession\tn50\tscaffolds\tgenome_size",
+                        "ACC1\t90000\t2\t800000",
+                        "ACC2\t120000\t1\t120000",
+                    ]
+                )
+                + "\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--assembly-stats",
+                    str(assembly_stats),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--output",
+                    str(master_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, master_rows = read_tsv_rows(master_output)
+            master_by_accession = {row["Accession"]: row for row in master_rows}
+
+            self.assertEqual(master_by_accession["ACC1"]["N50"], "50000")
+            self.assertEqual(master_by_accession["ACC1"]["Scaffolds"], "2")
+            self.assertEqual(master_by_accession["ACC1"]["Genome_Size"], "800000")
+            self.assertEqual(master_by_accession["ACC2"]["N50"], "120000")
+            self.assertEqual(master_by_accession["ACC2"]["Scaffolds"], "1")
+            self.assertEqual(master_by_accession["ACC2"]["Genome_Size"], "120000")
+
+    def test_main_does_not_insert_missing_metadata_metric_columns(self) -> None:
+        """Avoid adding new metadata columns when the input header omits them."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\torganism_name\tinternal_id\nACC1\ttrue\tComplete Genome\t/path/one.fna\tCandidate one\tid_1\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\n",
+            )
+            assembly_stats = self.write_text_file(
+                tmpdir / "assembly_stats.tsv",
+                "accession\tn50\tscaffolds\tgenome_size\nACC1\t120000\t1\t120000\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--assembly-stats",
+                    str(assembly_stats),
+                    "--append-columns",
+                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    "--output",
+                    str(master_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            master_header, master_rows = read_tsv_rows(master_output)
+            self.assertNotIn("N50", master_header)
+            self.assertNotIn("Scaffolds", master_header)
+            self.assertNotIn("Genome_Size", master_header)
+            self.assertEqual(master_rows[0]["Accession"], "ACC1")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,6 +22,7 @@ workflow FINAL_OUTPUTS {
     eggnog_results
     ani_clusters
     ani_metadata
+    assembly_stats
     ani_matrix
     version_files
     nextflow_version
@@ -123,6 +124,7 @@ workflow FINAL_OUTPUTS {
         collected_busco,
         combined_ccfinder,
         SELECT_ANI_REPRESENTATIVES.out.ani_summary,
+        assembly_stats,
     )
 
     WRITE_SAMPLE_STATUS(
@@ -139,6 +141,7 @@ workflow FINAL_OUTPUTS {
         padlocManifest,
         eggnogManifest,
         SELECT_ANI_REPRESENTATIVES.out.ani_summary,
+        assembly_stats,
         primaryBuscoColumn,
     )
 

@@ -31,6 +31,12 @@ CRISPR_COLUMNS = tuple(master_table_contract.CRISPR_COLUMNS)
 ANI_COLUMNS = tuple(master_table_contract.ANI_COLUMNS)
 DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
+ASSEMBLY_STATS_COLUMNS = ("n50", "scaffolds", "genome_size")
+ASSEMBLY_METADATA_COLUMN_MAP = {
+    "N50": "n50",
+    "Scaffolds": "scaffolds",
+    "Genome_Size": "genome_size",
+}
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--ani",
         type=Path,
         help="Optional ANI summary TSV from select_ani_representatives.py.",
+    )
+    parser.add_argument(
+        "--assembly-stats",
+        type=Path,
+        help="Optional in-house assembly stats TSV keyed by accession.",
     )
     parser.add_argument(
         "--output",
@@ -305,22 +316,55 @@ def build_metadata_row(
     metadata_header: Sequence[str],
     metadata_key_column: str,
     metadata_index: dict[str, dict[str, str]],
+    assembly_stats_row: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build the preserved metadata block for one sample."""
     accession = sample_row["accession"]
     existing_row = metadata_index.get(accession)
     if existing_row is not None:
-        return {column: existing_row.get(column, "NA") or "NA" for column in metadata_header}
+        metadata_row = {
+            column: existing_row.get(column, "NA") or "NA" for column in metadata_header
+        }
+    else:
+        metadata_row = {column: "NA" for column in metadata_header}
+        metadata_row[metadata_key_column] = accession
+        if sample_row.get("is_new") == "true":
+            supplemental = build_supplemental_metadata_map(sample_row)
+            for column in metadata_header:
+                normalised = normalise_key(column)
+                if normalised in supplemental:
+                    metadata_row[column] = supplemental[normalised]
 
-    metadata_row = {column: "NA" for column in metadata_header}
-    metadata_row[metadata_key_column] = accession
-    if sample_row.get("is_new") == "true":
-        supplemental = build_supplemental_metadata_map(sample_row)
-        for column in metadata_header:
-            normalised = normalise_key(column)
-            if normalised in supplemental:
-                metadata_row[column] = supplemental[normalised]
+    if assembly_stats_row:
+        for metadata_column, stats_column in ASSEMBLY_METADATA_COLUMN_MAP.items():
+            header_column = find_column_by_normalised_name(metadata_header, metadata_column)
+            if header_column is None:
+                continue
+            if not is_missing(metadata_row.get(header_column)):
+                continue
+            stats_value = assembly_stats_row.get(stats_column, "NA")
+            if is_missing(stats_value):
+                continue
+            metadata_row[header_column] = stats_value
     return metadata_row
+
+
+def resolve_assembly_metric_value(
+    metadata_row: dict[str, str],
+    assembly_stats_row: dict[str, str] | None,
+    metadata_column_name: str,
+) -> str:
+    """Resolve one assembly metric from metadata first, then in-house stats."""
+    metadata_value = detect_metadata_value(metadata_row, metadata_column_name)
+    if not is_missing(metadata_value):
+        return metadata_value
+
+    stats_column = ASSEMBLY_METADATA_COLUMN_MAP[metadata_column_name]
+    if assembly_stats_row is None:
+        return "NA"
+
+    stats_value = assembly_stats_row.get(stats_column, "NA")
+    return "NA" if is_missing(stats_value) else stats_value
 
 
 def load_taxonomy_index(path: Path | None) -> dict[str, dict[str, str]]:
@@ -348,6 +392,19 @@ def load_optional_accession_index(
     index = build_index(rows, key_column, table_name)
     ensure_index_keys_are_valid(index, validated_accessions, table_name)
     return index
+
+
+def load_assembly_stats_index(
+    path: Path | None,
+    validated_accessions: set[str],
+) -> dict[str, dict[str, str]]:
+    """Load optional in-house assembly stats keyed by accession."""
+    return load_optional_accession_index(
+        path,
+        ASSEMBLY_STATS_COLUMNS,
+        "assembly stats table",
+        validated_accessions,
+    )
 
 
 def load_busco_index(
@@ -438,11 +495,21 @@ def find_column_by_normalised_name(
     return None
 
 
+def detect_metadata_value(metadata_row: dict[str, str], column_name: str) -> str:
+    """Return one metadata value by normalised column name or `NA`."""
+    column = find_column_by_normalised_name(tuple(metadata_row), column_name)
+    if column is None:
+        return "NA"
+    value = metadata_row.get(column, "").strip()
+    return "NA" if is_missing(value) else value
+
+
 def build_master_row(
     sample_row: dict[str, str],
     metadata_header: Sequence[str],
     metadata_key_column: str,
     metadata_index: dict[str, dict[str, str]],
+    assembly_stats_index: dict[str, dict[str, str]],
     taxonomy_index: dict[str, dict[str, str]],
     checkm2_index: dict[str, dict[str, str]],
     sixteen_s_index: dict[str, dict[str, str]],
@@ -452,18 +519,20 @@ def build_master_row(
     append_columns: Sequence[str],
 ) -> dict[str, str]:
     """Build one final master-table row for a validated sample."""
+    accession = sample_row["accession"]
+    assembly_stats_row = assembly_stats_index.get(accession)
     metadata_row = build_metadata_row(
         sample_row,
         metadata_header,
         metadata_key_column,
         metadata_index,
+        assembly_stats_row=assembly_stats_row,
     )
     row = {column: metadata_row[column] for column in metadata_header}
 
     derived_values = {column: "NA" for column in append_columns}
     derived_values.update(derive_taxonomy_values(metadata_row, taxonomy_index))
 
-    accession = sample_row["accession"]
     for column in CHECKM2_COLUMNS:
         if accession in checkm2_index and column in checkm2_index[accession]:
             derived_values[column] = checkm2_index[accession][column] or "NA"
@@ -512,6 +581,7 @@ def run_build(args: argparse.Namespace) -> None:
         )
 
     taxonomy_index = load_taxonomy_index(args.taxonomy)
+    assembly_stats_index = load_assembly_stats_index(args.assembly_stats, validated_accessions)
     checkm2_index = load_optional_accession_index(
         args.checkm2,
         CHECKM2_COLUMNS,
@@ -545,6 +615,7 @@ def run_build(args: argparse.Namespace) -> None:
             metadata_header=metadata_header,
             metadata_key_column=metadata_key_column,
             metadata_index=metadata_index,
+            assembly_stats_index=assembly_stats_index,
             taxonomy_index=taxonomy_index,
             checkm2_index=checkm2_index,
             sixteen_s_index=sixteen_s_index,

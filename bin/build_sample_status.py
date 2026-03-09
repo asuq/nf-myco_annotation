@@ -7,6 +7,7 @@ import argparse
 import csv
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -18,6 +19,15 @@ PROKKA_MANIFEST_COLUMNS = ("exit_code", "gff_size", "faa_size")
 PADLOC_MANIFEST_COLUMNS = ("exit_code", "result_file_count")
 EGGNOG_MANIFEST_COLUMNS = ("exit_code", "annotations_size", "result_file_count")
 STATUS_COLUMNS_WITH_NA_DEFAULT = {"gcode", "low_quality"}
+
+
+@dataclass(frozen=True)
+class EffectiveAssemblyMetrics:
+    """Store effective assembly metrics for ANI eligibility."""
+
+    n50: str
+    scaffolds: str
+    genome_size: str
 
 
 class SampleStatusError(RuntimeError):
@@ -94,6 +104,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--ani",
         type=Path,
         help="Optional ANI summary TSV from select_ani_representatives.py.",
+    )
+    parser.add_argument(
+        "--assembly-stats",
+        type=Path,
+        help="Optional in-house assembly stats TSV keyed by accession.",
     )
     parser.add_argument(
         "--primary-busco-column",
@@ -375,6 +390,7 @@ def derive_ani_decision(
     low_quality_value: str,
     sixteen_s_value: str,
     metadata_row: dict[str, str],
+    assembly_metrics: EffectiveAssemblyMetrics,
     ani_index: dict[str, dict[str, str]],
     ani_requested: bool,
     primary_busco_value: str,
@@ -405,6 +421,12 @@ def derive_ani_decision(
 
     if table_helpers.is_missing(primary_busco_value):
         exclusion_reasons.append("missing_primary_busco")
+    if table_helpers.is_missing(assembly_metrics.n50):
+        exclusion_reasons.append("missing_n50")
+    if table_helpers.is_missing(assembly_metrics.scaffolds):
+        exclusion_reasons.append("missing_scaffolds")
+    if table_helpers.is_missing(assembly_metrics.genome_size):
+        exclusion_reasons.append("missing_genome_size")
 
     if accession in ani_index:
         if exclusion_reasons:
@@ -503,6 +525,7 @@ def build_status_row(
     initial_row: dict[str, str],
     output_columns: Sequence[str],
     metadata_row: dict[str, str],
+    assembly_stats_row: dict[str, str] | None,
     taxonomy_index: dict[str, dict[str, str]],
     taxonomy_requested: bool,
     checkm2_index: dict[str, dict[str, str]],
@@ -636,6 +659,23 @@ def build_status_row(
     primary_busco_value = "NA"
     if primary_busco_column is not None:
         primary_busco_value = busco_values.get(primary_busco_column, "NA")
+    assembly_metrics = EffectiveAssemblyMetrics(
+        n50=table_helpers.resolve_assembly_metric_value(
+            metadata_row,
+            assembly_stats_row,
+            "N50",
+        ),
+        scaffolds=table_helpers.resolve_assembly_metric_value(
+            metadata_row,
+            assembly_stats_row,
+            "Scaffolds",
+        ),
+        genome_size=table_helpers.resolve_assembly_metric_value(
+            metadata_row,
+            assembly_stats_row,
+            "Genome_Size",
+        ),
+    )
 
     row["ani_included"], row["ani_exclusion_reason"] = derive_ani_decision(
         accession,
@@ -643,6 +683,7 @@ def build_status_row(
         low_quality_value=low_quality_value,
         sixteen_s_value=sixteen_s_value,
         metadata_row=metadata_row,
+        assembly_metrics=assembly_metrics,
         ani_index=ani_index,
         ani_requested=ani_requested,
         primary_busco_value=primary_busco_value,
@@ -668,6 +709,10 @@ def run_build(args: argparse.Namespace) -> None:
             validated_samples=validated_samples,
         )
         metadata_header, metadata_key_column, metadata_index = table_helpers.load_metadata(args.metadata)
+        assembly_stats_index = table_helpers.load_assembly_stats_index(
+            args.assembly_stats,
+            validated_accessions,
+        )
         taxonomy_index = table_helpers.load_taxonomy_index(args.taxonomy)
         checkm2_index = table_helpers.load_optional_accession_index(
             args.checkm2,
@@ -721,11 +766,13 @@ def run_build(args: argparse.Namespace) -> None:
     rows: list[dict[str, str]] = []
     for sample_row in validated_samples:
         accession = sample_row["accession"]
+        assembly_stats_row = assembly_stats_index.get(accession)
         metadata_row = table_helpers.build_metadata_row(
             sample_row=sample_row,
             metadata_header=metadata_header,
             metadata_key_column=metadata_key_column,
             metadata_index=metadata_index,
+            assembly_stats_row=assembly_stats_row,
         )
         rows.append(
             build_status_row(
@@ -733,6 +780,7 @@ def run_build(args: argparse.Namespace) -> None:
                 initial_row=initial_status_index[accession],
                 output_columns=output_columns,
                 metadata_row=metadata_row,
+                assembly_stats_row=assembly_stats_row,
                 taxonomy_index=taxonomy_index,
                 taxonomy_requested=args.taxonomy is not None,
                 checkm2_index=checkm2_index,

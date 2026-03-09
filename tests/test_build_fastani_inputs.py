@@ -225,6 +225,79 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             self.assertTrue((outdir / "fastani_inputs").is_dir())
             self.assertEqual(list((outdir / "fastani_inputs").iterdir()), [])
 
+    def test_uses_in_house_assembly_stats_when_metadata_metrics_are_missing(self) -> None:
+        """Use computed stats for ANI eligibility and ANI metadata output."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            staged = self.write_text_file(tmpdir / "ACC4.fasta", ">a\nACGT\n")
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\n"
+                f"ACC4\ttrue\tComplete Genome\t{staged}\tACC4\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\n"
+                "ACC4\tGenome Four\tNA\tNA\tNA\tNA\tNA\n",
+            )
+            staged_manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC4\tACC4\tACC4.fasta\n",
+            )
+            assembly_stats = self.write_text_file(
+                tmpdir / "assembly_stats.tsv",
+                "accession\tn50\tscaffolds\tgenome_size\nACC4\t40000\t3\t120000\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tGcode\tLow_quality\n"
+                "ACC4\tNA\t95\tNA\t1\t11\tfalse\n",
+            )
+            sixteen_s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\n"
+                "ACC4\tYes\th4\t1500\ttrue\t\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\n"
+                "ACC4\tbacillota_odb12\tC:99.0%[S:99.0%,D:0.0%],F:0.0%,M:1.0%,n:200\tdone\t\n",
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = build_fastani_inputs.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--staged-manifest",
+                    str(staged_manifest),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(sixteen_s),
+                    "--busco",
+                    str(busco),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--assembly-stats",
+                    str(assembly_stats),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            metadata_rows = read_tsv(outdir / "ani_metadata.tsv")
+            self.assertEqual(len(metadata_rows), 1)
+            self.assertEqual(metadata_rows[0]["n50"], "40000")
+            self.assertEqual(metadata_rows[0]["scaffolds"], "3")
+            self.assertEqual(metadata_rows[0]["genome_size"], "120000")
+            exclusion_rows = read_tsv(outdir / "ani_exclusions.tsv")
+            self.assertEqual(exclusion_rows[0]["ani_included"], "true")
+            self.assertEqual(exclusion_rows[0]["ani_exclusion_reason"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

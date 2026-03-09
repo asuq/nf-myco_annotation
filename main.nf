@@ -66,6 +66,7 @@ workflow {
         PER_SAMPLE_ANNOTATION.out.eggnog,
         COHORT_ANI.out.clusters,
         COHORT_ANI.out.ani_metadata,
+        COHORT_ANI.out.assembly_stats,
         COHORT_ANI.out.fastani_matrix,
         INPUT_VALIDATION_AND_STAGING.out.versions
             .mix(BUSCO_DATASET_PREP.out.versions)

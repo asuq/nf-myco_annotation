@@ -16,7 +16,9 @@ from build_master_table import (
     detect_key_column,
     find_column_by_normalised_name,
     is_missing,
+    load_assembly_stats_index,
     read_table,
+    resolve_assembly_metric_value,
 )
 
 
@@ -94,6 +96,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--primary-busco-column",
         required=True,
         help="Primary BUSCO column name, derived from the first configured lineage.",
+    )
+    parser.add_argument(
+        "--assembly-stats",
+        type=Path,
+        help="Optional in-house assembly stats TSV keyed by accession.",
     )
     parser.add_argument(
         "--outdir",
@@ -296,6 +303,7 @@ def run_build_fastani_inputs(
     sixteen_s_status: Path,
     busco: Sequence[Path],
     primary_busco_column: str,
+    assembly_stats: Path | None,
     outdir: Path,
 ) -> None:
     """Build FastANI path lists, ANI metadata, and ANI exclusion rows."""
@@ -308,6 +316,10 @@ def run_build_fastani_inputs(
     sixteen_s_index = load_index(sixteen_s_status, ("accession",))
     busco_index = load_busco_index(busco)
     staged_index = load_staged_manifest(staged_manifest)
+    assembly_stats_index = load_assembly_stats_index(
+        assembly_stats,
+        {row["accession"] for row in validated_rows},
+    )
 
     if primary_busco_column not in {
         column
@@ -332,6 +344,7 @@ def run_build_fastani_inputs(
         sixteen_s_row = sixteen_s_index.get(accession, {})
         busco_row = busco_index.get(accession, {})
         staged_row = staged_index.get(accession, {})
+        assembly_stats_row = assembly_stats_index.get(accession)
 
         reasons: list[str] = []
         gcode, checkm2_completeness, checkm2_contamination = choose_checkm2_fields(checkm2_row)
@@ -364,15 +377,27 @@ def run_build_fastani_inputs(
         if is_missing(assembly_level):
             reasons.append("missing_assembly_level")
 
-        n50 = detect_metadata_value(metadata_row, "N50") if metadata_row else MISSING_VALUE
+        n50 = (
+            resolve_assembly_metric_value(metadata_row, assembly_stats_row, "N50")
+            if metadata_row or assembly_stats_row
+            else MISSING_VALUE
+        )
         if is_missing(n50):
             reasons.append("missing_n50")
 
-        scaffolds = detect_metadata_value(metadata_row, "Scaffolds") if metadata_row else MISSING_VALUE
+        scaffolds = (
+            resolve_assembly_metric_value(metadata_row, assembly_stats_row, "Scaffolds")
+            if metadata_row or assembly_stats_row
+            else MISSING_VALUE
+        )
         if is_missing(scaffolds):
             reasons.append("missing_scaffolds")
 
-        genome_size = detect_metadata_value(metadata_row, "Genome_Size") if metadata_row else MISSING_VALUE
+        genome_size = (
+            resolve_assembly_metric_value(metadata_row, assembly_stats_row, "Genome_Size")
+            if metadata_row or assembly_stats_row
+            else MISSING_VALUE
+        )
         if is_missing(genome_size):
             reasons.append("missing_genome_size")
 
@@ -444,6 +469,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             sixteen_s_status=args.sixteen_s_status,
             busco=args.busco,
             primary_busco_column=args.primary_busco_column,
+            assembly_stats=args.assembly_stats,
             outdir=args.outdir,
         )
     except (FastAniInputError, FileNotFoundError, OSError) as error:

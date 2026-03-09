@@ -26,6 +26,7 @@ process WRITE_SAMPLE_STATUS {
     path padloc_manifest
     path eggnog_manifest
     path ani_summary
+    path assembly_stats
     val primary_busco_column
 
     output:
@@ -50,6 +51,7 @@ process WRITE_SAMPLE_STATUS {
         --padloc-manifest "${padloc_manifest}" \
         --eggnog-manifest "${eggnog_manifest}" \
         --ani "${ani_summary}" \
+        --assembly-stats "${assembly_stats}" \
         --primary-busco-column "${primary_busco_column}" \
         --columns "${columns}" \
         --output sample_status.tsv

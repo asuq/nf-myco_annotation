@@ -26,6 +26,7 @@ process BUILD_MASTER_TABLE {
     path busco_tables, name: 'busco_tables/busco_table??.tsv'
     path ccfinder_strains
     path ani_summary
+    path assembly_stats
 
     output:
     path 'master_table.tsv', emit: master_table
@@ -45,6 +46,7 @@ process BUILD_MASTER_TABLE {
         ${buscoArgs} \
         --ccfinder-strains "${ccfinder_strains}" \
         --ani "${ani_summary}" \
+        --assembly-stats "${assembly_stats}" \
         --output master_table.tsv
 
     cat <<EOF > versions.yml

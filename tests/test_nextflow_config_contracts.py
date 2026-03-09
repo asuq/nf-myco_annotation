@@ -38,6 +38,13 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("withName: SELECT_ANI_REPRESENTATIVES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
         self.assertIn("withName: WRITE_SAMPLE_STATUS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
 
+    def test_seqtk_helper_processes_are_pinned_explicitly(self) -> None:
+        """Keep seqtk-backed helper processes on the shared seqtk image."""
+        config_text = BASE_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("withName: STAGE_INPUTS {\n        container = params.seqtk_container", config_text)
+        self.assertIn("withName: CALCULATE_ASSEMBLY_STATS {\n        container = params.seqtk_container", config_text)
+
     def test_docker_profile_forces_amd64_ccfinder_on_arm_hosts(self) -> None:
         """Allow Apple Silicon Docker runs to pull the pinned CCFINDER image."""
         config_text = DOCKER_CONFIG.read_text(encoding="utf-8")
