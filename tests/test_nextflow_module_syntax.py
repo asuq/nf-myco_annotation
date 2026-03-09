@@ -166,6 +166,22 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('-outdir "\\${tool_output_root}" \\', module_text)
         self.assertNotIn('-outdir "\\$PWD/ccfinder" \\', module_text)
 
+    def test_ccfinder_stages_local_fasta_and_collects_run_root_outputs(self) -> None:
+        """Require the isolated run to reopen the staged FASTA by local basename."""
+        module_text = (MODULES_DIR / "ccfinder.nf").read_text(encoding="utf-8")
+
+        self.assertIn('genome_name="\\$(basename "\\${genome_path}")"', module_text)
+        self.assertIn('ln -sf "\\${genome_path}" "\\${genome_name}"', module_text)
+        self.assertIn('perl "\\${ccfinder_root}/CRISPRCasFinder.pl" -in "\\${genome_name}" \\', module_text)
+        self.assertIn(
+            "result_json_path=\\$(find \"\\${tool_output_root}\" \"\\${run_root}\" -type f -name 'result.json' | head -n 1 || true)",
+            module_text,
+        )
+        self.assertIn(
+            "internal_log_path=\\$(find \"\\${tool_output_root}\" \"\\${run_root}\" -type f \\\\( -name 'ccfinder.log' -o -name 'logFile_*' \\\\) | head -n 1 || true)",
+            module_text,
+        )
+
     def test_summarise_ccfinder_consumes_strict_json_only(self) -> None:
         """Require CRISPR summarisation to depend only on the emitted JSON artefact."""
         module_text = (MODULES_DIR / "summarise_ccfinder.nf").read_text(encoding="utf-8")
