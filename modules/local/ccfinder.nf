@@ -33,6 +33,11 @@ process CCFINDER {
         echo "muscle not found in PATH." >&2
         exit 1
     fi
+    real_mv="\$(command -v mv || true)"
+    if [[ -z "\${real_mv}" ]]; then
+        echo "mv not found in PATH." >&2
+        exit 1
+    fi
 
     task_root="\$PWD"
     tool_bin="\${task_root}/tool_bin"
@@ -66,6 +71,36 @@ process CCFINDER {
         printf '%s\n' 'exec "\$real_muscle" "\${translated_args[@]}"'
     } > "\${tool_bin}/muscle"
     chmod +x "\${tool_bin}/muscle"
+    {
+        printf '%s\n' '#!/usr/bin/env bash'
+        printf '%s\n' 'set -euo pipefail'
+        printf 'real_mv=%q\n' "\${real_mv}"
+        printf 'protected=(%q %q %q)\n' "\$(basename "\${tool_bin}")" "\$(basename "\${run_root}")" "\$(basename "\${tool_output_root}")"
+        printf '%s\n' 'if (( \$# <= 1 )); then'
+        printf '%s\n' '    exec "\$real_mv" "\$@"'
+        printf '%s\n' 'fi'
+        printf '%s\n' 'destination="\${!#}"'
+        printf '%s\n' 'filtered_sources=()'
+        printf '%s\n' 'for ((i = 1; i < \$#; i++)); do'
+        printf '%s\n' '    arg="\${!i}"'
+        printf '%s\n' '    source_name="\$(basename "\$arg")"'
+        printf '%s\n' '    keep_source=true'
+        printf '%s\n' '    for protected_name in "\${protected[@]}"; do'
+        printf '%s\n' '        if [[ "\$source_name" == "\$protected_name" ]]; then'
+        printf '%s\n' '            keep_source=false'
+        printf '%s\n' '            break'
+        printf '%s\n' '        fi'
+        printf '%s\n' '    done'
+        printf '%s\n' '    if [[ "\$keep_source" == true ]]; then'
+        printf '%s\n' '        filtered_sources+=("\$arg")'
+        printf '%s\n' '    fi'
+        printf '%s\n' 'done'
+        printf '%s\n' 'if (( \${#filtered_sources[@]} == 0 )); then'
+        printf '%s\n' '    exit 0'
+        printf '%s\n' 'fi'
+        printf '%s\n' 'exec "\$real_mv" "\${filtered_sources[@]}" "\$destination"'
+    } > "\${tool_bin}/mv"
+    chmod +x "\${tool_bin}/mv"
     export PATH="\${tool_bin}:\$PATH"
 
     awk -v output_root="\${task_root}" '
@@ -81,12 +116,20 @@ process CCFINDER {
             next
         }
         {
-            print >> output_path
+            sequence_line = \$0
+            while (length(sequence_line) > 60) {
+                print substr(sequence_line, 1, 60) >> output_path
+                sequence_line = substr(sequence_line, 61)
+            }
+            if (length(sequence_line) > 0) {
+                print sequence_line >> output_path
+            }
         }
     ' "\${genome_path}"
 
     pushd "\${run_root}" >/dev/null
     cp "\${genome_path}" "\${genome_name}"
+    : > index.html
     set +e
     perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "\${genome_name}" \
         -outdir "\${tool_output_root}" \
@@ -103,13 +146,14 @@ process CCFINDER {
     popd >/dev/null
 
     mkdir -p ccfinder
-    result_json_path=''
-    internal_log_path=''
+    result_json_path=\$(find "\${tool_output_root}" "\${run_root}" -type f -name 'result.json' | head -n 1 || true)
+    internal_log_path=\$(find "\${tool_output_root}" "\${run_root}" -type f \\( -name 'ccfinder.log' -o -name 'logFile_*' \\) | head -n 1 || true)
+    if [[ -n "\${result_json_path}" ]]; then
+        perl -0pi -e 's/:\\s*(?=,|\\}|\\])/: null/g' "\${result_json_path}"
+    fi
     if [[ -d "\${tool_output_root}" ]]; then
         cp -R "\${tool_output_root}/". ccfinder/
     fi
-    result_json_path=\$(find "\${tool_output_root}" "\${run_root}" -type f -name 'result.json' | head -n 1 || true)
-    internal_log_path=\$(find "\${tool_output_root}" "\${run_root}" -type f \\( -name 'ccfinder.log' -o -name 'logFile_*' \\) | head -n 1 || true)
 
     if [[ -n "\${result_json_path}" ]]; then
         cp "\${result_json_path}" result.json

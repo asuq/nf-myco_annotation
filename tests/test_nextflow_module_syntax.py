@@ -141,18 +141,22 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn('-cf "\\${ccfinder_root}/CasFinder-2.0.3" \\', module_text)
         self.assertNotIn('-CASFinder "\\${ccfinder_root}/CasFinder-2.0.3" \\', module_text)
 
-    def test_ccfinder_wraps_muscle_v3_for_align_output_compatibility(self) -> None:
-        """Require a local MUSCLE shim for CRISPRCasFinder's newer CLI syntax."""
+    def test_ccfinder_wraps_muscle_and_mv_for_tool_compatibility(self) -> None:
+        """Require local wrappers for MUSCLE CLI compatibility and unsafe bulk moves."""
         module_path = MODULES_DIR / "ccfinder.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
         self.assertIn('real_muscle="\\$(command -v muscle || true)"', module_text)
+        self.assertIn('real_mv="\\$(command -v mv || true)"', module_text)
         self.assertIn('tool_bin="\\${task_root}/tool_bin"', module_text)
         self.assertIn("printf 'real_muscle=%q\\n' \"\\${real_muscle}\"", module_text)
         self.assertIn('-align)', module_text)
         self.assertIn("printf '%s\\n' '            translated_args+=(-in \"\\$2\")'", module_text)
         self.assertIn('-output)', module_text)
         self.assertIn("printf '%s\\n' '            translated_args+=(-out \"\\$2\")'", module_text)
+        self.assertIn("printf 'real_mv=%q\\n' \"\\${real_mv}\"", module_text)
+        self.assertIn("printf 'protected=(%q %q %q)\\n' \"\\$(basename \"\\${tool_bin}\")\" \"\\$(basename \"\\${run_root}\")\" \"\\$(basename \"\\${tool_output_root}\")\"", module_text)
+        self.assertIn("} > \"\\${tool_bin}/mv\"", module_text)
         self.assertIn('export PATH="\\${tool_bin}:\\$PATH"', module_text)
 
     def test_ccfinder_uses_isolated_run_root_outside_tool_output_tree(self) -> None:
@@ -176,10 +180,17 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('output_path = output_root "/" contig_id ".fna"', module_text)
         self.assertIn('sub(/\\\\.[0-9]+\\$/, "", contig_id)', module_text)
         self.assertIn('print \\$0 > output_path', module_text)
+        self.assertIn('while (length(sequence_line) > 60) {', module_text)
+        self.assertIn('print substr(sequence_line, 1, 60) >> output_path', module_text)
         self.assertIn('cp "\\${genome_path}" "\\${genome_name}"', module_text)
+        self.assertIn(': > index.html', module_text)
         self.assertIn('perl "\\${ccfinder_root}/CRISPRCasFinder.pl" -in "\\${genome_name}" \\', module_text)
         self.assertIn(
             "result_json_path=\\$(find \"\\${tool_output_root}\" \"\\${run_root}\" -type f -name 'result.json' | head -n 1 || true)",
+            module_text,
+        )
+        self.assertIn(
+            "perl -0pi -e 's/:\\\\s*(?=,|\\\\}|\\\\])/: null/g' \"\\${result_json_path}\"",
             module_text,
         )
         self.assertIn(

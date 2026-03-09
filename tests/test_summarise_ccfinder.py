@@ -253,6 +253,53 @@ class SummariseCCFinderTestCase(unittest.TestCase):
             self.assertEqual(contig_rows[1]["CRISPR_FRAC"], "0")
             self.assertEqual(crispr_rows, [])
 
+    def test_main_accepts_json_with_null_optional_fields(self) -> None:
+        """Ignore upstream optional fields that were normalised to JSON null."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            result_json = self.write_json(
+                tmpdir / "result.json",
+                {
+                    "Sequences": [
+                        {
+                            "Id": "contig_nulls",
+                            "Length": 1000,
+                            "Crisprs": [
+                                {
+                                    "Name": "c_nulls",
+                                    "Evidence_Level": 2,
+                                    "Start": 10,
+                                    "End": 100,
+                                    "Spacers": 5,
+                                    "Conservation_DRs": None,
+                                    "Conservation_Spacers": 0,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_ccfinder.main(
+                [
+                    "--accession",
+                    "ACC_NULLS",
+                    "--result-json",
+                    str(result_json),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
+            crispr_row = read_tsv_rows(outdir / "ccfinder_crisprs.tsv")[0]
+            self.assertEqual(strain_row["CRISPRS"], "1")
+            self.assertEqual(strain_row["ccfinder_status"], "done")
+            self.assertEqual(crispr_row["crispr_id"], "c_nulls")
+            self.assertEqual(crispr_row["evidence_level"], "2")
+
     def test_build_strain_row_emits_stable_master_table_values(self) -> None:
         """Build stable strain-level master-table fields from retained CRISPR records."""
         crispr_records = [
