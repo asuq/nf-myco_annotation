@@ -10,6 +10,7 @@ The pipeline requires:
 - `--checkm2_db`: CheckM2 database path
 - `--busco_download_dir` or `--prepare_busco_datasets true`
 - `--eggnog_db` for real eggNOG runs
+- `--padloc_db` for real PADLOC runs
 
 Optional labels used only in `tool_and_db_versions.tsv`:
 
@@ -75,6 +76,7 @@ Real-data `local`, `slurm`, and `all` runs require:
 - `--checkm2-db`
 - `--busco-download-dir` or `--prepare-busco-datasets`
 - `--eggnog-db`
+- `--padloc-db`
 
 These acceptance runs also assume the CRISPRCasFinder image is already set via
 `params.ccfinder_container` in pipeline config. The harness does not accept a
@@ -87,7 +89,8 @@ python3 bin/run_acceptance_tests.py local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
-  --eggnog-db /path/to/eggnog-db
+  --eggnog-db /path/to/eggnog-db \
+  --padloc-db /path/to/padloc-db
 ```
 
 Example SLURM acceptance run:
@@ -98,6 +101,7 @@ python3 bin/run_acceptance_tests.py slurm \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
   --eggnog-db /path/to/eggnog-db \
+  --padloc-db /path/to/padloc-db \
   --slurm-queue short \
   --slurm-account my_account
 ```
@@ -114,6 +118,7 @@ nextflow run . \
   --checkm2_db /path/to/checkm2-db \
   --busco_download_dir /path/to/busco-lineages \
   --eggnog_db /path/to/eggnog-db \
+  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 
@@ -127,6 +132,7 @@ nextflow run . -profile slurm \
   --checkm2_db /path/to/checkm2-db \
   --busco_download_dir /path/to/busco-lineages \
   --eggnog_db /path/to/eggnog-db \
+  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 
@@ -140,6 +146,7 @@ nextflow run . -profile apptainer \
   --checkm2_db /path/to/checkm2-db \
   --busco_download_dir /path/to/busco-lineages \
   --eggnog_db /path/to/eggnog-db \
+  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 

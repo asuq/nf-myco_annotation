@@ -59,6 +59,7 @@ Required by real-data modes:
 - `--checkm2-db`
 - `--busco-download-dir` or `--prepare-busco-datasets`
 - `--eggnog-db`
+- `--padloc-db`
 
 CRISPRCasFinder still uses `params.ccfinder_container` from `nextflow.config`.
 The wrapper does not accept a separate container override.
@@ -84,7 +85,8 @@ bin/run_pipeline_test.sh --dry-run local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
-  --eggnog-db /path/to/eggnog-db
+  --eggnog-db /path/to/eggnog-db \
+  --padloc-db /path/to/padloc-db
 ```
 
 Run the local real-data acceptance cohort:
@@ -94,7 +96,8 @@ bin/run_pipeline_test.sh local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
-  --eggnog-db /path/to/eggnog-db
+  --eggnog-db /path/to/eggnog-db \
+  --padloc-db /path/to/padloc-db
 ```
 
 Run the SLURM real-data acceptance cohort:
@@ -105,6 +108,7 @@ bin/run_pipeline_test.sh slurm \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
   --eggnog-db /path/to/eggnog-db \
+  --padloc-db /path/to/padloc-db \
   --slurm-queue short \
   --slurm-account my_account
 ```
@@ -116,7 +120,8 @@ bin/run_pipeline_test.sh all \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-download-dir /path/to/busco-lineages \
-  --eggnog-db /path/to/eggnog-db
+  --eggnog-db /path/to/eggnog-db \
+  --padloc-db /path/to/padloc-db
 ```
 
 ## Output locations
