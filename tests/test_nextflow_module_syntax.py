@@ -242,6 +242,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("collectFile(name: 'prokka_manifest.tsv', newLine: true, sort: false)", workflow_text)
         self.assertIn("collectFile(name: 'padloc_manifest.tsv', newLine: true, sort: false)", workflow_text)
         self.assertIn("collectFile(name: 'eggnog_manifest.tsv', newLine: true, sort: false)", workflow_text)
+        self.assertIn("accession\\tstatus\\twarnings\\texit_code\\tannotations_size\\tresult_file_count", workflow_text)
 
     def test_final_outputs_calls_manifest_helpers_as_closures(self) -> None:
         """Require closure helpers in final outputs to use explicit `.call(...)`."""
@@ -281,6 +282,25 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))", workflow_text)
         self.assertIn("padlocDb = params.padloc_db", main_text)
         self.assertIn('--padloc-db "${params.padloc_db ?: \'NA\'}" \\', collect_versions_text)
+
+    def test_eggnog_short_circuit_filters_only_eggnog_inputs(self) -> None:
+        """Require acceptance eggNOG short-circuiting to filter only eggNOG jobs."""
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "per_sample_annotation.nf"
+        ).read_text(encoding="utf-8")
+        final_outputs_text = (
+            ROOT / "subworkflows" / "local" / "final_outputs.nf"
+        ).read_text(encoding="utf-8")
+        config_text = (ROOT / "nextflow.config").read_text(encoding="utf-8")
+
+        self.assertIn("eggnog_only_accessions = null", config_text)
+        self.assertIn("params.eggnog_only_accessions", workflow_text)
+        self.assertIn("EGGNOG(eggnog_inputs)", workflow_text)
+        self.assertNotIn("PROKKA(annotation_candidates.filter", workflow_text)
+        self.assertNotIn("CCFINDER(annotation_candidates.filter", workflow_text)
+        self.assertNotIn("PADLOC(PROKKA.out.padloc_inputs.filter", workflow_text)
+        self.assertIn("configuredEggnogOnlyAccessions = parseConfiguredAccessions.call(params.eggnog_only_accessions)", final_outputs_text)
+        self.assertIn("eggnog_short_circuit", final_outputs_text)
 
     def test_collect_versions_stages_unique_input_names(self) -> None:
         """Require unique staged names for collected version files."""

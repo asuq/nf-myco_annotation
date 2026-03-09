@@ -1,5 +1,5 @@
 accession	source_accession	is_new	include_metadata	atypical_warnings	role_tags
-GCA_000027325.1	GCA_000027325.1	false	true	NA	gcode4_candidate
+GCA_000027325.1	GCA_000027325.1	false	true	NA	gcode4_candidate;eggnog_smoke_candidate
 GCA_000027345.1	GCA_000027345.1	false	true	NA	gcode4_candidate
 GCF_000008145.1	GCF_000008145.1	false	true	NA	gcode11_candidate;crispr_negative_candidate
 GCA_965226525.1	GCA_965226525.1	false	true	NA	gcode4_candidate;crispr_positive_candidate

@@ -15,6 +15,16 @@ workflow PER_SAMPLE_ANNOTATION {
     padloc_db
 
     main:
+    def eggnogOnlyAccessions = null
+    if (params.eggnog_only_accessions != null) {
+        def rawAccessions = params.eggnog_only_accessions instanceof Collection
+            ? (params.eggnog_only_accessions as Collection)
+            : params.eggnog_only_accessions.toString().split(',')
+        eggnogOnlyAccessions = rawAccessions
+            .collect { it.toString().trim() }
+            .findAll { !it.isEmpty() } as Set
+    }
+
     sample_by_accession = sample_genomes.map { meta, genome ->
         tuple(meta.accession, meta, genome)
     }
@@ -39,7 +49,15 @@ workflow PER_SAMPLE_ANNOTATION {
     CCFINDER(annotation_candidates)
     SUMMARISE_CCFINDER(CCFINDER.out.result_json)
     PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))
-    EGGNOG(PROKKA.out.eggnog_inputs)
+
+    eggnog_inputs = PROKKA.out.eggnog_inputs
+    if (eggnogOnlyAccessions != null && !eggnogOnlyAccessions.isEmpty()) {
+        eggnog_inputs = eggnog_inputs.filter { meta, faa ->
+            eggnogOnlyAccessions.contains(meta.accession.toString())
+        }
+    }
+
+    EGGNOG(eggnog_inputs)
 
     versions = PROKKA.out.versions
         .mix(CCFINDER.out.versions)

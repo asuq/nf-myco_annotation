@@ -52,6 +52,33 @@ workflow FINAL_OUTPUTS {
         return files == null ? 0 : files.count { file -> file.isFile() }
     }
 
+    parseConfiguredAccessions = { value ->
+        if (value == null) {
+            return null
+        }
+        def rawTokens = value instanceof Collection ? value : value.toString().split(',')
+        def cleaned = rawTokens
+            .collect { it.toString().trim() }
+            .findAll { !it.isEmpty() }
+        return cleaned ? cleaned as Set : null
+    }
+
+    extractSummaryValue = { summaryPath, columnName ->
+        def lines = summaryPath.toFile().readLines()
+        if (lines.size() < 2) {
+            return 'NA'
+        }
+        def header = lines[0].split('\t', -1)
+        def values = lines[1].split('\t', -1)
+        def columnIndex = header.findIndexOf { it == columnName }
+        if (columnIndex < 0 || columnIndex >= values.size()) {
+            return 'NA'
+        }
+        return values[columnIndex].trim()
+    }
+
+    configuredEggnogOnlyAccessions = parseConfiguredAccessions.call(params.eggnog_only_accessions)
+
     combined_checkm2 = checkm2_seed
         .mix(checkm2_summaries.map { meta, summary -> summary })
         .collectFile(
@@ -100,11 +127,33 @@ workflow FINAL_OUTPUTS {
         .collectFile(name: 'padloc_manifest.tsv', newLine: true, sort: false)
 
     eggnogManifest = Channel
-        .of('accession\texit_code\tannotations_size\tresult_file_count')
+        .of('accession\tstatus\twarnings\texit_code\tannotations_size\tresult_file_count')
         .concat(
             eggnog_results.map { meta, eggnogDir, annotations, log ->
-                "${meta.accession}\t${extractExitCode.call(log)}\t${annotations.toFile().length()}\t${countTopLevelFiles.call(eggnogDir)}"
+                def exitCode = extractExitCode.call(log)
+                def annotationsSize = annotations.toFile().length()
+                def resultFileCount = countTopLevelFiles.call(eggnogDir)
+                def status = (exitCode == '0' && annotationsSize > 0) ? 'done' : 'failed'
+                def warnings = ''
+                if (status == 'failed') {
+                    warnings = exitCode == '0' ? 'missing_eggnog_outputs' : 'eggnog_failed'
+                }
+                "${meta.accession}\t${status}\t${warnings}\t${exitCode}\t${annotationsSize}\t${resultFileCount}"
             }
+        )
+        .concat(
+            configuredEggnogOnlyAccessions == null
+                ? Channel.empty()
+                : checkm2_summaries
+                    .map { meta, summary ->
+                        def accession = meta.accession.toString()
+                        def gcode = extractSummaryValue.call(summary, 'Gcode')
+                        if (!['4', '11'].contains(gcode) || configuredEggnogOnlyAccessions.contains(accession)) {
+                            return null
+                        }
+                        return "${accession}\tskipped\teggnog_short_circuit\t0\t0\t0"
+                    }
+                    .filter { row -> row != null }
         )
         .collectFile(name: 'eggnog_manifest.tsv', newLine: true, sort: false)
 

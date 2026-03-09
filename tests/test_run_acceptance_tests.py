@@ -127,7 +127,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "is_new": "false",
                 "include_metadata": "true",
                 "atypical_warnings": "NA",
-                "role_tags": "gcode4_candidate;crispr_negative_candidate",
+                "role_tags": "gcode4_candidate;crispr_negative_candidate;eggnog_smoke_candidate",
             },
             {
                 "accession": "SRC_MYCO_B",
@@ -429,7 +429,16 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             metadata_tsv=Path("/tmp/metadata.tsv"),
             source_stats_tsv=Path("/tmp/source_stats.tsv"),
             checksums_tsv=Path("/tmp/download_checksums.tsv"),
-            cohort_plan=(),
+            cohort_plan=(
+                run_acceptance_tests.CohortRecord(
+                    accession="SRC_MYCO_A",
+                    source_accession="SRC_MYCO_A",
+                    is_new=False,
+                    include_metadata=True,
+                    atypical_warnings="NA",
+                    role_tags=("eggnog_smoke_candidate",),
+                ),
+            ),
             source_stats={},
         )
 
@@ -444,6 +453,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertNotIn("--ccfinder_container", command)
         self.assertIn("--padloc_db", command)
         self.assertIn(str(Path("/tmp/padloc").resolve()), command)
+        self.assertIn("--eggnog_only_accessions", command)
+        self.assertIn("SRC_MYCO_A", command)
 
     def test_parse_args_rejects_ccfinder_override_flag(self) -> None:
         """Reject a harness-level CCFINDER override flag."""

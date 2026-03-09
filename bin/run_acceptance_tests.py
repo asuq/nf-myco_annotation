@@ -61,6 +61,7 @@ REQUIRED_ROLE_TAGS = {
     "gcode11_candidate",
     "crispr_positive_candidate",
     "crispr_negative_candidate",
+    "eggnog_smoke_candidate",
     "ani_cluster_candidate",
     "atypical_excluded_candidate",
     "atypical_exception_candidate",
@@ -296,6 +297,9 @@ def load_cohort_plan(path: Path, catalog: dict[str, SourceRecord]) -> tuple[Coho
         raise AcceptanceTestError(
             "Cohort plan is missing required role tags: " + ", ".join(missing_roles)
         )
+    eggnog_smoke_candidates = [record for record in plan if "eggnog_smoke_candidate" in record.role_tags]
+    if len(eggnog_smoke_candidates) != 1:
+        raise AcceptanceTestError("Cohort plan must contain exactly one eggnog_smoke_candidate.")
     return tuple(plan)
 
 
@@ -668,6 +672,8 @@ def build_nextflow_command(
         str(Path(args.eggnog_db).resolve()),
         "--padloc_db",
         str(Path(args.padloc_db).resolve()),
+        "--eggnog_only_accessions",
+        get_single_role_record(cohort.cohort_plan, "eggnog_smoke_candidate").accession,
         "--outdir",
         str(outdir),
     ]
@@ -763,6 +769,14 @@ def status_contains_token(value: str, token: str) -> bool:
 def records_with_role(plan: Sequence[CohortRecord], role_tag: str) -> list[CohortRecord]:
     """Return all cohort records carrying one role tag."""
     return [record for record in plan if role_tag in record.role_tags]
+
+
+def get_single_role_record(plan: Sequence[CohortRecord], role_tag: str) -> CohortRecord:
+    """Return exactly one cohort record carrying one required role tag."""
+    matches = records_with_role(plan, role_tag)
+    if len(matches) != 1:
+        raise AcceptanceTestError(f"expected_single_{role_tag}")
+    return matches[0]
 
 
 def assert_role_coverage(
