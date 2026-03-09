@@ -5,7 +5,7 @@
  */
 process CHECKM2 {
     tag "${meta.accession} / ttable ${translation_table}"
-    label 'process_high'
+    label 'process_medium'
     publishDir(
         { "${params.outdir}/samples/${meta.accession}/checkm2_gcode${translation_table}" },
         mode: 'copy',
