@@ -26,7 +26,7 @@ workflow COHORT_ANI {
                 "${meta.accession}\t${meta.internal_id}\t${genome.getName()}"
             }
         )
-        .collectFile(name: 'staged_genomes.tsv', newLine: true)
+        .collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)
 
     staged_fasta_files = staged_genomes
         .map { meta, genome -> genome }
@@ -51,7 +51,15 @@ workflow COHORT_ANI {
         )
 
     busco_tables = SUMMARISE_BUSCO.out.summary
-        .map { meta, lineage, summary -> summary }
+        .map { meta, lineage, summary ->
+            tuple("busco_summary_${lineage}.tsv", summary)
+        }
+        .collectFile(
+            keepHeader: true,
+            skip: 1,
+        ) { outputName, summary ->
+            [outputName, summary]
+        }
         .collect()
 
     BUILD_FASTANI_INPUTS(
@@ -72,7 +80,7 @@ workflow COHORT_ANI {
         .mix(CLUSTER_ANI.out.versions)
 
     emit:
-    parsed_busco = SUMMARISE_BUSCO.out.summary
+    parsed_busco = busco_tables
     fastani_inputs = BUILD_FASTANI_INPUTS.out.fastani_inputs
     fastani_paths = BUILD_FASTANI_INPUTS.out.paths
     ani_metadata = BUILD_FASTANI_INPUTS.out.metadata

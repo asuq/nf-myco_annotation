@@ -67,7 +67,7 @@ process EGGNOG {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      eggnog_mapper: "$(emapper.py --version 2>&1 | head -n 1 || echo NA)"
+      eggnog_mapper: "\$(emapper.py --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

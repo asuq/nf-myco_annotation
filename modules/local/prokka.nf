@@ -62,7 +62,7 @@ process PROKKA {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      prokka: "$(command -v prokka >/dev/null 2>&1 && prokka --version 2>&1 | head -n 1 || echo NA)"
+      prokka: "\$(command -v prokka >/dev/null 2>&1 && prokka --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

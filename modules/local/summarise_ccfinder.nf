@@ -29,7 +29,7 @@ process SUMMARISE_CCFINDER {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/summarise_ccfinder.py"
     EOF
     """

@@ -222,6 +222,8 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
                 exclusion_rows[0]["ani_exclusion_reason"],
                 "low_quality;partial_16s;atypical",
             )
+            self.assertTrue((outdir / "fastani_inputs").is_dir())
+            self.assertEqual(list((outdir / "fastani_inputs").iterdir()), [])
 
 
 if __name__ == "__main__":

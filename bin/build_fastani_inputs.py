@@ -319,6 +319,7 @@ def run_build_fastani_inputs(
         )
 
     fastani_inputs_dir = outdir / "fastani_inputs"
+    fastani_inputs_dir.mkdir(parents=True, exist_ok=True)
     metadata_rows: list[dict[str, str]] = []
     exclusion_rows: list[dict[str, str]] = []
     fastani_paths: list[str] = []

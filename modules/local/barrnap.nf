@@ -41,7 +41,7 @@ process BARRNAP {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      barrnap: "$(command -v barrnap >/dev/null 2>&1 && barrnap --version 2>&1 | head -n 1 || echo NA)"
+      barrnap: "\$(command -v barrnap >/dev/null 2>&1 && barrnap --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

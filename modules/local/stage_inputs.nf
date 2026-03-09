@@ -35,8 +35,8 @@ process STAGE_INPUTS {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      seqtk: "$(command -v seqtk >/dev/null 2>&1 && seqtk 2>&1 | head -n 1 || echo NA)"
-      samtools: "$(command -v samtools >/dev/null 2>&1 && samtools --version 2>&1 | head -n 1 || echo NA)"
+      seqtk: "\$(command -v seqtk >/dev/null 2>&1 && seqtk 2>&1 | head -n 1 || echo NA)"
+      samtools: "\$(command -v samtools >/dev/null 2>&1 && samtools --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

@@ -35,7 +35,7 @@ process SUMMARISE_16S {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/summarise_16s.py"
     EOF
     """

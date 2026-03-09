@@ -88,7 +88,7 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "--eggnog-db",
                     "/db/eggnog",
                     "--container-ref",
-                    "python=python:3.12-slim",
+                    "python=python:3.12",
                     "--container-ref",
                     "checkm2=quay.io/biocontainers/checkm2:1.0.2",
                     "--output",
@@ -124,7 +124,7 @@ class CollectVersionsTestCase(unittest.TestCase):
                 row_map[("python", "container", "params container reference")][
                     "image_or_path"
                 ],
-                "python:3.12-slim",
+                "python:3.12",
             )
             self.assertEqual(
                 row_map[("python", "runtime", "reported by VALIDATE_INPUTS")]["version"],

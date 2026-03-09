@@ -45,7 +45,7 @@ process PADLOC {
     cat <<EOF > versions.yml
     "${task.process}":
       transform: "strip_prokka_prefix_and_fasta_tail"
-      padloc: "$(padloc --help 2>&1 | head -n 1 || echo NA)"
+      padloc: "\$(padloc --help 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

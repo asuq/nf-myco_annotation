@@ -9,7 +9,7 @@ process SUMMARISE_BUSCO {
     tuple val(meta), val(lineage), path(busco_summary_json)
 
     output:
-    tuple val(meta), val(lineage), path('busco_summary.tsv'), emit: summary
+    tuple val(meta), val(lineage), path("busco_summary_${lineage}.tsv"), emit: summary
     path 'versions.yml', emit: versions
 
     script:
@@ -18,18 +18,18 @@ process SUMMARISE_BUSCO {
         --accession "${meta.accession}" \
         --summary "${busco_summary_json}" \
         --lineage "${lineage}" \
-        --output busco_summary.tsv
+        --output "busco_summary_${lineage}.tsv"
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/summarise_busco.py"
     EOF
     """
 
     stub:
-    '''
-    cat <<'EOF' > busco_summary.tsv
+    """
+    cat <<EOF > "busco_summary_${lineage}.tsv"
     accession	lineage	BUSCO_bacillota_odb12	busco_status	warnings
     sample_a	bacillota_odb12	C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200	done
     EOF
@@ -38,5 +38,5 @@ process SUMMARISE_BUSCO {
       python: "stub"
       script: "bin/summarise_busco.py"
     EOF
-    '''
+    """
 }

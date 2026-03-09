@@ -48,7 +48,7 @@ process FASTANI {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      fastani: "$(command -v fastANI >/dev/null 2>&1 && fastANI --version 2>&1 | head -n 1 || echo NA)"
+      fastani: "\$(command -v fastANI >/dev/null 2>&1 && fastANI --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

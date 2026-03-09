@@ -57,7 +57,7 @@ process CCFINDER {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      crisprcasfinder: "$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | head -n 1 || echo NA)"
+      crisprcasfinder: "\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

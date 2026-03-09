@@ -19,7 +19,7 @@ process BUILD_FASTANI_INPUTS {
     path staged_fastas
     path checkm2_summaries
     path sixteen_s_statuses
-    path busco_tables
+    path busco_tables, name: 'busco_tables/busco_table??.tsv'
 
     output:
     path 'fastani_inputs', emit: fastani_inputs
@@ -45,7 +45,7 @@ process BUILD_FASTANI_INPUTS {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/build_fastani_inputs.py"
     EOF
     """

@@ -23,7 +23,7 @@ process BUILD_MASTER_TABLE {
     path taxonomy
     path checkm2
     path sixteen_s_status
-    path busco_tables
+    path busco_tables, name: 'busco_tables/busco_table??.tsv'
     path ccfinder_strains
     path ani_summary
 
@@ -49,7 +49,7 @@ process BUILD_MASTER_TABLE {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/build_master_table.py"
     EOF
     """

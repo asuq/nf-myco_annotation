@@ -240,7 +240,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "component": "python",
                 "kind": "container",
                 "version": "NA",
-                "image_or_path": "python:3.12-slim",
+                "image_or_path": "python:3.12",
                 "notes": "params container reference",
             },
         ]

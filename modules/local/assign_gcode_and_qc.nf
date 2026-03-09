@@ -12,7 +12,7 @@ process ASSIGN_GCODE_AND_QC {
     )
 
     input:
-    tuple val(meta), path(checkm2_gcode4_report), path(checkm2_gcode11_report)
+    tuple val(meta), path(checkm2_gcode4_report, name: 'checkm2_gcode4_report.tsv'), path(checkm2_gcode11_report, name: 'checkm2_gcode11_report.tsv')
 
     output:
     tuple val(meta), path('checkm2_summary.tsv'), emit: summary
@@ -28,7 +28,7 @@ process ASSIGN_GCODE_AND_QC {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/summarise_checkm2.py"
     EOF
     """

@@ -30,6 +30,18 @@ process CHECKM2 {
         exit 1
     fi
 
+    database_path="${checkm2Db}"
+    if [[ -d "\${database_path}" ]]; then
+        shopt -s nullglob
+        dmnd_candidates=("\${database_path}"/*.dmnd)
+        shopt -u nullglob
+        if [[ \${#dmnd_candidates[@]} -ne 1 ]]; then
+            echo "CHECKM2 expected exactly one .dmnd file in \${database_path}." >&2
+            exit 1
+        fi
+        database_path="\${dmnd_candidates[0]}"
+    fi
+
     output_dir="checkm2_gcode${translation_table}"
 
     set +e
@@ -37,7 +49,7 @@ process CHECKM2 {
         --extension fasta \
         --input "${genome}" \
         --output-directory "\${output_dir}" \
-        --database_path "${checkm2Db}" \
+        --database_path "\${database_path}" \
         --threads ${task.cpus} \
         --ttable ${translation_table} \
         --force \
@@ -56,7 +68,7 @@ process CHECKM2 {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      checkm2: "$(command -v checkm2 >/dev/null 2>&1 && checkm2 --version 2>&1 | head -n 1 || echo NA)"
+      checkm2: "\$(command -v checkm2 >/dev/null 2>&1 && checkm2 --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

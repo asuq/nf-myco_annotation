@@ -9,7 +9,7 @@ process DOWNLOAD_BUSCO_DATASET {
     val lineage
 
     output:
-    tuple val(lineage), path('busco_dataset'), emit: dataset
+    tuple val(lineage), path("${lineage}"), emit: dataset
     tuple val(lineage), path('download.log'), emit: log
     path 'versions.yml', emit: versions
 
@@ -43,18 +43,18 @@ process DOWNLOAD_BUSCO_DATASET {
         exit 1
     fi
 
-    ln -s "\${dataset_dir}" busco_dataset
+    ln -s "\${dataset_dir}" "${lineage}"
 
     cat <<EOF > versions.yml
     "${task.process}":
-      busco: "$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
+      busco: "\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 
     stub:
     """
-    mkdir -p busco_dataset
-    : > busco_dataset/dataset.cfg
+    mkdir -p "${lineage}"
+    : > "${lineage}/dataset.cfg"
     : > download.log
     cat <<'EOF' > versions.yml
     "${task.process}":

@@ -13,7 +13,7 @@ process COLLECT_VERSIONS {
     )
 
     input:
-    path version_files
+    path version_files, name: 'version_files/versions??.yml'
     val nextflow_version
     val pipeline_version
     val git_commit
