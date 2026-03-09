@@ -1,0 +1,138 @@
+"""Container contract tests for the CRISPRCasFinder runtime image."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCKER_DIR = ROOT / "docker" / "ccfinder"
+DOCKERFILE = DOCKER_DIR / "Dockerfile"
+PATCH_FILE = DOCKER_DIR / "CRISPRCasFinder.runtime.patch"
+SMOKE_SCRIPT = DOCKER_DIR / "ccfinder-smoke-test.sh"
+WRAPPER_SCRIPT = DOCKER_DIR / "macsyfinder-wrapper.sh"
+MV_WRAPPER_SCRIPT = DOCKER_DIR / "mv-compat.sh"
+IMAGE_TAG = "codex-ccfinder-test:runtime-contract"
+RUN_DOCKER_TESTS = os.environ.get("RUN_DOCKER_TESTS") == "1"
+
+
+def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run one subprocess and return the completed process."""
+    return subprocess.run(
+        args,
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+
+
+class CCFinderContainerContractTestCase(unittest.TestCase):
+    """Lock the Dockerfile to the inspected Singularity runtime contract."""
+
+    def test_dockerfile_records_inspected_singularity_runtime(self) -> None:
+        """Require the Dockerfile to pin the inspected Singularity image reference."""
+        dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "quay.io/singularity/singularity:v3.8.2-slim@sha256:2558c93c63aa8f721aae106ff1052dff5442171d7c00aed3e81d0fe62172b118",
+            dockerfile_text,
+        )
+        self.assertIn('io.nf_myco_annotation.reference_runtime="CRISPRCasFinder.simg"', dockerfile_text)
+        self.assertIn('io.nf_myco_annotation.reference_runtime_version="4.2.30"', dockerfile_text)
+
+    def test_runtime_patch_matches_the_inspected_runtime_contract(self) -> None:
+        """Require the runtime patch to encode the container-owned compatibility changes."""
+        patch_text = PATCH_FILE.read_text(encoding="utf-8")
+        dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
+        mv_wrapper_text = MV_WRAPPER_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn('my $PathVmatch2 = "/usr/local/CRISPRCasFinder/bin/vmatch2";', patch_text)
+        self.assertIn('my $PathMacsyfinder = "/usr/local/CRISPRCasFinder/macsyfinder";', patch_text)
+        self.assertIn('my $so = "/usr/local/CRISPRCasFinder/sel392v2.so";', patch_text)
+        self.assertIn(
+            'my $crisprdb = "/usr/local/CRISPRCasFinder/supplementary_files/CRISPR_crisprdb.csv";',
+            patch_text,
+        )
+        self.assertIn('my $muscle = " muscle -in $file -out $result ";', patch_text)
+        self.assertIn('makesystemcall("$PathVmatch2 " . join(\' \',@vmatchoptions));', patch_text)
+        self.assertIn('makesystemcall("$PathVsubseqselect2 " . join(\' \',@subselectoptions));', patch_text)
+        self.assertIn('makesystemcall("$PathMkvtree2 -db $inputfile " .', patch_text)
+        self.assertIn("COPY mv-compat.sh /tmp/mv-compat.sh", dockerfile_text)
+        self.assertIn("install -m 0755 /tmp/mv-compat.sh /usr/local/bin/mv", dockerfile_text)
+        self.assertIn('test "$(command -v mv)" = "/usr/local/bin/mv";', dockerfile_text)
+        self.assertIn('protected=(tool_bin ccfinder_run ccfinder_raw)', mv_wrapper_text)
+        self.assertIn('exec "${real_mv}" "${filtered_sources[@]}" "${destination}"', mv_wrapper_text)
+
+    def test_smoke_script_uses_module_style_explicit_resource_paths(self) -> None:
+        """Require the smoke harness to exercise the explicit path flags used by the module."""
+        smoke_script = SMOKE_SCRIPT.read_text(encoding="utf-8")
+        wrapper_script = WRAPPER_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("/usr/local/CRISPRCasFinder/install_test/sequence.fasta", smoke_script)
+        self.assertIn('run_root="${task_root}/ccfinder_run"', smoke_script)
+        self.assertIn('tool_output_root="${task_root}/ccfinder_raw"', smoke_script)
+        self.assertIn(': > index.html', smoke_script)
+        self.assertIn('-outdir "${tool_output_root}"', smoke_script)
+        self.assertIn("-soFile /usr/local/CRISPRCasFinder/sel392v2.so", smoke_script)
+        self.assertIn(
+            "-DBcrispr /usr/local/CRISPRCasFinder/supplementary_files/CRISPR_crisprdb.csv",
+            smoke_script,
+        )
+        self.assertIn('set +e', smoke_script)
+        self.assertIn("tool_exit_code=$?", smoke_script)
+        self.assertIn("cannot move '.*' to a subdirectory of itself", smoke_script)
+        self.assertIn('find "${tool_output_root}" "${run_root}" -type f -name \'result.json\'', smoke_script)
+        self.assertIn("CRISPR-Cas_summary.tsv", smoke_script)
+        self.assertIn("result.json", smoke_script)
+        self.assertIn('exec /opt/macsyfinder-venv/bin/macsyfinder "$@"', wrapper_script)
+
+    @unittest.skipUnless(RUN_DOCKER_TESTS, "Set RUN_DOCKER_TESTS=1 to build the container contract test.")
+    def test_built_container_passes_the_smoke_contract(self) -> None:
+        """Build the image and require the patched runtime contract to pass the smoke test."""
+        build_result = run_command(
+            [
+                "docker",
+                "build",
+                "--platform",
+                "linux/amd64",
+                "-t",
+                IMAGE_TAG,
+                str(DOCKER_DIR),
+            ]
+        )
+        self.assertEqual(
+            build_result.returncode,
+            0,
+            msg=f"Docker build failed.\nSTDOUT:\n{build_result.stdout}\nSTDERR:\n{build_result.stderr}",
+        )
+
+        run_result = run_command(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--platform",
+                "linux/amd64",
+                IMAGE_TAG,
+                "bash",
+                "-lc",
+                (
+                    "set -euo pipefail; "
+                    "grep -F 'my $PathVmatch2 = \"/usr/local/CRISPRCasFinder/bin/vmatch2\";' "
+                    "/usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; "
+                    "grep -F 'my $muscle = \" muscle -in $file -out $result \";' "
+                    "/usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; "
+                    "test \"$(command -v mv)\" = \"/usr/local/bin/mv\"; "
+                    "/usr/local/bin/ccfinder-smoke-test"
+                ),
+            ]
+        )
+        self.assertEqual(
+            run_result.returncode,
+            0,
+            msg=f"Runtime contract failed.\nSTDOUT:\n{run_result.stdout}\nSTDERR:\n{run_result.stderr}",
+        )

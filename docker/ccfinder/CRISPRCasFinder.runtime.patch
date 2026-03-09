@@ -1,0 +1,106 @@
+--- CRISPRCasFinder.pl
++++ CRISPRCasFinder.pl
+@@ -37,6 +37,10 @@
+ 
+ # set parameters for the Vmatch program
+ #$ENV{'LD_LIBRARY_PATH'} = '.';
++my $PathVmatch2 = "/usr/local/CRISPRCasFinder/bin/vmatch2";
++my $PathMkvtree2 = "/usr/local/CRISPRCasFinder/bin/mkvtree2";
++my $PathVsubseqselect2 = "/usr/local/CRISPRCasFinder/bin/vsubseqselect2";
++my $PathMacsyfinder = "/usr/local/CRISPRCasFinder/macsyfinder";
+ 
+ ## Parameters
+ my $SpSim = 60; # maximal allowed percentage of similarity between Spacers (default value=60)
+@@ -63,7 +67,7 @@
+ 
+ my $launchCasFinder = 0; # boolean variable indicating if we use casfinder or not (default value=0)
+ 
+-#my $casfinder = "CasFinder-2.0.3"; # repository containing new CasFinder (default 'CasFinder-2.0.3')
++my $casfinder = "/usr/local/CRISPRCasFinder/CasFinder-2.0.3"; # repository containing new CasFinder (default '/usr/local/CRISPRCasFinder/CasFinder-2.0.3')
+ 
+ my $kingdom = "Bacteria"; # allow to choose analysis between Archaea and Bacteria (default 'Bacteria')
+ 
+@@ -71,13 +75,13 @@
+ 
+ my $writeFullReport = 0; # boolean variable indicating if we write crispr-cas_vicinity_report or not (default value=0)
+ 
+-my $so = "./sel392v2.so"; # path to shared object (.so) file (former name: $pathSoFile)
+-
+-my $crisprdb = ""; # path to all CRISPR candidates contained in CRISPRdb (from last update)
+-
+-my $repeats = ""; # path to file containing repeat sequences, IDs, and Nb in CRISPRdb (last update)
+-
+-my $dirRepeat = ""; # path to file containing repeat IDs and Orientation according to CRISPRDirection
++my $so = "/usr/local/CRISPRCasFinder/sel392v2.so"; # path to shared object (.so) file (former name: $pathSoFile)
++
++my $crisprdb = "/usr/local/CRISPRCasFinder/supplementary_files/CRISPR_crisprdb.csv"; # path to all CRISPR candidates contained in CRISPRdb (from last update)
++
++my $repeats = "/usr/local/CRISPRCasFinder/supplementary_files/Repeat_List.csv"; # path to file containing repeat sequences, IDs, and Nb in CRISPRdb (last update)
++
++my $dirRepeat = "/usr/local/CRISPRCasFinder/supplementary_files/repeatDirection.tsv"; # path to file containing repeat IDs and Orientation according to CRISPRDirection
+ 
+ my $html = 0; # boolean variable indicating if we use html visualization or not (default value=0)
+ 
+@@ -111,7 +115,7 @@
+ 
+ my $gscf = 0; # option allowing to get summary file of Cas-finder and copy it to TSV repository (default value=0) 
+ 
+-my $cssFile = ""; # option allowing to copy CSS file (crispr.css) to get the same design as CRISPRdb when using option -HTML (default value='')
++my $cssFile = "/usr/local/CRISPRCasFinder/supplementary_files/crispr.css"; # option allowing to copy CSS file (crispr.css) to get the same design as CRISPRdb when using option -HTML (default value='/usr/local/CRISPRCasFinder/supplementary_files/crispr.css')
+ 
+ my $genCode = 11; # option allowing to modify the genetic code (translation table) for CDS annotation (default value=11)
+ 
+@@ -598,7 +602,7 @@
+   	}
+   	#Modification DC - 05/05/2017
+   	#makesystemcall("./vmatch " . join(' ',@vmatchoptions)); #DC
+-  	makesystemcall("vmatch " . join(' ',@vmatchoptions)); #LK - DC replaced vmatch by vmatch2
++  	makesystemcall("$PathVmatch2 " . join(' ',@vmatchoptions)); #LK - DC replaced vmatch by vmatch2
+   	#makesystemcall("cp vmatch_result.txt CHECKvmatch_result.txt");
+   
+   	my @rep = trans_data("vmatch_result.txt");
+@@ -1550,7 +1554,7 @@
+     }
+ 	
+     #$macsyfinder = "macsyfinder --sequence-db my_aa.fna --replicon-topology circular --db-type gembase --models CASFinder --accessory-weight 1 --exchangeable-weight 1 --coverage-profile 0.4 --redundancy-penalty 1 -w 4 -o $casDir ";
+-	$macsyfinder = "macsyfinder -w $cpuMacSyFinder --replicon-topology circular --models CASFinder --accessory-weight 1 --exchangeable-weight 1 --coverage-profile 0.4 --redundancy-penalty 1 --sequence-db $proteome --out-dir $casDir ";
++	$macsyfinder = "$PathMacsyfinder -w $cpuMacSyFinder --replicon-topology circular --models CASFinder --accessory-weight 1 --exchangeable-weight 1 --coverage-profile 0.4 --redundancy-penalty 1 --sequence-db $proteome --out-dir $casDir ";
+ 	    
+     #my ($macsyfinder_hour,$macsyfinder_min,$macsyfinder_sec) = Now();
+     #if ( (-d $casfinder) and (-d $casdb) and (-d $profiles) ) {
+@@ -3946,7 +3950,7 @@
+   eval
+   {
+ 	my $prog = isProgInstalled("muscle");
+-	my $muscle = " muscle -align $file -output $result ";
++	my $muscle = " muscle -in $file -out $result ";
+ 	#my $muscle = " muscle -in $file -out $result "; #muscle command-line
+ 	if ($quiet){
+ 		$muscle .= " -quiet ";
+@@ -3985,7 +3989,7 @@
+   eval
+   {
+ 	my $prog = isProgInstalled("muscle");
+-	my $muscle = " muscle -align $file -output $result ";
++	my $muscle = " muscle -in $file -out $result ";
+ 	#my $muscle = " muscle -in $file -out $result "; #muscle command-line
+ 	if ($quiet){
+ 		$muscle .= " -quiet ";
+@@ -4034,7 +4038,7 @@
+ 
+ 	# Modification DC - 05/05/2017
+     	#makesystemcall("./vsubseqselect " . join(' ',@subselectoptions)); #DC
+-    	makesystemcall("vsubseqselect " . join(' ',@subselectoptions)); #LK - DC replaced vsubseqselect by vsubseqselect2
++    	makesystemcall("$PathVsubseqselect2 " . join(' ',@subselectoptions)); #LK - DC replaced vsubseqselect by vsubseqselect2
+ 	#my ($hour,$min,$sec) = Now();
+ 	if($logOption){
+    		print LOG " vsubseqselect @subselectoptions\n"; # DC replaced vsubseqselect by vsubseqselect2 , [$hour:$min:$sec]
+@@ -5204,7 +5208,7 @@
+   my ($inputfile,$indexname) = @_;
+   if(not (checkdbfile($inputfile,"${indexname}.prj")))
+   {
+-    makesystemcall("mkvtree -db $inputfile " .   # LK - DC replaced mkvtree by mkvtree2
++    makesystemcall("$PathMkvtree2 -db $inputfile " .   # LK - DC replaced mkvtree by mkvtree2
+                    "-dna -pl -lcp -suf -tis -ois -bwt -bck -sti1");
+     #my ($hour,$min,$sec) = Now();
+ 
