@@ -255,6 +255,14 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn("countTopLevelFiles(padlocDir)", workflow_text)
         self.assertNotIn("countTopLevelFiles(eggnogDir)", workflow_text)
 
+    def test_padloc_creates_output_directory_before_running_tool(self) -> None:
+        """Require PADLOC output directory creation before invoking the tool."""
+        module_text = (MODULES_DIR / "padloc.nf").read_text(encoding="utf-8")
+
+        mkdir_index = module_text.index("mkdir -p padloc")
+        run_index = module_text.index('padloc --faa padloc_input.faa')
+        self.assertLess(mkdir_index, run_index)
+
     def test_collect_versions_stages_unique_input_names(self) -> None:
         """Require unique staged names for collected version files."""
         module_path = MODULES_DIR / "collect_versions.nf"

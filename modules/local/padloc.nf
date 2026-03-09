@@ -33,13 +33,14 @@ process PADLOC {
 
     cp "${faa}" padloc_input.faa
 
+    mkdir -p padloc
+
     set +e
     padloc --faa padloc_input.faa --gff padloc_input.gff --cpu ${task.cpus} --outdir "\$PWD/padloc" ${extraArgs} \
         > padloc.log 2>&1
     exit_code=\$?
     set -e
 
-    mkdir -p padloc
     printf 'exit_code=%s\n' "\$exit_code" >> padloc.log
 
     cat <<EOF > versions.yml
