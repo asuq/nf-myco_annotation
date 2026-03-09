@@ -68,17 +68,22 @@ process CCFINDER {
     chmod +x "\${tool_bin}/muscle"
     export PATH="\${tool_bin}:\$PATH"
 
-    while IFS= read -r contig_id; do
-        [[ -n "\${contig_id}" ]] || continue
-        ln -sf "\${run_root}/\${contig_id}.fna" "\${task_root}/\${contig_id}.fna"
-    done < <(
-        awk '/^>/{
-            contig_id=\$1
+    awk -v output_root="\${task_root}" '
+        /^>/ {
+            if (output_path != "") {
+                close(output_path)
+            }
+            contig_id = \$1
             sub(/^>/, "", contig_id)
             sub(/\\.[0-9]+\$/, "", contig_id)
-            print contig_id
-        }' "\${genome_path}"
-    )
+            output_path = output_root "/" contig_id ".fna"
+            print \$0 > output_path
+            next
+        }
+        {
+            print >> output_path
+        }
+    ' "\${genome_path}"
 
     pushd "\${run_root}" >/dev/null
     cp "\${genome_path}" "\${genome_name}"
