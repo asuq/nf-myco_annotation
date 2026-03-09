@@ -20,7 +20,7 @@ process WRITE_SAMPLE_STATUS {
     path taxonomy
     path checkm2
     path sixteen_s_status
-    path busco_tables
+    path busco_tables, name: 'busco_tables/busco_table??.tsv'
     path ccfinder_strains
     path prokka_manifest
     path padloc_manifest
@@ -36,7 +36,8 @@ process WRITE_SAMPLE_STATUS {
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
     """
-    build_sample_status.py \
+    script_path="\$(command -v build_sample_status.py)"
+    python3 "\${script_path}" \
         --validated-samples "${validated_samples}" \
         --initial-status "${initial_status}" \
         --metadata "${metadata}" \
@@ -55,7 +56,7 @@ process WRITE_SAMPLE_STATUS {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      python: "$(python3 --version 2>&1 | sed 's/^Python //')"
+      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/build_sample_status.py"
     EOF
     """

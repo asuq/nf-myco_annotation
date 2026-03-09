@@ -89,6 +89,14 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             module_text = module_path.read_text(encoding="utf-8")
             self.assertIn(expected_snippet, module_text, module_name)
 
+    def test_write_sample_status_runs_helper_via_python3(self) -> None:
+        """Require the shared helper image to launch sample-status via Python."""
+        module_path = MODULES_DIR / "write_sample_status.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('script_path="\\$(command -v build_sample_status.py)"', module_text)
+        self.assertIn('python3 "\\${script_path}"', module_text)
+
     def test_cohort_ani_combines_busco_summaries_per_lineage(self) -> None:
         """Require the ANI workflow to aggregate BUSCO rows into lineage tables."""
         workflow_path = ROOT / "subworkflows" / "local" / "cohort_ani.nf"
@@ -112,6 +120,15 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn("collected_busco = busco_summaries", workflow_text)
         self.assertNotIn(".map { meta, lineage, summary -> summary }", workflow_text)
+
+    def test_final_outputs_keep_manifest_headers_first(self) -> None:
+        """Require collected annotation manifests to preserve their header rows."""
+        workflow_path = ROOT / "subworkflows" / "local" / "final_outputs.nf"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+
+        self.assertIn("collectFile(name: 'prokka_manifest.tsv', newLine: true, sort: false)", workflow_text)
+        self.assertIn("collectFile(name: 'padloc_manifest.tsv', newLine: true, sort: false)", workflow_text)
+        self.assertIn("collectFile(name: 'eggnog_manifest.tsv', newLine: true, sort: false)", workflow_text)
 
     def test_final_outputs_calls_manifest_helpers_as_closures(self) -> None:
         """Require closure helpers in final outputs to use explicit `.call(...)`."""

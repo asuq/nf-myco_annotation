@@ -79,35 +79,33 @@ workflow FINAL_OUTPUTS {
         )
 
     collected_busco = busco_summaries
-        .map { meta, lineage, summary -> summary }
-        .collect()
 
     prokkaManifest = Channel
         .of('accession\texit_code\tgff_size\tfaa_size')
         .concat(
             prokka_results.map { meta, prokkaDir, gff, faa, log ->
-                "${meta.accession}\t${extractExitCode(log)}\t${gff.toFile().length()}\t${faa.toFile().length()}"
+                "${meta.accession}\t${extractExitCode.call(log)}\t${gff.toFile().length()}\t${faa.toFile().length()}"
             }
         )
-        .collectFile(name: 'prokka_manifest.tsv', newLine: true)
+        .collectFile(name: 'prokka_manifest.tsv', newLine: true, sort: false)
 
     padlocManifest = Channel
         .of('accession\texit_code\tresult_file_count')
         .concat(
             padloc_results.map { meta, padlocDir, log ->
-                "${meta.accession}\t${extractExitCode(log)}\t${countTopLevelFiles(padlocDir)}"
+                "${meta.accession}\t${extractExitCode.call(log)}\t${countTopLevelFiles.call(padlocDir)}"
             }
         )
-        .collectFile(name: 'padloc_manifest.tsv', newLine: true)
+        .collectFile(name: 'padloc_manifest.tsv', newLine: true, sort: false)
 
     eggnogManifest = Channel
         .of('accession\texit_code\tannotations_size\tresult_file_count')
         .concat(
             eggnog_results.map { meta, eggnogDir, annotations, log ->
-                "${meta.accession}\t${extractExitCode(log)}\t${annotations.toFile().length()}\t${countTopLevelFiles(eggnogDir)}"
+                "${meta.accession}\t${extractExitCode.call(log)}\t${annotations.toFile().length()}\t${countTopLevelFiles.call(eggnogDir)}"
             }
         )
-        .collectFile(name: 'eggnog_manifest.tsv', newLine: true)
+        .collectFile(name: 'eggnog_manifest.tsv', newLine: true, sort: false)
 
     SELECT_ANI_REPRESENTATIVES(
         ani_clusters,
