@@ -32,6 +32,7 @@ Shared helper image requirement:
 
 ## Profiles
 
+- `debug`: composable behaviour profile that defaults eggNOG smoke runs to `GCA_000027325.1`
 - `local`: local executor
 - `slurm`: SLURM executor with optional `params.slurm_queue`, `params.slurm_account`, and `params.slurm_cluster_options`
 - `apptainer`: Apptainer execution with optional `params.apptainer_cache_dir` and `params.apptainer_run_options`
@@ -62,8 +63,8 @@ Use `bin/run_acceptance_tests.py` for the layered acceptance workflow:
 - `prepare`: download or reuse the tracked acceptance source genomes and build a generated cohort under `assets/testdata/local/acceptance/`
 - `unit`: run the Python unit-test layer for fine-grained and minor edge cases
 - `stub`: run the full-pipeline `-stub-run` smoke test
-- `local`: run the generated positive cohort with `-profile local,docker`
-- `slurm`: run the same cohort with `-profile slurm,apptainer` and compare its stable outputs against the latest successful local run
+- `local`: run the generated positive cohort with `-profile debug,local,docker`
+- `slurm`: run the same cohort with `-profile debug,slurm,apptainer` and compare its stable outputs against the latest successful local run
 - `all`: run `prepare`, `unit`, `stub`, `local`, and `slurm` in sequence
 
 Tracked cohort descriptors live under `assets/testdata/acceptance/`. Large
@@ -82,10 +83,12 @@ These acceptance runs also assume the CRISPRCasFinder image is already set via
 `params.ccfinder_container` in pipeline config. The harness does not accept a
 separate CCFINDER container argument.
 
-Acceptance runs also short-circuit eggNOG to one tracked smoke accession by
-setting `params.eggnog_only_accessions` internally. Normal raw pipeline runs
-still execute eggNOG for every gcode-qualified sample unless that param is set
-explicitly.
+Acceptance runs use the `debug` profile by default, which sets
+`params.eggnog_only_accessions = 'GCA_000027325.1'`. Normal raw pipeline runs
+still execute eggNOG for every gcode-qualified sample unless you opt into
+`debug` or set that parameter explicitly. If you override `--local-profile` or
+`--slurm-profile` in the harness, include `debug` yourself if you still want
+the smoke-only eggNOG behaviour.
 
 Example local acceptance run:
 
@@ -124,6 +127,35 @@ nextflow run . \
   --busco_download_dir /path/to/busco-lineages \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
+  --outdir results
+```
+
+Local debug smoke variant:
+
+```bash
+nextflow run . -profile debug,local,docker \
+  --sample_csv samples.csv \
+  --metadata metadata.tsv \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2_db /path/to/checkm2-db \
+  --busco_download_dir /path/to/busco-lineages \
+  --eggnog_db /path/to/eggnog-db \
+  --padloc_db /path/to/padloc-db \
+  --outdir results
+```
+
+Local debug run with an overridden eggNOG smoke accession:
+
+```bash
+nextflow run . -profile debug,local,docker \
+  --sample_csv samples.csv \
+  --metadata metadata.tsv \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2_db /path/to/checkm2-db \
+  --busco_download_dir /path/to/busco-lineages \
+  --eggnog_db /path/to/eggnog-db \
+  --padloc_db /path/to/padloc-db \
+  --eggnog_only_accessions SOME_OTHER_ACCESSION \
   --outdir results
 ```
 
