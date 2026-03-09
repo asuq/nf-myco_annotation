@@ -60,6 +60,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
         self.assertIn("params.max_memory = 16.GB", config_text)
         self.assertIn("withName: EGGNOG", config_text)
+        self.assertIn("container = params.eggnog_container", config_text)
         self.assertIn("cpus = 4", config_text)
         self.assertIn("memory = 8.GB", config_text)
 
