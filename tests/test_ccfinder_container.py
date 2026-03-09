@@ -49,7 +49,22 @@ class CCFinderContainerContractTestCase(unittest.TestCase):
         self.assertIn('io.nf_myco_annotation.reference_runtime_version="4.2.30"', dockerfile_text)
         self.assertIn("COPY macsyfinder-1.0.5.tar.gz /tmp/macsyfinder-1.0.5.tar.gz", dockerfile_text)
         self.assertIn(
+            "cpanm --notest \\\n        Bio::DB::Fasta \\\n        Bio::Seq \\\n        Bio::SeqIO \\\n        Bio::AlignIO;",
+            dockerfile_text,
+        )
+        self.assertNotIn('ensure_perl_module "Bio::AlignIO" "Bio::AlignIO";', dockerfile_text)
+        self.assertNotIn('ensure_perl_module "Bio::SeqIO" "Bio::SeqIO";', dockerfile_text)
+        self.assertNotIn('ensure_perl_module "Bio::DB::Fasta" "Bio::DB::Fasta";', dockerfile_text)
+        self.assertIn(
+            "COPY --from=builder /usr/local/lib/x86_64-linux-gnu/perl/5.26.1 /usr/local/lib/x86_64-linux-gnu/perl/5.26.1",
+            dockerfile_text,
+        )
+        self.assertIn(
             "COPY --from=builder /usr/local/share/macsyfinder /usr/local/share/macsyfinder",
+            dockerfile_text,
+        )
+        self.assertIn(
+            "COPY --from=builder /usr/local/share/perl/5.26.1 /usr/local/share/perl/5.26.1",
             dockerfile_text,
         )
         self.assertIn("COPY --from=builder /etc/macsyfinder /etc/macsyfinder", dockerfile_text)
@@ -133,6 +148,9 @@ class CCFinderContainerContractTestCase(unittest.TestCase):
                     "grep -F 'my $version = \"4.2.30\";' /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; "
                     "grep -F 'my $PathMacsyfinder = \"/usr/local/CRISPRCasFinder/macsyfinder\";' "
                     "/usr/local/CRISPRCasFinder/CRISPRCasFinder.pl; "
+                    "test -f /usr/local/share/perl/5.26.1/Bio/DB/IndexedBase.pm; "
+                    "test -f /usr/local/share/perl/5.26.1/Bio/DB/Fasta.pm; "
+                    "test -z \"$(perl -MBio::DB::IndexedBase -e 1 2>&1)\"; "
                     "test -d /usr/local/share/macsyfinder/DEF; "
                     "test -f /etc/macsyfinder/macsyfinder.conf.new; "
                     "/usr/local/bin/ccfinder-smoke-test"
