@@ -60,6 +60,7 @@ process COLLECT_VERSIONS {
         --busco-download-dir "${params.busco_download_dir ?: 'NA'}" \
         --eggnog-db "${params.eggnog_db ?: 'NA'}" \
         --eggnog-db-label "${params.eggnog_db_label ?: 'NA'}" \
+        --padloc-db "${params.padloc_db ?: 'NA'}" \
         --padloc-db-label "${params.padloc_db_label ?: 'NA'}" \
         ${containerArgs} \
         --output tool_and_db_versions.tsv
