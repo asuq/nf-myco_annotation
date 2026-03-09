@@ -44,7 +44,8 @@ process COLLECT_VERSIONS {
         "--container-ref \"${name}=${value}\""
     }.join(' \\\n        ')
     """
-    collect_versions.py \
+    script_path="\$(command -v collect_versions.py)"
+    python3 "\${script_path}" \
         ${versionArgs} \
         --nextflow-version "${nextflow_version}" \
         --pipeline-version "${pipeline_version}" \

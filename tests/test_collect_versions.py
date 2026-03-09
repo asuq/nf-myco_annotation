@@ -157,6 +157,71 @@ class CollectVersionsTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertFalse(output.exists())
 
+    def test_ignores_trailing_heredoc_delimiters_in_versions_files(self) -> None:
+        """Tolerate cached versions files that include a literal heredoc terminator."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            versions = self.write_text_file(
+                tmpdir / "versions.yml",
+                '\n'.join(
+                    [
+                        '"DOWNLOAD_BUSCO_DATASET":',
+                        '  busco: "BUSCO 6.0.0"',
+                        "EOF",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-file",
+                    str(versions),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            rows = read_tsv(output)
+            busco_rows = [row for row in rows if row["component"] == "busco"]
+            self.assertEqual(len(busco_rows), 1)
+            self.assertEqual(busco_rows[0]["version"], "BUSCO 6.0.0")
+
+    def test_joins_multiline_quoted_values_in_versions_files(self) -> None:
+        """Tolerate cached versions files with quoted values split across lines."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            versions = self.write_text_file(
+                tmpdir / "versions.yml",
+                '\n'.join(
+                    [
+                        '"STAGE_INPUTS":',
+                        '  seqtk: "',
+                        'NA"',
+                        '  samtools: "NA"',
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-file",
+                    str(versions),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            rows = read_tsv(output)
+            seqtk_rows = [row for row in rows if row["component"] == "seqtk"]
+            self.assertEqual(len(seqtk_rows), 1)
+            self.assertEqual(seqtk_rows[0]["version"], "NA")
+
     def test_invalid_container_ref_fails(self) -> None:
         """Fail cleanly when a container reference is not name=value."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

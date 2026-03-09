@@ -180,6 +180,8 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
             stripped = line.strip()
             if not stripped:
                 continue
+            if stripped == "EOF":
+                continue
             if not line.startswith((" ", "\t")):
                 if not stripped.endswith(":"):
                     raise CollectVersionsError(
@@ -193,7 +195,25 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
                 )
             name, value = stripped.split(":", 1)
             clean_name = name.strip()
-            clean_value = value.strip().strip("'\"")
+            raw_value = value.strip()
+            quote_count = raw_value.count('"') + raw_value.count("'")
+            if raw_value in {'"', "'"} or (
+                raw_value[:1] in {'"', "'"} and quote_count == 1 and not raw_value.endswith(raw_value[:1])
+            ):
+                quote_character = raw_value[:1]
+                continued_values = [raw_value]
+                for continuation_raw_line in handle:
+                    continuation_line = continuation_raw_line.rstrip("\n")
+                    continuation_stripped = continuation_line.strip()
+                    if not continuation_stripped:
+                        continue
+                    if continuation_stripped == "EOF":
+                        continue
+                    continued_values.append(continuation_stripped)
+                    if continuation_stripped.endswith(quote_character):
+                        break
+                raw_value = " ".join(continued_values)
+            clean_value = raw_value.strip().strip("'\"")
             kind = VERSION_KIND_KEYS.get(clean_name, "tool")
             if clean_name == "script":
                 rows.append(
