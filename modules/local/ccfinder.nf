@@ -34,7 +34,13 @@ process CCFINDER {
         exit 1
     fi
 
-    mkdir -p local_bin
+    task_root="\$PWD"
+    tool_bin="\${task_root}/tool_bin"
+    run_root="\${task_root}/ccfinder_run"
+    tool_output_root="\${task_root}/ccfinder_raw"
+    genome_path="\$(cd "\$(dirname "${genome}")" && pwd)/\$(basename "${genome}")"
+
+    mkdir -p "\${tool_bin}" "\${run_root}"
     {
         printf '%s\n' '#!/usr/bin/env bash'
         printf '%s\n' 'set -euo pipefail'
@@ -57,13 +63,14 @@ process CCFINDER {
         printf '%s\n' '    esac'
         printf '%s\n' 'done'
         printf '%s\n' 'exec "\$real_muscle" "\${translated_args[@]}"'
-    } > local_bin/muscle
-    chmod +x local_bin/muscle
-    export PATH="\$PWD/local_bin:\$PATH"
+    } > "\${tool_bin}/muscle"
+    chmod +x "\${tool_bin}/muscle"
+    export PATH="\${tool_bin}:\$PATH"
 
+    pushd "\${run_root}" >/dev/null
     set +e
-    perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "${genome}" \
-        -outdir "\$PWD/ccfinder" \
+    perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "\${genome_path}" \
+        -outdir "\${tool_output_root}" \
         -soFile "\${ccfinder_root}/sel392v2.so" \
         -DBcrispr "\${ccfinder_root}/supplementary_files/CRISPR_crisprdb.csv" \
         -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
@@ -71,25 +78,37 @@ process CCFINDER {
         -cpuMacSyFinder ${task.cpus} -cpuProkka ${task.cpus} \
         -log -html -levelMin 2 \
         -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \
-        ${extraArgs} \
-        > ccfinder.log 2>&1
+        ${extraArgs}
     exit_code=\$?
     set -e
+    popd >/dev/null
 
     mkdir -p ccfinder
-    result_json_path=\$(find ccfinder -type f -name 'result.json' | head -n 1 || true)
+    result_json_path=''
+    internal_log_path=''
+    if [[ -d "\${tool_output_root}" ]]; then
+        cp -R "\${tool_output_root}/". ccfinder/
+        result_json_path=\$(find "\${tool_output_root}" -type f -name 'result.json' | head -n 1 || true)
+        internal_log_path=\$(find "\${tool_output_root}" -type f -name 'ccfinder.log' | head -n 1 || true)
+    fi
+
     if [[ -n "\${result_json_path}" ]]; then
         cp "\${result_json_path}" result.json
     else
         : > result.json
     fi
 
+    if [[ -n "\${internal_log_path}" ]]; then
+        cp "\${internal_log_path}" ccfinder.log
+    else
+        : > ccfinder.log
+    fi
     printf 'exit_code=%s\n' "\$exit_code" >> ccfinder.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      crisprcasfinder: "\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | head -n 1 || echo NA)"
-    EOF
+    {
+        printf '"%s":\n' "${task.process}"
+        printf '  crisprcasfinder: "%s"\n' "\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | head -n 1 || echo NA)"
+    } > versions.yml
     """
 
     stub:

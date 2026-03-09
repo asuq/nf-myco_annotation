@@ -36,11 +36,7 @@ workflow PER_SAMPLE_ANNOTATION {
 
     PROKKA(annotation_candidates)
     CCFINDER(annotation_candidates)
-    ccfinder_summary_inputs = CCFINDER.out.results.map { meta, ccfinder_dir, result_json, log ->
-        tuple(meta, ccfinder_dir, result_json)
-    }
-
-    SUMMARISE_CCFINDER(ccfinder_summary_inputs)
+    SUMMARISE_CCFINDER(CCFINDER.out.result_json)
     PADLOC(PROKKA.out.padloc_inputs)
     EGGNOG(PROKKA.out.eggnog_inputs)
 

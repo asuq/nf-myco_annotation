@@ -41,43 +41,6 @@ class SummariseCCFinderTestCase(unittest.TestCase):
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
 
-    def write_report(self, path: Path, rows: list[list[str]]) -> Path:
-        """Write a `Crisprs_REPORT.tsv` fixture and return its path."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        header = [
-            "Strain",
-            "Sequence",
-            "Sequence_basename",
-            "Duplicated_Spacers",
-            "CRISPR_Id",
-            "CRISPR_Start",
-            "CRISPR_End",
-            "CRISPR_Length",
-            "Potential_Orientation (AT%)",
-            "CRISPRDirection",
-            "Consensus_Repeat",
-            "Repeat_ID (CRISPRdb)",
-            "Nb_CRISPRs_with_same_Repeat (CRISPRdb)",
-            "Repeat_Length",
-            "Spacers_Nb",
-            "Mean_size_Spacers",
-            "Standard_Deviation_Spacers",
-            "Nb_Repeats_matching_Consensus",
-            "Ratio_Repeats_match/TotalRepeat",
-            "Conservation_Repeats (% identity)",
-            "EBcons_Repeats",
-            "Conservation_Spacers (% identity)",
-            "EBcons_Spacers",
-            "Repeat_Length_plus_mean_size_Spacers",
-            "Ratio_Repeat/mean_Spacers_Length",
-            "CRISPR_found_in_DB (if sequence IDs are similar)",
-            "Evidence_Level",
-        ]
-        content_rows = ["\t".join(header)]
-        content_rows.extend("\t".join(row) for row in rows)
-        path.write_text("\n".join(content_rows) + "\n", encoding="utf-8")
-        return path
-
     def test_main_builds_strain_contig_and_crispr_tables(self) -> None:
         """Ignore evidence-level 1 arrays and aggregate retained arrays correctly."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -377,55 +340,18 @@ class SummariseCCFinderTestCase(unittest.TestCase):
             self.assertEqual(read_tsv_rows(outdir / "ccfinder_contigs.tsv"), [])
             self.assertEqual(read_tsv_rows(outdir / "ccfinder_crisprs.tsv"), [])
 
-    def test_main_falls_back_to_report_tsv_when_json_is_malformed(self) -> None:
-        """Use `Crisprs_REPORT.tsv` when the JSON artefact is malformed."""
+    def test_main_marks_malformed_json_as_failed(self) -> None:
+        """Treat malformed JSON as a failed CRISPR summary."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             outdir = tmpdir / "out"
-            ccfinder_dir = tmpdir / "ccfinder"
             result_json = tmpdir / "result.json"
             result_json.write_text("{\n", encoding="utf-8")
-            self.write_report(
-                ccfinder_dir / "Crisprs_REPORT.tsv",
-                [
-                    [
-                        "ACC_FALLBACK",
-                        "contig_a",
-                        "contig_a",
-                        "0",
-                        "crispr_1",
-                        "10",
-                        "100",
-                        "91",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "3",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "4",
-                    ]
-                ],
-            )
 
             exit_code = summarise_ccfinder.main(
                 [
                     "--accession",
-                    "ACC_FALLBACK",
-                    "--ccfinder-dir",
-                    str(ccfinder_dir),
+                    "ACC_BAD_JSON",
                     "--result-json",
                     str(result_json),
                     "--outdir",
@@ -435,46 +361,11 @@ class SummariseCCFinderTestCase(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
-            contig_row = read_tsv_rows(outdir / "ccfinder_contigs.tsv")[0]
-            crispr_row = read_tsv_rows(outdir / "ccfinder_crisprs.tsv")[0]
-            self.assertEqual(strain_row["CRISPRS"], "1")
-            self.assertEqual(strain_row["SPACERS_SUM"], "3")
-            self.assertEqual(strain_row["ccfinder_status"], "done")
-            self.assertEqual(strain_row["warnings"], "")
-            self.assertEqual(contig_row["contig_id"], "contig_a")
-            self.assertEqual(contig_row["contig_length"], "NA")
-            self.assertEqual(contig_row["CRISPR_FRAC"], "NA")
-            self.assertEqual(crispr_row["crispr_id"], "crispr_1")
-
-    def test_main_falls_back_to_empty_report_as_zero_crisprs(self) -> None:
-        """Treat a header-only report as a valid zero-CRISPR summary."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            outdir = tmpdir / "out"
-            ccfinder_dir = tmpdir / "ccfinder"
-            result_json = tmpdir / "result.json"
-            result_json.write_text("{\n", encoding="utf-8")
-            self.write_report(ccfinder_dir / "Crisprs_REPORT.tsv", [])
-
-            exit_code = summarise_ccfinder.main(
-                [
-                    "--accession",
-                    "ACC_ZERO",
-                    "--ccfinder-dir",
-                    str(ccfinder_dir),
-                    "--result-json",
-                    str(result_json),
-                    "--outdir",
-                    str(outdir),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            strain_row = read_tsv_rows(outdir / "ccfinder_strains.tsv")[0]
-            self.assertEqual(strain_row["CRISPRS"], "0")
-            self.assertEqual(strain_row["SPACERS_SUM"], "0")
-            self.assertEqual(strain_row["CRISPR_FRAC"], "0")
-            self.assertEqual(strain_row["ccfinder_status"], "done")
+            self.assertEqual(strain_row["CRISPRS"], "NA")
+            self.assertEqual(strain_row["SPACERS_SUM"], "NA")
+            self.assertEqual(strain_row["CRISPR_FRAC"], "NA")
+            self.assertEqual(strain_row["ccfinder_status"], "failed")
+            self.assertEqual(strain_row["warnings"], "ccfinder_summary_failed")
             self.assertEqual(read_tsv_rows(outdir / "ccfinder_contigs.tsv"), [])
             self.assertEqual(read_tsv_rows(outdir / "ccfinder_crisprs.tsv"), [])
 
