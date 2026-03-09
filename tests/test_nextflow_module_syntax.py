@@ -170,8 +170,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         """Require the isolated run to reopen the staged FASTA by local basename."""
         module_text = (MODULES_DIR / "ccfinder.nf").read_text(encoding="utf-8")
 
-        self.assertIn('genome_name="\\$(basename "\\${genome_path}")"', module_text)
-        self.assertIn('ln -sf "\\${genome_path}" "\\${genome_name}"', module_text)
+        self.assertIn('genome_name="\\$(basename "${genome}")"', module_text)
+        self.assertIn('cp "${genome}" "\\${genome_name}"', module_text)
         self.assertIn('perl "\\${ccfinder_root}/CRISPRCasFinder.pl" -in "\\${genome_name}" \\', module_text)
         self.assertIn(
             "result_json_path=\\$(find \"\\${tool_output_root}\" \"\\${run_root}\" -type f -name 'result.json' | head -n 1 || true)",

@@ -38,8 +38,7 @@ process CCFINDER {
     tool_bin="\${task_root}/tool_bin"
     run_root="\${task_root}/ccfinder_run"
     tool_output_root="\${task_root}/ccfinder_raw"
-    genome_path="\$(cd "\$(dirname "${genome}")" && pwd)/\$(basename "${genome}")"
-    genome_name="\$(basename "\${genome_path}")"
+    genome_name="\$(basename "${genome}")"
 
     mkdir -p "\${tool_bin}" "\${run_root}"
     {
@@ -69,7 +68,7 @@ process CCFINDER {
     export PATH="\${tool_bin}:\$PATH"
 
     pushd "\${run_root}" >/dev/null
-    ln -sf "\${genome_path}" "\${genome_name}"
+    cp "${genome}" "\${genome_name}"
     set +e
     perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "\${genome_name}" \
         -outdir "\${tool_output_root}" \
