@@ -26,11 +26,17 @@ workflow {
     }
 
     log.warn 'PADLOC and eggNOG outputs are retained in sample folders but are intentionally excluded from master_table.tsv.'
+    if (!params.padloc_db) {
+        log.warn 'params.padloc_db is unset; PADLOC requires an external data directory and gcode-qualified PADLOC tasks will fail.'
+    }
 
     sampleCsv = Channel.fromPath(params.sample_csv, checkIfExists: true)
     metadata = Channel.fromPath(params.metadata, checkIfExists: true)
     taxdump = Channel.fromPath(params.taxdump, checkIfExists: true)
     buscoLineages = Channel.fromList(params.busco_lineages as List<String>)
+    padlocDb = params.padloc_db
+        ? Channel.fromPath(params.padloc_db, checkIfExists: true)
+        : Channel.value(file("${projectDir}/assets/testdata/stub/padloc_db"))
 
     INPUT_VALIDATION_AND_STAGING(sampleCsv, metadata)
     BUSCO_DATASET_PREP(buscoLineages)
@@ -43,6 +49,7 @@ workflow {
     PER_SAMPLE_ANNOTATION(
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
         PER_SAMPLE_QC.out.gcode_qc,
+        padlocDb,
     )
     COHORT_ANI(
         INPUT_VALIDATION_AND_STAGING.out.validated_samples,

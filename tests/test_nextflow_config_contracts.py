@@ -22,6 +22,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
         self.assertIn("ani_score_profile = 'default'", config_text)
         self.assertIn("use_biocontainers = true", config_text)
+        self.assertIn("padloc_db = null", config_text)
 
     def test_python_container_uses_shared_repo_owned_helper_image(self) -> None:
         """Use one shared helper image that carries the ANI scientific stack."""

@@ -263,6 +263,25 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         run_index = module_text.index('padloc --faa padloc_input.faa')
         self.assertLess(mkdir_index, run_index)
 
+    def test_padloc_requires_staged_database_directory(self) -> None:
+        """Require PADLOC to use a staged database directory rather than image defaults."""
+        module_text = (MODULES_DIR / "padloc.nf").read_text(encoding="utf-8")
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "per_sample_annotation.nf"
+        ).read_text(encoding="utf-8")
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
+        collect_versions_text = (MODULES_DIR / "collect_versions.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("tuple val(meta), path(gff), path(faa), path(padloc_db)", module_text)
+        self.assertIn('padloc_db_dir="\\$(cd "${padloc_db}" && pwd)"', module_text)
+        self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
+        self.assertIn('--data "\\${padloc_db_dir}"', module_text)
+        self.assertIn("PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))", workflow_text)
+        self.assertIn("padlocDb = params.padloc_db", main_text)
+        self.assertIn('--padloc-db "${params.padloc_db ?: \'NA\'}" \\', collect_versions_text)
+
     def test_collect_versions_stages_unique_input_names(self) -> None:
         """Require unique staged names for collected version files."""
         module_path = MODULES_DIR / "collect_versions.nf"

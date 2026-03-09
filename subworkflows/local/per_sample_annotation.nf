@@ -12,6 +12,7 @@ workflow PER_SAMPLE_ANNOTATION {
     take:
     sample_genomes
     gcode_summaries
+    padloc_db
 
     main:
     sample_by_accession = sample_genomes.map { meta, genome ->
@@ -37,7 +38,7 @@ workflow PER_SAMPLE_ANNOTATION {
     PROKKA(annotation_candidates)
     CCFINDER(annotation_candidates)
     SUMMARISE_CCFINDER(CCFINDER.out.result_json)
-    PADLOC(PROKKA.out.padloc_inputs)
+    PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))
     EGGNOG(PROKKA.out.eggnog_inputs)
 
     versions = PROKKA.out.versions
