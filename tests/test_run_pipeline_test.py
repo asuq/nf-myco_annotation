@@ -59,6 +59,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/busco",
             "--eggnog-db",
             "/tmp/eggnog",
+            "--padloc-db",
+            "/tmp/padloc",
         )
 
         self.assertEqual(result.returncode, 0)
@@ -66,7 +68,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py local --taxdump /tmp/taxdump "
             "--checkm2-db /tmp/checkm2 --busco-download-dir /tmp/busco "
-            "--eggnog-db /tmp/eggnog",
+            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc",
         )
         self.assertEqual(result.stderr, "")
 

@@ -39,6 +39,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "taxdump": Path("/tmp/taxdump"),
             "checkm2_db": Path("/tmp/checkm2"),
             "eggnog_db": Path("/tmp/eggnog"),
+            "padloc_db": Path("/tmp/padloc"),
             "resume": False,
             "prepare_busco_datasets": False,
             "busco_download_dir": Path("/tmp/busco"),
@@ -441,6 +442,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         )
 
         self.assertNotIn("--ccfinder_container", command)
+        self.assertIn("--padloc_db", command)
+        self.assertIn(str(Path("/tmp/padloc").resolve()), command)
 
     def test_parse_args_rejects_ccfinder_override_flag(self) -> None:
         """Reject a harness-level CCFINDER override flag."""

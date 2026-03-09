@@ -629,6 +629,8 @@ def validate_real_run_args(args: argparse.Namespace) -> None:
         missing.append("--checkm2-db")
     if not args.eggnog_db:
         missing.append("--eggnog-db")
+    if not args.padloc_db:
+        missing.append("--padloc-db")
     if not args.prepare_busco_datasets and not args.busco_download_dir:
         missing.append("--busco-download-dir or --prepare-busco-datasets")
     if missing:
@@ -664,6 +666,8 @@ def build_nextflow_command(
         str(Path(args.checkm2_db).resolve()),
         "--eggnog_db",
         str(Path(args.eggnog_db).resolve()),
+        "--padloc_db",
+        str(Path(args.padloc_db).resolve()),
         "--outdir",
         str(outdir),
     ]
@@ -1047,6 +1051,7 @@ def build_real_run_parser() -> argparse.ArgumentParser:
         help="Allow the pipeline to prepare BUSCO lineage datasets itself.",
     )
     parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
+    parser.add_argument("--padloc-db", type=Path, default=None, help="PADLOC database path.")
     parser.add_argument(
         "--local-profile",
         default=DEFAULT_LOCAL_PROFILE,
