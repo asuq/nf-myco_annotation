@@ -82,6 +82,11 @@ These acceptance runs also assume the CRISPRCasFinder image is already set via
 `params.ccfinder_container` in pipeline config. The harness does not accept a
 separate CCFINDER container argument.
 
+Acceptance runs also short-circuit eggNOG to one tracked smoke accession by
+setting `params.eggnog_only_accessions` internally. Normal raw pipeline runs
+still execute eggNOG for every gcode-qualified sample unless that param is set
+explicitly.
+
 Example local acceptance run:
 
 ```bash

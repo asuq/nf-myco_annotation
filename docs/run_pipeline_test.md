@@ -64,6 +64,11 @@ Required by real-data modes:
 CRISPRCasFinder still uses `params.ccfinder_container` from `nextflow.config`.
 The wrapper does not accept a separate container override.
 
+Acceptance-backed `local`, `slurm`, and `all` runs also restrict eggNOG to one
+tracked smoke accession through the harness. Raw pipeline runs are unchanged
+and still execute eggNOG for every gcode-qualified sample unless
+`params.eggnog_only_accessions` is set explicitly.
+
 ## Examples
 
 Quick stub smoke test:
