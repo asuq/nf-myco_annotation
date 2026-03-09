@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NEXTFLOW_CONFIG = ROOT / "nextflow.config"
 DOCKER_CONFIG = ROOT / "conf" / "docker.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
+DEBUG_CONFIG = ROOT / "conf" / "debug.config"
 BASE_CONFIG = ROOT / "conf" / "base.config"
 
 
@@ -23,6 +24,16 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("ani_score_profile = 'default'", config_text)
         self.assertIn("use_biocontainers = true", config_text)
         self.assertIn("padloc_db = null", config_text)
+        self.assertIn("eggnog_only_accessions = null", config_text)
+        self.assertIn("includeConfig 'conf/debug.config'", config_text)
+
+    def test_debug_profile_sets_default_eggnog_smoke_accession(self) -> None:
+        """Provide one composable debug profile for single-sample eggNOG runs."""
+        config_text = DEBUG_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("profiles {", config_text)
+        self.assertIn("debug {", config_text)
+        self.assertIn("eggnog_only_accessions = 'GCA_000027325.1'", config_text)
 
     def test_python_container_uses_shared_repo_owned_helper_image(self) -> None:
         """Use one shared helper image that carries the ANI scientific stack."""
