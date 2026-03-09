@@ -23,11 +23,18 @@ process BUSCO {
     script:
     """
     output_dir="busco_${lineage}"
+    busco_download_root="busco_downloads"
+    staged_lineage_dir="\${busco_download_root}/lineages/${lineage}"
+    dataset_source="\$(cd "${dataset_dir}" && pwd)"
+
+    mkdir -p "\$(dirname "\${staged_lineage_dir}")"
+    ln -s "\${dataset_source}" "\${staged_lineage_dir}"
 
     set +e
     busco \
         --in "${genome}" \
-        --lineage_dataset "${dataset_dir}" \
+        --download_path "\${busco_download_root}" \
+        --lineage_dataset "${lineage}" \
         --mode genome \
         --offline \
         --cpu ${task.cpus} \
@@ -49,7 +56,7 @@ process BUSCO {
 
     cat <<EOF > versions.yml
     "${task.process}":
-      busco: "$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
+      busco: "\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
     EOF
     """
 

@@ -1,0 +1,137 @@
+"""Regression tests for parser-safe Nextflow module scripts."""
+
+from __future__ import annotations
+
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULES_DIR = ROOT / "modules" / "local"
+RAW_COMMAND_SUBSTITUTION = re.compile(r'(?<!\\)\$\(')
+
+
+def find_raw_command_substitutions(path: Path) -> list[str]:
+    """Return line-numbered raw shell substitutions that would break parsing."""
+    matches: list[str] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if RAW_COMMAND_SUBSTITUTION.search(line):
+            matches.append(f"{path.relative_to(ROOT)}:{line_number}:{line.strip()}")
+    return matches
+
+
+class NextflowModuleSyntaxTestCase(unittest.TestCase):
+    """Protect local Nextflow modules from raw shell substitution syntax."""
+
+    def test_local_modules_escape_shell_command_substitutions(self) -> None:
+        """Require parser-safe escaping for shell command substitution tokens."""
+        matches: list[str] = []
+        for path in sorted(MODULES_DIR.glob("*.nf")):
+            matches.extend(find_raw_command_substitutions(path))
+
+        self.assertEqual(matches, [])
+
+    def test_assign_gcode_and_qc_stages_unique_checkm2_input_names(self) -> None:
+        """Require unique staged names for paired CheckM2 reports."""
+        module_path = MODULES_DIR / "assign_gcode_and_qc.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn("name: 'checkm2_gcode4_report.tsv'", module_text)
+        self.assertIn("name: 'checkm2_gcode11_report.tsv'", module_text)
+
+    def test_checkm2_resolves_directory_parameters_to_dmnd_files(self) -> None:
+        """Require CheckM2 to accept a database directory containing one `.dmnd` file."""
+        module_path = MODULES_DIR / "checkm2.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('database_path="${checkm2Db}"', module_text)
+        self.assertIn('dmnd_candidates=("\\${database_path}"/*.dmnd)', module_text)
+        self.assertIn('--database_path "\\${database_path}"', module_text)
+
+    def test_summarise_busco_emits_lineage_specific_summary_names(self) -> None:
+        """Require unique BUSCO summary filenames per lineage."""
+        module_path = MODULES_DIR / "summarise_busco.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('path("busco_summary_${lineage}.tsv")', module_text)
+        self.assertIn('--output "busco_summary_${lineage}.tsv"', module_text)
+
+    def test_download_busco_dataset_preserves_lineage_directory_name(self) -> None:
+        """Require downloaded BUSCO datasets to be staged under their lineage names."""
+        module_path = MODULES_DIR / "download_busco_dataset.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('tuple val(lineage), path("${lineage}"), emit: dataset', module_text)
+        self.assertIn('ln -s "\\${dataset_dir}" "${lineage}"', module_text)
+
+    def test_busco_stages_offline_datasets_under_download_root(self) -> None:
+        """Require BUSCO offline runs to stage lineage datasets in BUSCO's expected layout."""
+        module_path = MODULES_DIR / "busco.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('busco_download_root="busco_downloads"', module_text)
+        self.assertIn('staged_lineage_dir="\\${busco_download_root}/lineages/${lineage}"', module_text)
+        self.assertIn('dataset_source="\\$(cd "${dataset_dir}" && pwd)"', module_text)
+        self.assertIn('ln -s "\\${dataset_source}" "\\${staged_lineage_dir}"', module_text)
+        self.assertIn('--download_path "\\${busco_download_root}"', module_text)
+        self.assertIn('--lineage_dataset "${lineage}"', module_text)
+
+    def test_busco_consumers_stage_unique_summary_names(self) -> None:
+        """Require BUSCO summary consumers to stage input files uniquely."""
+        expected_snippet = "path busco_tables, name: 'busco_tables/busco_table??.tsv'"
+        for module_name in (
+            "build_fastani_inputs.nf",
+            "build_master_table.nf",
+            "write_sample_status.nf",
+        ):
+            module_path = MODULES_DIR / module_name
+            module_text = module_path.read_text(encoding="utf-8")
+            self.assertIn(expected_snippet, module_text, module_name)
+
+    def test_cohort_ani_combines_busco_summaries_per_lineage(self) -> None:
+        """Require the ANI workflow to aggregate BUSCO rows into lineage tables."""
+        workflow_path = ROOT / "subworkflows" / "local" / "cohort_ani.nf"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+
+        self.assertIn('tuple("busco_summary_${lineage}.tsv", summary)', workflow_text)
+        self.assertIn(".collectFile(", workflow_text)
+        self.assertIn("parsed_busco = busco_tables", workflow_text)
+
+    def test_cohort_ani_preserves_staged_manifest_header_order(self) -> None:
+        """Require the staged ANI manifest header to stay first in the file."""
+        workflow_path = ROOT / "subworkflows" / "local" / "cohort_ani.nf"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+
+        self.assertIn("collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)", workflow_text)
+
+    def test_final_outputs_consumes_combined_busco_tables(self) -> None:
+        """Require final outputs to consume combined BUSCO lineage tables directly."""
+        workflow_path = ROOT / "subworkflows" / "local" / "final_outputs.nf"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+
+        self.assertIn("collected_busco = busco_summaries", workflow_text)
+        self.assertNotIn(".map { meta, lineage, summary -> summary }", workflow_text)
+
+    def test_final_outputs_calls_manifest_helpers_as_closures(self) -> None:
+        """Require closure helpers in final outputs to use explicit `.call(...)`."""
+        workflow_path = ROOT / "subworkflows" / "local" / "final_outputs.nf"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+
+        self.assertIn("extractExitCode.call(log)", workflow_text)
+        self.assertIn("countTopLevelFiles.call(padlocDir)", workflow_text)
+        self.assertIn("countTopLevelFiles.call(eggnogDir)", workflow_text)
+        self.assertNotIn("extractExitCode(log)", workflow_text)
+        self.assertNotIn("countTopLevelFiles(padlocDir)", workflow_text)
+        self.assertNotIn("countTopLevelFiles(eggnogDir)", workflow_text)
+
+    def test_collect_versions_stages_unique_input_names(self) -> None:
+        """Require unique staged names for collected version files."""
+        module_path = MODULES_DIR / "collect_versions.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn("path version_files, name: 'version_files/versions??.yml'", module_text)
+
+
+if __name__ == "__main__":
+    unittest.main()
