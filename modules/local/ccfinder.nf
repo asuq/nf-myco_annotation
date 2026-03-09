@@ -28,6 +28,38 @@ process CCFINDER {
         echo "CRISPRCasFinder.pl not found under \${ccfinder_root}." >&2
         exit 1
     fi
+    real_muscle="\$(command -v muscle || true)"
+    if [[ -z "\${real_muscle}" ]]; then
+        echo "muscle not found in PATH." >&2
+        exit 1
+    fi
+
+    mkdir -p local_bin
+    {
+        printf '%s\n' '#!/usr/bin/env bash'
+        printf '%s\n' 'set -euo pipefail'
+        printf 'real_muscle=%q\n' "\${real_muscle}"
+        printf '%s\n' 'translated_args=()'
+        printf '%s\n' 'while ((\$# > 0)); do'
+        printf '%s\n' '    case "\$1" in'
+        printf '%s\n' '        -align)'
+        printf '%s\n' '            translated_args+=(-in "\$2")'
+        printf '%s\n' '            shift 2'
+        printf '%s\n' '            ;;'
+        printf '%s\n' '        -output)'
+        printf '%s\n' '            translated_args+=(-out "\$2")'
+        printf '%s\n' '            shift 2'
+        printf '%s\n' '            ;;'
+        printf '%s\n' '        *)'
+        printf '%s\n' '            translated_args+=("\$1")'
+        printf '%s\n' '            shift'
+        printf '%s\n' '            ;;'
+        printf '%s\n' '    esac'
+        printf '%s\n' 'done'
+        printf '%s\n' 'exec "\$real_muscle" "\${translated_args[@]}"'
+    } > local_bin/muscle
+    chmod +x local_bin/muscle
+    export PATH="\$PWD/local_bin:\$PATH"
 
     set +e
     perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "${genome}" \
@@ -36,7 +68,6 @@ process CCFINDER {
         -DBcrispr "\${ccfinder_root}/supplementary_files/CRISPR_crisprdb.csv" \
         -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
         -DIRrepeat "\${ccfinder_root}/supplementary_files/repeatDirection.tsv" \
-        -CASFinder "\${ccfinder_root}/CasFinder-2.0.3" \
         -cpuMacSyFinder ${task.cpus} -cpuProkka ${task.cpus} \
         -log -html -levelMin 2 \
         -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \

@@ -89,6 +89,34 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             module_text = module_path.read_text(encoding="utf-8")
             self.assertIn(expected_snippet, module_text, module_name)
 
+    def test_assembly_stats_flow_is_staged_into_ani_and_final_outputs(self) -> None:
+        """Require the in-house assembly-stats TSV to feed all downstream consumers."""
+        cohort_workflow = (ROOT / "subworkflows" / "local" / "cohort_ani.nf").read_text(
+            encoding="utf-8"
+        )
+        final_outputs_workflow = (
+            ROOT / "subworkflows" / "local" / "final_outputs.nf"
+        ).read_text(encoding="utf-8")
+        build_fastani_module = (MODULES_DIR / "build_fastani_inputs.nf").read_text(
+            encoding="utf-8"
+        )
+        build_master_module = (MODULES_DIR / "build_master_table.nf").read_text(
+            encoding="utf-8"
+        )
+        write_status_module = (MODULES_DIR / "write_sample_status.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("CALCULATE_ASSEMBLY_STATS(staged_manifest, staged_fasta_files)", cohort_workflow)
+        self.assertIn("CALCULATE_ASSEMBLY_STATS.out.stats", cohort_workflow)
+        self.assertIn("path assembly_stats", build_fastani_module)
+        self.assertIn("--assembly-stats \"${assembly_stats}\"", build_fastani_module)
+        self.assertIn("path assembly_stats", build_master_module)
+        self.assertIn("--assembly-stats \"${assembly_stats}\"", build_master_module)
+        self.assertIn("path assembly_stats", write_status_module)
+        self.assertIn("--assembly-stats \"${assembly_stats}\"", write_status_module)
+        self.assertIn("assembly_stats", final_outputs_workflow)
+
     def test_write_sample_status_runs_helper_via_python3(self) -> None:
         """Require the shared helper image to launch sample-status via Python."""
         module_path = MODULES_DIR / "write_sample_status.nf"
@@ -96,6 +124,35 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('script_path="\\$(command -v build_sample_status.py)"', module_text)
         self.assertIn('python3 "\\${script_path}"', module_text)
+
+    def test_collect_versions_runs_helper_via_python3(self) -> None:
+        """Require version collection to resolve the staged helper explicitly."""
+        module_path = MODULES_DIR / "collect_versions.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('script_path="\\$(command -v collect_versions.py)"', module_text)
+        self.assertIn('python3 "\\${script_path}"', module_text)
+
+    def test_ccfinder_does_not_pass_removed_casfinder_path_flags(self) -> None:
+        """Require the pinned CRISPRCasFinder invocation to omit dead path flags."""
+        module_path = MODULES_DIR / "ccfinder.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertNotIn('-cf "\\${ccfinder_root}/CasFinder-2.0.3" \\', module_text)
+        self.assertNotIn('-CASFinder "\\${ccfinder_root}/CasFinder-2.0.3" \\', module_text)
+
+    def test_ccfinder_wraps_muscle_v3_for_align_output_compatibility(self) -> None:
+        """Require a local MUSCLE shim for CRISPRCasFinder's newer CLI syntax."""
+        module_path = MODULES_DIR / "ccfinder.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('real_muscle="\\$(command -v muscle || true)"', module_text)
+        self.assertIn("printf 'real_muscle=%q\\n' \"\\${real_muscle}\"", module_text)
+        self.assertIn('-align)', module_text)
+        self.assertIn("printf '%s\\n' '            translated_args+=(-in \"\\$2\")'", module_text)
+        self.assertIn('-output)', module_text)
+        self.assertIn("printf '%s\\n' '            translated_args+=(-out \"\\$2\")'", module_text)
+        self.assertIn('export PATH="\\$PWD/local_bin:\\$PATH"', module_text)
 
     def test_cohort_ani_combines_busco_summaries_per_lineage(self) -> None:
         """Require the ANI workflow to aggregate BUSCO rows into lineage tables."""
