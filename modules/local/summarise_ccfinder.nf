@@ -13,7 +13,7 @@ process SUMMARISE_CCFINDER {
     )
 
     input:
-    tuple val(meta), path(result_json)
+    tuple val(meta), path(ccfinder_dir), path(result_json)
 
     output:
     tuple val(meta), path('ccfinder_strains.tsv'), path('ccfinder_contigs.tsv'), path('ccfinder_crisprs.tsv'), emit: summaries
@@ -24,6 +24,7 @@ process SUMMARISE_CCFINDER {
     """
     summarise_ccfinder.py \
         --accession "${meta.accession}" \
+        --ccfinder-dir "${ccfinder_dir}" \
         --result-json "${result_json}" \
         --outdir .
 

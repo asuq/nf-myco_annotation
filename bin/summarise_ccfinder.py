@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse CRISPRCasFinder JSON into strain, contig, and CRISPR summary tables."""
+"""Summarise CRISPRCasFinder outputs into strain, contig, and CRISPR tables."""
 
 from __future__ import annotations
 
@@ -85,6 +85,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Original sample accession for the output tables.",
     )
     parser.add_argument(
+        "--ccfinder-dir",
+        type=Path,
+        help="Path to the CRISPRCasFinder output directory for TSV fallback parsing.",
+    )
+    parser.add_argument(
         "--result-json",
         required=True,
         type=Path,
@@ -123,6 +128,17 @@ def load_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         raise ValueError(f"Could not parse CRISPRCasFinder JSON: {path}") from error
+
+
+def read_report_rows(path: Path) -> list[dict[str, str]]:
+    """Read one CRISPRCasFinder TSV report."""
+    if not path.is_file():
+        raise ValueError(f"Missing CRISPRCasFinder report: {path}")
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError(f"CRISPRCasFinder report is empty: {path}")
+        return list(reader)
 
 
 def find_sequence_records(payload: Any) -> list[dict[str, Any]]:
@@ -292,6 +308,81 @@ def parse_crispr_records(accession: str, payload: Any) -> tuple[list[CrisprRecor
     return crispr_records, contig_summaries, warnings
 
 
+def parse_report_crispr_records(
+    accession: str,
+    report_path: Path,
+) -> tuple[list[CrisprRecord], list[ContigSummary], list[str]]:
+    """Parse CRISPR rows from `Crisprs_REPORT.tsv` as a fallback."""
+    rows = read_report_rows(report_path)
+    crispr_records: list[CrisprRecord] = []
+    warnings: list[str] = []
+    contig_order: list[str] = []
+    contig_totals: dict[str, tuple[int, int]] = {}
+
+    for row in rows:
+        contig_id = (row.get("Sequence", "") or row.get("Sequence_basename", "")).strip()
+        if not contig_id:
+            contig_id = "contig_1"
+
+        evidence_level = parse_int(row.get("Evidence_Level"))
+        if evidence_level is None:
+            warnings.append("invalid_crispr_entry")
+            continue
+        if evidence_level == 1:
+            continue
+
+        start = parse_int(row.get("CRISPR_Start"))
+        end = parse_int(row.get("CRISPR_End"))
+        spacer_count = parse_int(row.get("Spacers_Nb"))
+        if start is None or end is None or spacer_count is None or end < start:
+            warnings.append("invalid_crispr_entry")
+            continue
+
+        crispr_id = (row.get("CRISPR_Id", "") or "").strip()
+        if not crispr_id:
+            crispr_id = f"{contig_id}_crispr_{len(crispr_records) + 1}"
+
+        record = CrisprRecord(
+            accession=accession,
+            contig_id=contig_id,
+            crispr_id=crispr_id,
+            evidence_level=evidence_level,
+            spacer_count=spacer_count,
+            start=start,
+            end=end,
+        )
+        crispr_records.append(record)
+
+        if contig_id not in contig_totals:
+            contig_order.append(contig_id)
+            contig_totals[contig_id] = (0, 0)
+        crisprs_total, spacers_total = contig_totals[contig_id]
+        contig_totals[contig_id] = (crisprs_total + 1, spacers_total + spacer_count)
+
+    contig_summaries = [
+        ContigSummary(
+            accession=accession,
+            contig_id=contig_id,
+            contig_length=None,
+            crisprs=contig_totals[contig_id][0],
+            spacers_sum=contig_totals[contig_id][1],
+            crispr_frac=None,
+        )
+        for contig_id in contig_order
+    ]
+    return crispr_records, contig_summaries, warnings
+
+
+def resolve_report_path(ccfinder_dir: Path | None, result_json: Path) -> Path | None:
+    """Return the best available `Crisprs_REPORT.tsv` fallback path."""
+    if ccfinder_dir is not None:
+        return ccfinder_dir / "Crisprs_REPORT.tsv"
+    inferred = result_json.parent / "ccfinder" / "Crisprs_REPORT.tsv"
+    if inferred.exists():
+        return inferred
+    return None
+
+
 def build_strain_row(
     accession: str,
     crispr_records: Sequence[CrisprRecord],
@@ -379,6 +470,42 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.accession,
             payload,
         )
+    except ValueError as error:
+        report_path = resolve_report_path(args.ccfinder_dir, args.result_json)
+        fallback_error: ValueError | None = None
+        if report_path is not None:
+            try:
+                crispr_records, contig_summaries, warnings = parse_report_crispr_records(
+                    args.accession,
+                    report_path,
+                )
+            except ValueError as fallback_parse_error:
+                fallback_error = fallback_parse_error
+            else:
+                LOGGER.warning("%s Falling back to %s.", str(error), report_path)
+                strain_row = build_strain_row(
+                    args.accession,
+                    crispr_records,
+                    contig_summaries,
+                    status="done",
+                    warnings=warnings,
+                )
+                contig_rows = build_contig_rows(contig_summaries)
+                crispr_rows = build_crispr_rows(crispr_records)
+        if "strain_row" not in locals():
+            LOGGER.warning(str(error))
+            if fallback_error is not None:
+                LOGGER.warning(str(fallback_error))
+            strain_row = build_strain_row(
+                args.accession,
+                [],
+                [],
+                status="failed",
+                warnings=["ccfinder_summary_failed"],
+            )
+            contig_rows = []
+            crispr_rows = []
+    else:
         strain_row = build_strain_row(
             args.accession,
             crispr_records,
@@ -388,17 +515,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         contig_rows = build_contig_rows(contig_summaries)
         crispr_rows = build_crispr_rows(crispr_records)
-    except ValueError as error:
-        LOGGER.warning(str(error))
-        strain_row = build_strain_row(
-            args.accession,
-            [],
-            [],
-            status="failed",
-            warnings=["ccfinder_summary_failed"],
-        )
-        contig_rows = []
-        crispr_rows = []
 
     write_tsv(args.outdir / "ccfinder_strains.tsv", STRAIN_COLUMNS, [strain_row])
     write_tsv(args.outdir / "ccfinder_contigs.tsv", CONTIG_COLUMNS, contig_rows)

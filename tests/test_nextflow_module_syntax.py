@@ -154,6 +154,18 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("printf '%s\\n' '            translated_args+=(-out \"\\$2\")'", module_text)
         self.assertIn('export PATH="\\$PWD/local_bin:\\$PATH"', module_text)
 
+    def test_summarise_ccfinder_stages_output_directory_for_tsv_fallback(self) -> None:
+        """Require CRISPR summarisation to stage the output directory as well as JSON."""
+        module_text = (MODULES_DIR / "summarise_ccfinder.nf").read_text(encoding="utf-8")
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "per_sample_annotation.nf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("tuple val(meta), path(ccfinder_dir), path(result_json)", module_text)
+        self.assertIn('--ccfinder-dir "${ccfinder_dir}"', module_text)
+        self.assertIn("CCFINDER.out.results.map { meta, ccfinder_dir, result_json, log ->", workflow_text)
+        self.assertIn("tuple(meta, ccfinder_dir, result_json)", workflow_text)
+
     def test_cohort_ani_combines_busco_summaries_per_lineage(self) -> None:
         """Require the ANI workflow to aggregate BUSCO rows into lineage tables."""
         workflow_path = ROOT / "subworkflows" / "local" / "cohort_ani.nf"
