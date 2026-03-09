@@ -44,6 +44,9 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = LOCAL_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn("params.max_memory = 16.GB", config_text)
+        self.assertIn("withName: EGGNOG", config_text)
+        self.assertIn("cpus = 4", config_text)
+        self.assertIn("memory = 8.GB", config_text)
 
     def test_reporting_assets_overwrite_on_resumed_runs(self) -> None:
         """Allow resumed local runs to rewrite pipeline info artefacts safely."""
