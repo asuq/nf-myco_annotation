@@ -172,6 +172,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('genome_path="\\$(cd "\\$(dirname "${genome}")" && pwd)/\\$(basename "${genome}")"', module_text)
         self.assertIn('genome_name="\\$(basename "${genome}")"', module_text)
+        self.assertIn('while IFS= read -r contig_id; do', module_text)
+        self.assertIn('ln -sf "\\${run_root}/\\${contig_id}.fna" "\\${task_root}/\\${contig_id}.fna"', module_text)
+        self.assertIn("awk '/^>/{", module_text)
+        self.assertIn('sub(/\\\\.[0-9]+\\$/, "", contig_id)', module_text)
         self.assertIn('cp "\\${genome_path}" "\\${genome_name}"', module_text)
         self.assertIn('perl "\\${ccfinder_root}/CRISPRCasFinder.pl" -in "\\${genome_name}" \\', module_text)
         self.assertIn(
