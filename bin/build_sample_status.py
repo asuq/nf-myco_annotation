@@ -17,7 +17,7 @@ import build_master_table as table_helpers
 LOGGER = logging.getLogger(__name__)
 PROKKA_MANIFEST_COLUMNS = ("exit_code", "gff_size", "faa_size")
 PADLOC_MANIFEST_COLUMNS = ("exit_code", "result_file_count")
-EGGNOG_MANIFEST_COLUMNS = ("exit_code", "annotations_size", "result_file_count")
+EGGNOG_MANIFEST_COLUMNS = ("status", "warnings", "exit_code", "annotations_size", "result_file_count")
 STATUS_COLUMNS_WITH_NA_DEFAULT = {"gcode", "low_quality"}
 
 
@@ -519,6 +519,45 @@ def eggnog_outputs_present(row: dict[str, str], accession: str) -> bool:
     return annotations_size > 0
 
 
+def derive_eggnog_status(
+    accession: str,
+    *,
+    manifest_index: dict[str, dict[str, str]],
+    manifest_requested: bool,
+    gcode_value: str,
+) -> tuple[str, list[str]]:
+    """Return eggNOG status, including explicit acceptance short-circuit rows."""
+    if not manifest_requested:
+        return "na", []
+    if gcode_value == "NA":
+        return "skipped", []
+
+    row = manifest_index.get(accession)
+    if row is None:
+        return "failed", ["missing_eggnog_result"]
+
+    manifest_status = (row.get("status") or "").strip()
+    if manifest_status == "skipped":
+        warnings = table_helpers.split_tokens(row.get("warnings", ""))
+        return "skipped", warnings or ["eggnog_short_circuit"]
+    if manifest_status not in {"", "done", "failed"}:
+        raise SampleStatusError(
+            f"eggNOG manifest has invalid status for accession {accession!r}: {manifest_status!r}."
+        )
+
+    return derive_annotation_status(
+        accession,
+        manifest_index=manifest_index,
+        manifest_requested=manifest_requested,
+        gcode_value=gcode_value,
+        table_name="eggNOG manifest",
+        failed_warning="eggnog_failed",
+        missing_warning="missing_eggnog_result",
+        has_outputs=eggnog_outputs_present,
+        missing_outputs_warning="missing_eggnog_outputs",
+    )
+
+
 def build_status_row(
     sample_row: dict[str, str],
     *,
@@ -642,15 +681,11 @@ def build_status_row(
     row["padloc_status"] = padloc_status
     warnings.extend(padloc_warnings)
 
-    eggnog_status, eggnog_warnings = derive_annotation_status(
+    eggnog_status, eggnog_warnings = derive_eggnog_status(
         accession,
         manifest_index=eggnog_index,
         manifest_requested=eggnog_requested,
         gcode_value=gcode_value,
-        table_name="eggNOG manifest",
-        failed_warning="eggnog_failed",
-        missing_warning="missing_eggnog_result",
-        has_outputs=eggnog_outputs_present,
     )
     row["eggnog_status"] = eggnog_status
     warnings.extend(eggnog_warnings)
