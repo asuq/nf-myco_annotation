@@ -26,6 +26,22 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("ani_score_profile = 'default'", config_text)
         self.assertIn("use_biocontainers = true", config_text)
         self.assertIn("padloc_db = null", config_text)
+        self.assertIn("db_root = null", config_text)
+        self.assertIn("download_missing_databases = false", config_text)
+        self.assertIn("force_runtime_database_rebuild = false", config_text)
+        self.assertIn("runtime_db_helper_container = null", config_text)
+        self.assertIn("runtime_db_link_mode = 'copy'", config_text)
+        self.assertIn("runtime_db_scratch_root = null", config_text)
+        self.assertIn("taxdump_source = null", config_text)
+        self.assertIn("taxdump_version = null", config_text)
+        self.assertIn("checkm2_source = null", config_text)
+        self.assertIn("checkm2_version = null", config_text)
+        self.assertIn("busco_source_root = null", config_text)
+        self.assertIn("busco_version = null", config_text)
+        self.assertIn("eggnog_source = null", config_text)
+        self.assertIn("eggnog_version = null", config_text)
+        self.assertIn("padloc_source = null", config_text)
+        self.assertIn("padloc_version = null", config_text)
         self.assertIn("eggnog_only_accessions = null", config_text)
         self.assertIn("singularity_cache_dir = null", config_text)
         self.assertIn("singularity_run_options = ''", config_text)
@@ -114,6 +130,23 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
         self.assertIn("withName: STAGE_INPUTS {\n        container = params.seqtk_container", config_text)
         self.assertIn("withName: CALCULATE_ASSEMBLY_STATS {\n        container = params.seqtk_container", config_text)
+
+    def test_runtime_database_prep_processes_use_the_dedicated_helper_image(self) -> None:
+        """Keep the prep entry point on the dedicated runtime DB helper image."""
+        config_text = BASE_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "withName: PREP_RUNTIME_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.runtime_db_helper_container",
+            config_text,
+        )
+        self.assertIn(
+            "withName: PREP_BUSCO_DATABASES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.runtime_db_helper_container",
+            config_text,
+        )
+        self.assertIn(
+            "withName: MERGE_RUNTIME_DATABASE_REPORTS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.runtime_db_helper_container",
+            config_text,
+        )
 
     def test_docker_profile_forces_amd64_ccfinder_on_arm_hosts(self) -> None:
         """Allow Apple Silicon Docker runs to pull the pinned CCFINDER image."""
