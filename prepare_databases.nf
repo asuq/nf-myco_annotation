@@ -1,8 +1,19 @@
 #!/usr/bin/env nextflow
 
 nextflow.enable.dsl = 2
-nextflow.enable.configProcessNamesValidation = false
 
+/*
+ * Register the main workflow subworkflows so shared config selectors remain
+ * valid without weakening selector validation globally.
+ */
+include { BUSCO_DATASET_PREP as UNUSED_BUSCO_DATASET_PREP } from './subworkflows/local/busco_dataset_prep'
+include { COHORT_16S as UNUSED_COHORT_16S } from './subworkflows/local/cohort_16s'
+include { COHORT_ANI as UNUSED_COHORT_ANI } from './subworkflows/local/cohort_ani'
+include { COHORT_TAXONOMY as UNUSED_COHORT_TAXONOMY } from './subworkflows/local/cohort_taxonomy'
+include { FINAL_OUTPUTS as UNUSED_FINAL_OUTPUTS } from './subworkflows/local/final_outputs'
+include { INPUT_VALIDATION_AND_STAGING as UNUSED_INPUT_VALIDATION_AND_STAGING } from './subworkflows/local/input_validation_and_staging'
+include { PER_SAMPLE_ANNOTATION as UNUSED_PER_SAMPLE_ANNOTATION } from './subworkflows/local/per_sample_annotation'
+include { PER_SAMPLE_QC as UNUSED_PER_SAMPLE_QC } from './subworkflows/local/per_sample_qc'
 include { RUNTIME_DATABASE_PREP } from './subworkflows/local/runtime_database_prep'
 
 workflow {
