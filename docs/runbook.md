@@ -32,12 +32,10 @@ Shared helper image requirement:
 
 Runtime database prep helper image:
 
-- `params.runtime_db_helper_container` is the optional dedicated helper image
-  for `prepare_databases.nf`
+- `prepare_databases.nf` always uses the dedicated helper image
+  `quay.io/asuq1617/nf-myco-db:0.1`
 - the repo-owned Dockerfile for this image lives under
   `docker/runtime_db_helper/Dockerfile`
-- if `params.runtime_db_helper_container` is unset, the prep workflow runs on
-  the host and requires `aria2c` plus Python 3.12 on `PATH`
 
 ## Runtime database preparation
 
@@ -89,7 +87,7 @@ under `--outdir` on success.
 - `local`: local executor
 - `slurm`: SLURM executor with optional `params.slurm_queue`, `params.slurm_account`, and `params.slurm_cluster_options`
 - `singularity`: Singularity execution with optional `params.singularity_cache_dir` and `params.singularity_run_options`
-- `oist`: standalone OIST HPC profile with SLURM and Singularity enabled
+- `oist`: standalone OIST HPC profile with SLURM and Singularity enabled, using the submitting user account rather than `params.slurm_account`
 - `test`: local fixture profile for `-stub-run`
 
 ## Minimal test path
@@ -119,6 +117,7 @@ Use `bin/run_acceptance_tests.py` for the layered acceptance workflow:
 - `stub`: run the full-pipeline `-stub-run` smoke test
 - `local`: run the generated positive cohort with `-profile debug,local,docker`
 - `slurm`: run the same cohort with `-profile debug,slurm,singularity` and compare its stable outputs against the latest successful local run
+- `dbprep-slurm`: run `prepare_databases.nf` on SLURM, download the curated runtime databases, and validate the prepared database tree
 - `all`: run `prepare`, `unit`, `stub`, `local`, and `slurm` in sequence
 
 Tracked cohort descriptors live under `assets/testdata/acceptance/`. Large
@@ -170,6 +169,16 @@ python3 bin/run_acceptance_tests.py slurm \
   --padloc-db /path/to/padloc-db \
   --slurm-queue short \
   --slurm-account my_account
+```
+
+Example SLURM database-prep run:
+
+```bash
+python3 bin/run_acceptance_tests.py dbprep-slurm \
+  --dbprep-profile oist \
+  --work-root /path/to/work-root \
+  --slurm-queue short \
+  --singularity-cache-dir /path/to/singularity-cache
 ```
 
 ## Example real runs

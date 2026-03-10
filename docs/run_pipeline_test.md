@@ -16,6 +16,10 @@ For runtime database preparation, use `nextflow run prepare_databases.nf`
 instead. The wrapper's `prepare` mode only prepares the tracked acceptance
 cohort and its cached source genomes.
 
+For a scripted SLURM validation of runtime database preparation itself, use the
+wrapper's `dbprep-slurm` mode. That mode runs `prepare_databases.nf`, downloads
+the curated runtime databases, and validates the prepared database tree.
+
 For OIST or any other full-eggNOG HPC validation, prefer raw `nextflow run .`
 over this wrapper. The wrapper's SLURM path remains centred on the debug
 acceptance cohort and local-baseline comparison.
@@ -23,7 +27,7 @@ acceptance cohort and local-baseline comparison.
 ## Command
 
 ```bash
-bin/run_pipeline_test.sh [--dry-run] <prepare|unit|stub|local|slurm|all> [args...]
+bin/run_pipeline_test.sh [--dry-run] <prepare|unit|stub|local|slurm|dbprep-slurm|all> [args...]
 ```
 
 Supported modes:
@@ -33,6 +37,7 @@ Supported modes:
 - `stub`: run the stub smoke test through the acceptance harness
 - `local`: run the real-data acceptance cohort with the local profile
 - `slurm`: run the real-data acceptance cohort with the SLURM profile and compare against the latest local baseline
+- `dbprep-slurm`: run the runtime database prep workflow on SLURM and validate the prepared database tree
 - `all`: run `prepare`, `unit`, `stub`, `local`, and `slurm` in sequence
 
 Wrapper options:
@@ -58,8 +63,8 @@ Always required:
 
 Required by pipeline-running modes:
 
-- `nextflow` for `stub`, `local`, `slurm`, and `all`
-- `sbatch` for `slurm` and `all`
+- `nextflow` for `stub`, `local`, `slurm`, `dbprep-slurm`, and `all`
+- `sbatch` for `slurm`, `dbprep-slurm`, and `all`
 
 Required by real-data modes:
 
@@ -131,6 +136,16 @@ bin/run_pipeline_test.sh slurm \
   --padloc-db /path/to/padloc-db \
   --slurm-queue short \
   --slurm-account my_account
+```
+
+Run the SLURM runtime database-prep validation:
+
+```bash
+bin/run_pipeline_test.sh dbprep-slurm \
+  --dbprep-profile oist \
+  --work-root /path/to/work-root \
+  --slurm-queue short \
+  --singularity-cache-dir /path/to/singularity-cache
 ```
 
 Run the full layered workflow:

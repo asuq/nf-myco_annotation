@@ -1099,7 +1099,6 @@ Recommended params include:
 - `params.eggnog_db`
 - `params.outdir`
 - `params.ani_threshold`
-- `params.use_biocontainers`
 
 ---
 
