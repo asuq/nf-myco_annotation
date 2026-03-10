@@ -354,6 +354,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         busco_module_text = (MODULES_DIR / "download_busco_databases.nf").read_text(
             encoding="utf-8"
         )
+        checkm2_module_text = (MODULES_DIR / "download_checkm2_database.nf").read_text(
+            encoding="utf-8"
+        )
         finalise_module_text = (MODULES_DIR / "finalise_runtime_database.nf").read_text(
             encoding="utf-8"
         )
@@ -364,6 +367,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('script_path="/usr/local/bin/prepare_runtime_databases.py"', prepare_module_text)
         self.assertIn("--taxdump-dest", prepare_module_text)
         self.assertIn('/usr/local/bin/python3 "\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
+        self.assertIn('normalise_download_layout() {', checkm2_module_text)
+        self.assertIn('nested_root="\\$1/CheckM2_database"', checkm2_module_text)
         self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
         self.assertIn('script_path="/usr/local/bin/finalise_runtime_database.py"', finalise_module_text)
         self.assertIn('/usr/local/bin/python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
