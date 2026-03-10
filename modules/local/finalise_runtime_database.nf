@@ -35,9 +35,9 @@ process FINALISE_RUNTIME_DATABASE {
         helper_args+=(--busco-lineage "\${lineage}")
     done < "${lineages_file}"
 
-    python3 "\${script_path}" "\${helper_args[@]}"
+    "\${script_path}" "\${helper_args[@]}"
 
-    python_version="\$(python3 --version 2>&1 | sed 's/^Python //')"
+    python_version="\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
     {
         printf '"%s":\n' "${task.process}"
         printf '  python: "%s"\n' "\${python_version}"

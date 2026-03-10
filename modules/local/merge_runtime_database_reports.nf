@@ -26,14 +26,14 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
     done
-    python3 "\${script_path}" \
+    "\${script_path}" \
         --output-report runtime_database_report.tsv \
         --output-args nextflow_args.txt \
         "\${report_args[@]}"
 
     {
         printf '"%s":\n' "${task.process}"
-        printf '  python: "%s"\n' "\$(python3 --version 2>&1 | sed 's/^Python //')"
+        printf '  python: "%s"\n' "\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
         printf '  helper: "%s"\n' 'bin/merge_runtime_database_reports.py'
     } > versions.yml
     """
@@ -45,7 +45,7 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
     done
-    python3 "\${script_path}" \
+    "\${script_path}" \
         --output-report runtime_database_report.tsv \
         --output-args nextflow_args.txt \
         "\${report_args[@]}"

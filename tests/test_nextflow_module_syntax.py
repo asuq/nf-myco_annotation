@@ -344,7 +344,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("buscoRequest = destinations.busco_root", workflow_text)
         self.assertIn("eggnogRequest = destinations.eggnog", workflow_text)
         self.assertIn("padlocRequest = destinations.padloc", workflow_text)
-        self.assertIn('python3 "\\${script_path}" \\', merge_module_text)
+        self.assertIn('"\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_modules_delegate_to_python_helpers(self) -> None:
         """Require the prep workflow to keep validation logic out of Groovy."""
@@ -363,12 +363,12 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('script_path="${projectDir}/bin/prepare_runtime_databases.py"', prepare_module_text)
         self.assertIn("--taxdump-dest", prepare_module_text)
-        self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
+        self.assertIn('"\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
         self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
         self.assertIn('script_path="${projectDir}/bin/finalise_runtime_database.py"', finalise_module_text)
-        self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
+        self.assertIn('"\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
         self.assertIn('script_path="${projectDir}/bin/merge_runtime_database_reports.py"', merge_module_text)
-        self.assertIn('python3 "\\${script_path}" \\', merge_module_text)
+        self.assertIn('"\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_respects_configured_busco_lineages(self) -> None:
         """Require the prep workflow to forward params.busco_lineages to BUSCO prep."""

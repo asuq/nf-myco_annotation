@@ -39,9 +39,9 @@ process PREP_TAXDUMP_DATABASE {
         helper_args+=(--scratch-root "${scratch_root}")
     fi
 
-    python3 "\${script_path}" "\${helper_args[@]}"
+    "\${script_path}" "\${helper_args[@]}"
 
-    python_version="\$(python3 --version 2>&1 | sed 's/^Python //')"
+    python_version="\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
     printf '%s\n' \
         '"${task.process}":' \
         "  python: \"\${python_version}\"" \
