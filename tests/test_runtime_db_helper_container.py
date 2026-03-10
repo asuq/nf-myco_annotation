@@ -35,6 +35,7 @@ class RuntimeDbHelperContainerContractTestCase(unittest.TestCase):
         self.assertIn("FROM python:3.12-slim", dockerfile_text)
         self.assertIn("aria2", dockerfile_text)
         self.assertIn("COPY bin/prepare_runtime_databases.py", dockerfile_text)
+        self.assertIn("COPY bin/finalise_runtime_database.py", dockerfile_text)
         self.assertIn("COPY bin/merge_runtime_database_reports.py", dockerfile_text)
         self.assertIn("COPY assets/runtime_database_sources.json", dockerfile_text)
         self.assertIn(
@@ -85,6 +86,7 @@ class RuntimeDbHelperContainerContractTestCase(unittest.TestCase):
                     "set -euo pipefail; "
                     "command -v aria2c >/dev/null; "
                     "command -v prepare_runtime_databases.py >/dev/null; "
+                    "command -v finalise_runtime_database.py >/dev/null; "
                     "command -v merge_runtime_database_reports.py >/dev/null; "
                     "test -f /opt/nf-myco_annotation/runtime_database_sources.json"
                 ),

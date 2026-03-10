@@ -42,7 +42,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "padloc_db": Path("/tmp/padloc"),
             "resume": False,
             "prepare_busco_datasets": False,
-            "busco_download_dir": Path("/tmp/busco"),
+            "busco_db": Path("/tmp/busco"),
             "slurm_queue": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
@@ -56,7 +56,11 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         defaults = {
             "resume": False,
             "dbprep_profile": "slurm,singularity",
-            "db_root": None,
+            "taxdump": Path("/tmp/taxdump"),
+            "checkm2_db": Path("/tmp/checkm2"),
+            "busco_db": Path("/tmp/busco"),
+            "eggnog_db": Path("/tmp/eggnog"),
+            "padloc_db": Path("/tmp/padloc"),
             "slurm_queue": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
@@ -509,7 +513,11 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         """Build the dedicated runtime database prep command."""
         args = self.make_dbprep_args(
             dbprep_profile="oist",
-            db_root=Path("/tmp/prepared-db"),
+            taxdump=Path("/tmp/taxdump"),
+            checkm2_db=Path("/tmp/checkm2"),
+            busco_db=Path("/tmp/busco"),
+            eggnog_db=Path("/tmp/eggnog"),
+            padloc_db=Path("/tmp/padloc"),
             singularity_cache_dir="/tmp/singularity-cache",
             singularity_run_options="bind=/db",
         )
@@ -518,14 +526,15 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             profile=args.dbprep_profile,
             work_dir=Path("/tmp/dbprep-work"),
             outdir=Path("/tmp/dbprep-results"),
-            db_root=Path("/tmp/prepared-db"),
             args=args,
         )
 
         self.assertEqual(command[:4], ["nextflow", "run", "prepare_databases.nf", "-profile"])
         self.assertIn("oist", command)
-        self.assertIn("--db_root", command)
-        self.assertIn("/tmp/prepared-db", command)
+        self.assertIn("--taxdump", command)
+        self.assertIn(str(Path("/tmp/taxdump").resolve()), command)
+        self.assertIn("--busco_db", command)
+        self.assertIn(str(Path("/tmp/busco").resolve()), command)
         self.assertIn("--download_missing_databases", command)
         self.assertIn("true", command)
         self.assertIn("--singularity_cache_dir", command)
@@ -536,33 +545,43 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
     def test_assert_dbprep_database_tree_accepts_complete_layout(self) -> None:
         """Accept a prepared runtime database tree with the required markers."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
-            db_root = Path(tmpdir_name)
-            (db_root / "taxdump").mkdir()
-            (db_root / "checkm2").mkdir()
-            (db_root / "busco" / "bacillota_odb12").mkdir(parents=True)
-            (db_root / "busco" / "mycoplasmatota_odb12").mkdir(parents=True)
-            (db_root / "eggnog").mkdir()
-            (db_root / "padloc" / "hmm").mkdir(parents=True)
+            tmpdir = Path(tmpdir_name)
+            taxdump_dir = tmpdir / "taxdump"
+            checkm2_dir = tmpdir / "checkm2"
+            busco_dir = tmpdir / "busco"
+            eggnog_dir = tmpdir / "eggnog"
+            padloc_dir = tmpdir / "padloc"
+            taxdump_dir.mkdir()
+            checkm2_dir.mkdir()
+            (busco_dir / "bacillota_odb12").mkdir(parents=True)
+            (busco_dir / "mycoplasmatota_odb12").mkdir(parents=True)
+            eggnog_dir.mkdir()
+            (padloc_dir / "hmm").mkdir(parents=True)
 
             for path in (
-                db_root / "taxdump" / "names.dmp",
-                db_root / "taxdump" / "nodes.dmp",
-                db_root / "checkm2" / "CheckM2_database.dmnd",
-                db_root / "busco" / "bacillota_odb12" / "dataset.cfg",
-                db_root / "busco" / "mycoplasmatota_odb12" / "dataset.cfg",
-                db_root / "eggnog" / "eggnog.db",
-                db_root / "eggnog" / "eggnog_proteins.dmnd",
-                db_root / "padloc" / "hmm" / "padlocdb.hmm",
-                db_root / "taxdump" / ".nf_myco_ready.json",
-                db_root / "checkm2" / ".nf_myco_ready.json",
-                db_root / "busco" / "bacillota_odb12" / ".nf_myco_ready.json",
-                db_root / "busco" / "mycoplasmatota_odb12" / ".nf_myco_ready.json",
-                db_root / "eggnog" / ".nf_myco_ready.json",
-                db_root / "padloc" / ".nf_myco_ready.json",
+                taxdump_dir / "names.dmp",
+                taxdump_dir / "nodes.dmp",
+                checkm2_dir / "CheckM2_database.dmnd",
+                busco_dir / "bacillota_odb12" / "dataset.cfg",
+                busco_dir / "mycoplasmatota_odb12" / "dataset.cfg",
+                eggnog_dir / "eggnog.db",
+                eggnog_dir / "eggnog_proteins.dmnd",
+                padloc_dir / "hmm" / "padlocdb.hmm",
+                taxdump_dir / ".nf_myco_ready.json",
+                checkm2_dir / ".nf_myco_ready.json",
+                busco_dir / ".nf_myco_ready.json",
+                eggnog_dir / ".nf_myco_ready.json",
+                padloc_dir / ".nf_myco_ready.json",
             ):
                 path.write_text("stub\n", encoding="utf-8")
 
-            run_acceptance_tests.assert_dbprep_database_tree(db_root)
+            run_acceptance_tests.assert_dbprep_database_tree(
+                taxdump_dir,
+                checkm2_dir,
+                busco_dir,
+                eggnog_dir,
+                padloc_dir,
+            )
 
     def test_assert_dbprep_report_contract_requires_all_components(self) -> None:
         """Reject prep reports that omit one required runtime database component."""
@@ -574,8 +593,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 [
                     {"component": "taxdump", "status": "prepared", "source": "stub", "destination": "/db/taxdump", "details": "ok"},
                     {"component": "checkm2", "status": "prepared", "source": "stub", "destination": "/db/checkm2", "details": "ok"},
-                    {"component": "busco:bacillota_odb12", "status": "prepared", "source": "stub", "destination": "/db/busco/bacillota_odb12", "details": "ok"},
-                    {"component": "busco:mycoplasmatota_odb12", "status": "prepared", "source": "stub", "destination": "/db/busco/mycoplasmatota_odb12", "details": "ok"},
                     {"component": "busco_root", "status": "prepared", "source": "derived", "destination": "/db/busco", "details": "ok"},
                     {"component": "eggnog", "status": "prepared", "source": "stub", "destination": "/db/eggnog", "details": "ok"},
                 ],
@@ -633,8 +650,16 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "dbprep-slurm",
                 "--dbprep-profile",
                 "oist",
-                "--db-root",
-                "/tmp/db-root",
+                "--taxdump",
+                "/tmp/taxdump",
+                "--checkm2-db",
+                "/tmp/checkm2",
+                "--busco-db",
+                "/tmp/busco",
+                "--eggnog-db",
+                "/tmp/eggnog",
+                "--padloc-db",
+                "/tmp/padloc",
                 "--singularity-cache-dir",
                 "/tmp/singularity-cache",
             ]
@@ -642,7 +667,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
         self.assertEqual(args.command, "dbprep-slurm")
         self.assertEqual(args.dbprep_profile, "oist")
-        self.assertEqual(args.db_root, Path("/tmp/db-root"))
+        self.assertEqual(args.busco_db, Path("/tmp/busco"))
         self.assertEqual(args.singularity_cache_dir, "/tmp/singularity-cache")
 
 

@@ -306,7 +306,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("--taxdump", stdout)
             self.assertIn("--checkm2_db", stdout)
-            self.assertIn("--busco_download_dir", stdout)
+            self.assertIn("--busco_db", stdout)
             self.assertIn("--eggnog_db", stdout)
             self.assertIn("--padloc_db", stdout)
 

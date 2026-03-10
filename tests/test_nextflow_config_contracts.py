@@ -25,22 +25,12 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn("ani_score_profile = 'default'", config_text)
+        self.assertIn("busco_db = null", config_text)
         self.assertIn("padloc_db = null", config_text)
-        self.assertIn("db_root = null", config_text)
         self.assertIn("download_missing_databases = false", config_text)
         self.assertIn("force_runtime_database_rebuild = false", config_text)
-        self.assertIn("runtime_db_link_mode = 'copy'", config_text)
         self.assertIn("runtime_db_scratch_root = null", config_text)
-        self.assertIn("taxdump_source = null", config_text)
         self.assertIn("taxdump_version = null", config_text)
-        self.assertIn("checkm2_source = null", config_text)
-        self.assertIn("checkm2_version = null", config_text)
-        self.assertIn("busco_source_root = null", config_text)
-        self.assertIn("busco_version = null", config_text)
-        self.assertIn("eggnog_source = null", config_text)
-        self.assertIn("eggnog_version = null", config_text)
-        self.assertIn("padloc_source = null", config_text)
-        self.assertIn("padloc_version = null", config_text)
         self.assertIn("eggnog_only_accessions = null", config_text)
         self.assertIn("singularity_cache_dir = null", config_text)
         self.assertIn("singularity_run_options = ''", config_text)
@@ -140,15 +130,23 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
-            "withName: PREP_RUNTIME_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
+            "withName: PREP_TAXDUMP_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
             config_text,
         )
         self.assertIn(
-            "withName: PREP_BUSCO_DATABASES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
+            "withName: FINALISE_RUNTIME_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
             config_text,
         )
         self.assertIn(
             "withName: MERGE_RUNTIME_DATABASE_REPORTS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
+            config_text,
+        )
+        self.assertIn(
+            "withName: DOWNLOAD_CHECKM2_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.checkm2_container",
+            config_text,
+        )
+        self.assertIn(
+            "withName: DOWNLOAD_BUSCO_DATABASES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.busco_container",
             config_text,
         )
 

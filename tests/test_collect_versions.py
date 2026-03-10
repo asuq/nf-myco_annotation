@@ -81,7 +81,7 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "bacillota_odb12",
                     "--busco-lineage",
                     "mycoplasmatota_odb12",
-                    "--busco-download-dir",
+                    "--busco-db",
                     "/db/busco",
                     "--eggnog-db",
                     "/db/eggnog",

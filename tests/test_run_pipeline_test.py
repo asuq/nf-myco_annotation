@@ -55,7 +55,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/taxdump",
             "--checkm2-db",
             "/tmp/checkm2",
-            "--busco-download-dir",
+            "--busco-db",
             "/tmp/busco",
             "--eggnog-db",
             "/tmp/eggnog",
@@ -67,7 +67,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py local --taxdump /tmp/taxdump "
-            "--checkm2-db /tmp/checkm2 --busco-download-dir /tmp/busco "
+            "--checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
             "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc",
         )
         self.assertEqual(result.stderr, "")
@@ -106,7 +106,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/taxdump",
             "--checkm2-db",
             "/tmp/checkm2",
-            "--busco-download-dir",
+            "--busco-db",
             "/tmp/busco",
             "--eggnog-db",
             "/tmp/eggnog",
@@ -122,7 +122,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py slurm --taxdump /tmp/taxdump "
-            "--checkm2-db /tmp/checkm2 --busco-download-dir /tmp/busco "
+            "--checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
             "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc "
             "--singularity-cache-dir /tmp/singularity-cache "
             "--singularity-run-options bind=/db",
@@ -136,7 +136,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("This mode runs prepare_databases.nf on SLURM", result.stdout)
         self.assertIn("--dbprep-profile DBPREP_PROFILE", result.stdout)
-        self.assertIn("--db-root DB_ROOT", result.stdout)
+        self.assertIn("--busco-db BUSCO_DB", result.stdout)
 
     def test_wrapper_dry_run_dbprep_slurm_preserves_runtime_arguments(self) -> None:
         """Forward dbprep-slurm arguments unchanged during dry-run output."""
@@ -145,8 +145,16 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "dbprep-slurm",
             "--dbprep-profile",
             "oist",
-            "--db-root",
-            "/tmp/db-root",
+            "--taxdump",
+            "/tmp/taxdump",
+            "--checkm2-db",
+            "/tmp/checkm2",
+            "--busco-db",
+            "/tmp/busco",
+            "--eggnog-db",
+            "/tmp/eggnog",
+            "--padloc-db",
+            "/tmp/padloc",
             "--slurm-queue",
             "short",
             "--singularity-cache-dir",
@@ -157,7 +165,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py dbprep-slurm --dbprep-profile oist "
-            "--db-root /tmp/db-root --slurm-queue short "
+            "--taxdump /tmp/taxdump --checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
+            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc --slurm-queue short "
             "--singularity-cache-dir /tmp/singularity-cache",
         )
         self.assertEqual(result.stderr, "")

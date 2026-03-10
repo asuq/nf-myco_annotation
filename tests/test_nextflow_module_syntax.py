@@ -309,46 +309,52 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         matches: list[str] = []
         for path in (
             MODULES_DIR / "prepare_runtime_database.nf",
-            MODULES_DIR / "prepare_busco_databases.nf",
+            MODULES_DIR / "download_checkm2_database.nf",
+            MODULES_DIR / "download_busco_databases.nf",
+            MODULES_DIR / "download_eggnog_database.nf",
+            MODULES_DIR / "download_padloc_database.nf",
+            MODULES_DIR / "finalise_runtime_database.nf",
             MODULES_DIR / "merge_runtime_database_reports.nf",
         ):
             matches.extend(find_raw_command_substitutions(path))
 
         self.assertEqual(matches, [])
 
-    def test_prepare_databases_requires_db_root_and_busco_lineages(self) -> None:
+    def test_prepare_databases_requires_a_database_destination_and_busco_lineages(self) -> None:
         """Require the separate prep entry point to validate its core params."""
         workflow_text = (ROOT / "prepare_databases.nf").read_text(encoding="utf-8")
 
-        self.assertIn('if (!params.db_root) {', workflow_text)
-        self.assertIn('error "params.db_root is required."', workflow_text)
+        self.assertIn("At least one database destination must be set for prepare_databases.nf.", workflow_text)
         self.assertIn("params.busco_lineages must be a non-empty list.", workflow_text)
 
-    def test_prepare_databases_uses_canonical_subdirectories_under_db_root(self) -> None:
-        """Require the prep workflow to derive stable destinations beneath db_root."""
+    def test_prepare_databases_uses_main_database_params_directly(self) -> None:
+        """Require the prep workflow to reuse the main DB params directly."""
         workflow_text = (ROOT / "prepare_databases.nf").read_text(encoding="utf-8")
         merge_module_text = (MODULES_DIR / "merge_runtime_database_reports.nf").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn("dbRootFile.mkdirs()", workflow_text)
-        self.assertIn("taxdumpRequest = Channel.of(", workflow_text)
-        self.assertIn("checkm2Request = Channel.of(", workflow_text)
-        self.assertIn("buscoRequest = Channel.of(", workflow_text)
-        self.assertIn("eggnogRequest = Channel.of(", workflow_text)
-        self.assertIn("padlocRequest = Channel.of(", workflow_text)
-        self.assertIn("--taxdump ${db_root}/taxdump", merge_module_text)
-        self.assertIn("--checkm2_db ${db_root}/checkm2", merge_module_text)
-        self.assertIn("--busco_download_dir ${db_root}/busco", merge_module_text)
-        self.assertIn("--eggnog_db ${db_root}/eggnog", merge_module_text)
-        self.assertIn("--padloc_db ${db_root}/padloc", merge_module_text)
+        self.assertIn("taxdump   : normaliseDestination.call(params.taxdump)", workflow_text)
+        self.assertIn("checkm2   : normaliseDestination.call(params.checkm2_db)", workflow_text)
+        self.assertIn("busco_root: normaliseDestination.call(params.busco_db)", workflow_text)
+        self.assertIn("eggnog    : normaliseDestination.call(params.eggnog_db)", workflow_text)
+        self.assertIn("padloc    : normaliseDestination.call(params.padloc_db)", workflow_text)
+        self.assertIn("taxdumpRequest = destinations.taxdump", workflow_text)
+        self.assertIn("checkm2Request = destinations.checkm2", workflow_text)
+        self.assertIn("buscoRequest = destinations.busco_root", workflow_text)
+        self.assertIn("eggnogRequest = destinations.eggnog", workflow_text)
+        self.assertIn("padlocRequest = destinations.padloc", workflow_text)
+        self.assertIn('python3 "\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_modules_delegate_to_python_helpers(self) -> None:
         """Require the prep workflow to keep validation logic out of Groovy."""
         prepare_module_text = (MODULES_DIR / "prepare_runtime_database.nf").read_text(
             encoding="utf-8"
         )
-        busco_module_text = (MODULES_DIR / "prepare_busco_databases.nf").read_text(
+        busco_module_text = (MODULES_DIR / "download_busco_databases.nf").read_text(
+            encoding="utf-8"
+        )
+        finalise_module_text = (MODULES_DIR / "finalise_runtime_database.nf").read_text(
             encoding="utf-8"
         )
         merge_module_text = (MODULES_DIR / "merge_runtime_database_reports.nf").read_text(
@@ -357,21 +363,25 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('script_path="\\$(command -v prepare_runtime_databases.py)"', prepare_module_text)
         self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
-        self.assertIn('script_path="\\$(command -v prepare_runtime_databases.py)"', busco_module_text)
-        self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', busco_module_text)
+        self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
+        self.assertIn('script_path="\\$(command -v finalise_runtime_database.py)"', finalise_module_text)
+        self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
         self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
         self.assertIn('python3 "\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_respects_configured_busco_lineages(self) -> None:
         """Require the prep workflow to forward params.busco_lineages to BUSCO prep."""
         workflow_text = (ROOT / "prepare_databases.nf").read_text(encoding="utf-8")
-        busco_module_text = (MODULES_DIR / "prepare_busco_databases.nf").read_text(
+        busco_module_text = (MODULES_DIR / "download_busco_databases.nf").read_text(
+            encoding="utf-8"
+        )
+        finalise_module_text = (MODULES_DIR / "finalise_runtime_database.nf").read_text(
             encoding="utf-8"
         )
 
         self.assertIn("params.busco_lineages as List<String>", workflow_text)
-        self.assertIn("cat <<'EOF' > busco_lineages.txt", busco_module_text)
-        self.assertIn("helper_args+=(--busco-lineage-source", busco_module_text)
+        self.assertIn("""printf '%s\\n' "\\${lineages[@]}" > lineages.txt""", busco_module_text)
+        self.assertIn('helper_args+=(--busco-lineage "\\${lineage}")', finalise_module_text)
 
 
 if __name__ == "__main__":
