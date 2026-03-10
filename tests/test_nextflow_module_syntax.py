@@ -357,6 +357,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         checkm2_module_text = (MODULES_DIR / "download_checkm2_database.nf").read_text(
             encoding="utf-8"
         )
+        eggnog_module_text = (MODULES_DIR / "download_eggnog_database.nf").read_text(
+            encoding="utf-8"
+        )
         finalise_module_text = (MODULES_DIR / "finalise_runtime_database.nf").read_text(
             encoding="utf-8"
         )
@@ -370,6 +373,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('normalise_download_layout() {', checkm2_module_text)
         self.assertIn('nested_root="\\$1/CheckM2_database"', checkm2_module_text)
         self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
+        self.assertIn('download_eggnog_data.py.patched', eggnog_module_text)
+        self.assertIn('https://eggnog5.embl.de/download/emapperdb-', eggnog_module_text)
         self.assertIn('script_path="/usr/local/bin/finalise_runtime_database.py"', finalise_module_text)
         self.assertIn('/usr/local/bin/python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
         self.assertIn('script_path="/usr/local/bin/merge_runtime_database_reports.py"', merge_module_text)
