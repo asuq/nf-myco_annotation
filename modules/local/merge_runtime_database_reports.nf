@@ -26,7 +26,7 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
     done
-    "\${script_path}" \
+    /usr/local/bin/python3 "\${script_path}" \
         --output-report runtime_database_report.tsv \
         --output-args nextflow_args.txt \
         "\${report_args[@]}"
@@ -45,7 +45,7 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
     done
-    "\${script_path}" \
+    /usr/local/bin/python3 "\${script_path}" \
         --output-report runtime_database_report.tsv \
         --output-args nextflow_args.txt \
         "\${report_args[@]}"
