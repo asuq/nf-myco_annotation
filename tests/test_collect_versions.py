@@ -72,7 +72,7 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "--git-commit",
                     "abc1234",
                     "--container-engine",
-                    "apptainer",
+                    "singularity",
                     "--use-biocontainers",
                     "true",
                     "--checkm2-db",

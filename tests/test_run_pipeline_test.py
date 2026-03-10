@@ -88,6 +88,46 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertIn("Run the real-data local acceptance cohort.", result.stdout)
         self.assertIn("--checkm2-db CHECKM2_DB", result.stdout)
 
+    def test_wrapper_slurm_help_shows_singularity_runtime_flags(self) -> None:
+        """Expose renamed Singularity runtime flags through delegated help."""
+        result = self.run_wrapper("slurm", "--help")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("--singularity-cache-dir SINGULARITY_CACHE_DIR", result.stdout)
+        self.assertIn("--singularity-run-options SINGULARITY_RUN_OPTIONS", result.stdout)
+
+    def test_wrapper_dry_run_slurm_preserves_singularity_arguments(self) -> None:
+        """Forward renamed Singularity arguments unchanged during dry-run output."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "slurm",
+            "--taxdump",
+            "/tmp/taxdump",
+            "--checkm2-db",
+            "/tmp/checkm2",
+            "--busco-download-dir",
+            "/tmp/busco",
+            "--eggnog-db",
+            "/tmp/eggnog",
+            "--padloc-db",
+            "/tmp/padloc",
+            "--singularity-cache-dir",
+            "/tmp/singularity-cache",
+            "--singularity-run-options",
+            "bind=/db",
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            result.stdout.strip(),
+            "python3 bin/run_acceptance_tests.py slurm --taxdump /tmp/taxdump "
+            "--checkm2-db /tmp/checkm2 --busco-download-dir /tmp/busco "
+            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc "
+            "--singularity-cache-dir /tmp/singularity-cache "
+            "--singularity-run-options bind=/db",
+        )
+        self.assertEqual(result.stderr, "")
+
     def test_wrapper_has_valid_bash_syntax(self) -> None:
         """Pass Bash syntax validation."""
         result = subprocess.run(
