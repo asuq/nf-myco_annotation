@@ -26,7 +26,7 @@ DEFAULT_WORK_ROOT = ROOT_DIR / "assets" / "testdata" / "local" / "acceptance"
 DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "source_catalog.tsv"
 DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
 DEFAULT_LOCAL_PROFILE = "debug,local,docker"
-DEFAULT_SLURM_PROFILE = "debug,slurm,apptainer"
+DEFAULT_SLURM_PROFILE = "debug,slurm,singularity"
 REAL_RUN_NOTE = (
     "CRISPRCasFinder uses params.ccfinder_container from pipeline config; "
     "the acceptance harness does not override it."
@@ -684,8 +684,8 @@ def build_nextflow_command(
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
     maybe_add_parameter(command, "--slurm_account", args.slurm_account)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
-    maybe_add_parameter(command, "--apptainer_cache_dir", args.apptainer_cache_dir)
-    maybe_add_parameter(command, "--apptainer_run_options", args.apptainer_run_options)
+    maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
+    maybe_add_parameter(command, "--singularity_run_options", args.singularity_run_options)
     return command
 
 
@@ -1074,14 +1074,14 @@ def build_real_run_parser() -> argparse.ArgumentParser:
         help="Optional extra SLURM cluster options.",
     )
     parser.add_argument(
-        "--apptainer-cache-dir",
+        "--singularity-cache-dir",
         default=None,
-        help="Optional Apptainer cache directory.",
+        help="Optional Singularity cache directory.",
     )
     parser.add_argument(
-        "--apptainer-run-options",
+        "--singularity-run-options",
         default=None,
-        help="Optional extra Apptainer run options.",
+        help="Optional extra Singularity run options.",
     )
     return parser
 
