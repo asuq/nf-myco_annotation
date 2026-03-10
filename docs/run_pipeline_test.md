@@ -12,6 +12,10 @@ The wrapper does not re-implement pipeline logic. It forwards work to the
 acceptance harness, which remains the single source of truth for validation,
 Nextflow command construction, and output checks.
 
+For runtime database preparation, use `python3 bin/prepare_runtime_databases.py`
+instead. The wrapper's `prepare` mode only prepares the tracked acceptance
+cohort and its cached source genomes.
+
 ## Command
 
 ```bash
@@ -63,6 +67,10 @@ Required by real-data modes:
 
 CRISPRCasFinder still uses `params.ccfinder_container` from `nextflow.config`.
 The wrapper does not accept a separate container override.
+
+The wrapper does not prepare runtime databases such as taxdump, CheckM2,
+BUSCO, eggNOG, or PADLOC. Prepare those separately before real-data runs when
+they are not already available.
 
 Acceptance-backed `local`, `slurm`, and `all` runs now use the composable
 `debug` profile by default. That profile restricts eggNOG to the tracked smoke

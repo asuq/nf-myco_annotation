@@ -30,6 +30,48 @@ Shared helper image requirement:
 - local Docker and HPC Apptainer runs should reuse that one helper image to
   reduce container pulls
 
+## Runtime database preparation
+
+Use `bin/prepare_runtime_databases.py` when one or more runtime databases are
+missing on the target machine.
+
+- It is a standalone operator helper, not part of the normal pipeline runtime.
+- It accepts only caller-supplied local pinned sources.
+- It prepares databases in place under the final destination roots.
+- Archive extraction uses destination-local scratch by default, not system tmp.
+- A prepared destination is reusable only when it validates and contains
+  `.nf_myco_ready.json`.
+- Concurrent preparation is blocked by a per-destination lock sidecar ending in
+  `.nf_myco_prepare.lock`.
+
+Supported runtime databases:
+
+- taxdump
+- CheckM2
+- BUSCO lineage directories
+- eggNOG
+- PADLOC
+
+Example:
+
+```bash
+python3 bin/prepare_runtime_databases.py \
+  --taxdump-source /staged/db_sources/taxdump_20240914 \
+  --taxdump-dest /shared/db/taxdump_20240914 \
+  --checkm2-source /staged/db_sources/checkm2/CheckM2_database.dmnd \
+  --checkm2-dest /shared/db/checkm2 \
+  --busco-lineage-source bacillota_odb12=/staged/db_sources/busco/bacillota_odb12 \
+  --busco-lineage-source mycoplasmatota_odb12=/staged/db_sources/busco/mycoplasmatota_odb12 \
+  --busco-dest-root /shared/db/busco \
+  --eggnog-source /staged/db_sources/eggnog_data \
+  --eggnog-dest /shared/db/eggnog \
+  --padloc-source /staged/db_sources/padloc_data \
+  --padloc-dest /shared/db/padloc \
+  --report /shared/db/runtime_db_prepare.tsv
+```
+
+The helper prints a copy-pastable Nextflow argument block on success.
+
 ## Profiles
 
 - `debug`: composable behaviour profile that defaults eggNOG smoke runs to `GCA_000027325.1`
