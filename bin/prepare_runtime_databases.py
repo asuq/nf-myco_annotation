@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Prepare pinned runtime databases in operator-managed destinations."""
+"""Prepare runtime databases in operator-managed destinations."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import gzip
+import hashlib
 import json
 import logging
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 import tarfile
 import zipfile
@@ -17,7 +20,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence
+from urllib.parse import urlparse
 
 
 LOGGER = logging.getLogger(__name__)
@@ -26,6 +30,9 @@ LOCK_FILE_SUFFIX = ".nf_myco_prepare.lock"
 DEFAULT_BUSCO_LINEAGES = ("bacillota_odb12", "mycoplasmatota_odb12")
 REPORT_COLUMNS = ("component", "status", "source", "destination", "details")
 LINK_MODES = ("copy", "symlink", "hardlink")
+DEFAULT_REMOTE_SOURCE_MANIFEST = (
+    Path(__file__).resolve().parents[1] / "assets" / "runtime_database_sources.json"
+)
 
 
 class PrepareRuntimeDatabasesError(RuntimeError):
@@ -46,7 +53,7 @@ class PreparationRecord:
 
     component: str
     status: str
-    source: Path | None
+    source: str | None
     destination: Path
     details: str
 
@@ -58,14 +65,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description=(
-            "Prepare pinned runtime databases in operator-managed destinations "
-            "without relying on system tmp."
+            "Prepare runtime databases in operator-managed destinations without "
+            "relying on system tmp."
         )
     )
     parser.add_argument("--taxdump-source", type=Path, help="Pinned taxdump source path.")
     parser.add_argument("--taxdump-dest", type=Path, help="Final taxdump destination.")
+    parser.add_argument("--taxdump-version", default=None, help="Pinned remote taxdump version.")
     parser.add_argument("--checkm2-source", type=Path, help="CheckM2 database source path.")
     parser.add_argument("--checkm2-dest", type=Path, help="Final CheckM2 destination.")
+    parser.add_argument("--checkm2-version", default=None, help="Pinned remote CheckM2 version.")
     parser.add_argument(
         "--busco-lineage-source",
         action="append",
@@ -77,17 +86,31 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Final BUSCO lineage root directory.",
     )
+    parser.add_argument("--busco-version", default=None, help="Pinned remote BUSCO version.")
     parser.add_argument("--eggnog-source", type=Path, help="eggNOG database source path.")
     parser.add_argument("--eggnog-dest", type=Path, help="Final eggNOG destination.")
+    parser.add_argument("--eggnog-version", default=None, help="Pinned remote eggNOG version.")
     parser.add_argument("--padloc-source", type=Path, help="PADLOC database source path.")
     parser.add_argument("--padloc-dest", type=Path, help="Final PADLOC destination.")
+    parser.add_argument("--padloc-version", default=None, help="Pinned remote PADLOC version.")
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Allow missing sources to be downloaded from curated remote sources.",
+    )
+    parser.add_argument(
+        "--remote-source-manifest",
+        type=Path,
+        default=DEFAULT_REMOTE_SOURCE_MANIFEST,
+        help="JSON manifest describing curated remote database sources.",
+    )
     parser.add_argument(
         "--scratch-root",
         type=Path,
         default=None,
         help=(
-            "Optional scratch root for archive extraction. Defaults to the "
-            "destination parent directory."
+            "Optional scratch root for downloads and archive extraction. Defaults "
+            "to the destination parent directory."
         ),
     )
     parser.add_argument(
@@ -140,7 +163,7 @@ def report_row(record: PreparationRecord) -> dict[str, str]:
     return {
         "component": record.component,
         "status": record.status,
-        "source": str(record.source) if record.source else "NA",
+        "source": record.source if record.source else "NA",
         "destination": str(record.destination),
         "details": record.details,
     }
@@ -164,14 +187,6 @@ def parse_name_path(token: str, argument_name: str) -> tuple[str, Path]:
             f"{argument_name} entry is missing the source path after '=': {token!r}"
         )
     return clean_name, normalise_path(Path(clean_path))
-
-
-def ensure_existing_path(path: Path, label: str) -> Path:
-    """Require one existing source path."""
-    source = normalise_path(path)
-    if not source.exists():
-        raise PrepareRuntimeDatabasesError(f"Missing {label}: {source}")
-    return source
 
 
 def ensure_parent_directory(path: Path) -> None:
@@ -224,18 +239,20 @@ def marker_exists(destination: Path) -> bool:
 def write_marker(
     *,
     component: str,
-    source: Path,
+    source: str,
     destination: Path,
     validation: ValidationResult,
+    source_metadata: dict[str, str] | None = None,
 ) -> None:
     """Write one ready marker after validation has succeeded."""
     payload = {
         "component": component,
-        "source": str(source),
+        "source": source,
         "destination": str(destination),
         "prepared_at": datetime.now(UTC).isoformat(),
         "required_paths": list(validation.required_paths),
         "details": validation.details,
+        "source_metadata": source_metadata or {},
     }
     marker_path(destination).write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -268,17 +285,14 @@ def preparation_lock(destination: Path, *, force: bool) -> Iterator[Path]:
 
 
 def validate_taxdump(path: Path) -> ValidationResult:
-    """Validate one pinned taxdump directory."""
+    """Validate one taxdump directory."""
     required = ("names.dmp", "nodes.dmp")
     missing = [name for name in required if not (path / name).is_file()]
     if missing:
         raise PrepareRuntimeDatabasesError(
             f"Taxdump directory is missing required files in {path}: {', '.join(missing)}"
         )
-    return ValidationResult(
-        required_paths=required,
-        details={"files": str(len(required))},
-    )
+    return ValidationResult(required_paths=required, details={"files": str(len(required))})
 
 
 def validate_checkm2(path: Path) -> ValidationResult:
@@ -288,10 +302,7 @@ def validate_checkm2(path: Path) -> ValidationResult:
         raise PrepareRuntimeDatabasesError(
             f"CheckM2 destination must contain exactly one top-level .dmnd file: {path}"
         )
-    return ValidationResult(
-        required_paths=(candidates[0],),
-        details={"dmnd": candidates[0]},
-    )
+    return ValidationResult(required_paths=(candidates[0],), details={"dmnd": candidates[0]})
 
 
 def validate_eggnog(path: Path) -> ValidationResult:
@@ -302,10 +313,7 @@ def validate_eggnog(path: Path) -> ValidationResult:
         raise PrepareRuntimeDatabasesError(
             f"eggNOG destination is missing required files in {path}: {', '.join(missing)}"
         )
-    return ValidationResult(
-        required_paths=required,
-        details={"files": str(len(required))},
-    )
+    return ValidationResult(required_paths=required, details={"files": str(len(required))})
 
 
 def validate_padloc(path: Path) -> ValidationResult:
@@ -315,10 +323,7 @@ def validate_padloc(path: Path) -> ValidationResult:
         raise PrepareRuntimeDatabasesError(
             f"PADLOC destination must contain hmm/padlocdb.hmm: {path}"
         )
-    return ValidationResult(
-        required_paths=required,
-        details={"hmm": "hmm/padlocdb.hmm"},
-    )
+    return ValidationResult(required_paths=required, details={"hmm": "hmm/padlocdb.hmm"})
 
 
 def build_busco_lineage_validator(lineage: str) -> Validator:
@@ -331,10 +336,7 @@ def build_busco_lineage_validator(lineage: str) -> Validator:
             raise PrepareRuntimeDatabasesError(
                 f"BUSCO lineage {lineage} is missing dataset.cfg in {path}"
             )
-        return ValidationResult(
-            required_paths=required,
-            details={"lineage": lineage},
-        )
+        return ValidationResult(required_paths=required, details={"lineage": lineage})
 
     return validate_busco_lineage
 
@@ -513,7 +515,8 @@ def prepare_from_archive(
                 destination.rmdir()
             else:
                 raise PrepareRuntimeDatabasesError(
-                    f"Archive destination must be absent or empty before finalisation: {destination}"
+                    f"Archive destination must be absent or empty before finalisation: "
+                    f"{destination}"
                 )
         resolved_root.rename(destination)
         if scratch_dir.exists():
@@ -524,11 +527,17 @@ def prepare_from_archive(
         raise
 
 
-def describe_validation(validation: ValidationResult) -> str:
+def describe_validation(
+    validation: ValidationResult,
+    extras: dict[str, str] | None = None,
+) -> str:
     """Render one validation summary into a short report string."""
     paths = ",".join(validation.required_paths)
-    details = ";".join(f"{key}={value}" for key, value in sorted(validation.details.items()))
-    return f"required_paths={paths};{details}"
+    details = dict(validation.details)
+    if extras:
+        details.update(extras)
+    rendered_details = ";".join(f"{key}={value}" for key, value in sorted(details.items()))
+    return f"required_paths={paths};{rendered_details}"
 
 
 def assess_destination(
@@ -536,10 +545,10 @@ def assess_destination(
     component: str,
     destination: Path,
     validator: Validator,
-) -> tuple[str, ValidationResult | None]:
+) -> tuple[str, ValidationResult | None, dict[str, object] | None]:
     """Classify one destination before preparation."""
     if not destination.exists():
-        return "missing", None
+        return "missing", None, None
     if not destination.is_dir():
         raise PrepareRuntimeDatabasesError(
             f"Destination must be a directory for {component}: {destination}"
@@ -560,37 +569,442 @@ def assess_destination(
             f"Destination is valid but incomplete for {component}; "
             f"missing {MARKER_FILE_NAME}: {destination}"
         )
-    return "ready", validation
+    return "ready", validation, marker
+
+
+def load_remote_source_manifest(path: Path) -> dict[str, Any]:
+    """Load the curated remote source manifest."""
+    manifest_path = normalise_path(path)
+    if not manifest_path.is_file():
+        raise PrepareRuntimeDatabasesError(
+            f"Missing remote source manifest: {manifest_path}"
+        )
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise PrepareRuntimeDatabasesError(
+            f"Remote source manifest is not valid JSON: {manifest_path}"
+        ) from error
+    if not isinstance(data, dict):
+        raise PrepareRuntimeDatabasesError(
+            f"Remote source manifest must contain a JSON object: {manifest_path}"
+        )
+    return data
+
+
+def resolve_remote_version(
+    *,
+    manifest: dict[str, Any],
+    component: str,
+    requested_version: str | None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve one remote component version from the manifest."""
+    component_manifest = manifest.get(component)
+    if not isinstance(component_manifest, dict):
+        raise PrepareRuntimeDatabasesError(
+            f"Remote source manifest is missing the {component} component."
+        )
+    versions = component_manifest.get("versions")
+    if not isinstance(versions, dict) or not versions:
+        raise PrepareRuntimeDatabasesError(
+            f"Remote source manifest has no versions for {component}."
+        )
+    version_key = requested_version or component_manifest.get("default_version")
+    if not isinstance(version_key, str) or not version_key:
+        raise PrepareRuntimeDatabasesError(
+            f"Remote source manifest has no default version for {component}."
+        )
+    version_config = versions.get(version_key)
+    if not isinstance(version_config, dict):
+        raise PrepareRuntimeDatabasesError(
+            f"Remote source manifest does not define version {version_key!r} for {component}."
+        )
+    return version_key, version_config
+
+
+def ensure_remote_download_support() -> None:
+    """Require aria2 before attempting remote downloads."""
+    if shutil.which("aria2c") is None:
+        raise PrepareRuntimeDatabasesError(
+            "aria2c is required for remote downloads but is not available on PATH."
+        )
+
+
+def infer_download_name(url: str, fallback_name: str) -> str:
+    """Infer one local download file name from a URL."""
+    parsed = urlparse(url)
+    candidate = Path(parsed.path).name
+    return candidate or fallback_name
+
+
+def download_with_aria2(url: str, destination: Path) -> None:
+    """Download one remote file with aria2 into a fixed destination path."""
+    ensure_parent_directory(destination)
+    command = [
+        "aria2c",
+        "--allow-overwrite=true",
+        "--auto-file-renaming=false",
+        "--console-log-level=warn",
+        "--summary-interval=0",
+        "--file-allocation=none",
+        "--dir",
+        str(destination.parent),
+        "--out",
+        destination.name,
+        url,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise PrepareRuntimeDatabasesError(
+            f"aria2 download failed for {url}: "
+            f"{result.stderr.strip() or result.stdout.strip() or 'unknown error'}"
+        )
+
+
+def compute_checksum(path: Path, algorithm: str) -> str:
+    """Compute one checksum for a file using the requested algorithm."""
+    try:
+        digest = hashlib.new(algorithm)
+    except ValueError as error:
+        raise PrepareRuntimeDatabasesError(
+            f"Unsupported checksum algorithm: {algorithm}"
+        ) from error
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def parse_checksum_file(path: Path, expected_name: str | None = None) -> str:
+    """Parse one checksum file into a plain checksum string."""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split()
+        if expected_name and len(parts) >= 2:
+            target_name = parts[-1].lstrip("*")
+            if target_name != expected_name:
+                continue
+        return parts[0]
+    raise PrepareRuntimeDatabasesError(f"Could not parse checksum from {path}")
+
+
+def resolve_expected_checksum(
+    checksum_config: dict[str, Any] | None,
+    *,
+    expected_name: str,
+    scratch_dir: Path,
+) -> tuple[str, str] | None:
+    """Resolve one expected checksum from inline or remote metadata."""
+    if checksum_config is None:
+        return None
+    checksum_type = checksum_config.get("type")
+    if not isinstance(checksum_type, str) or not checksum_type:
+        raise PrepareRuntimeDatabasesError("Remote checksum configuration is missing its type.")
+    inline_value = checksum_config.get("value")
+    if isinstance(inline_value, str) and inline_value:
+        return checksum_type, inline_value
+    checksum_url = checksum_config.get("url")
+    if isinstance(checksum_url, str) and checksum_url:
+        checksum_name = infer_download_name(checksum_url, f"{expected_name}.{checksum_type}")
+        checksum_path = scratch_dir / checksum_name
+        download_with_aria2(checksum_url, checksum_path)
+        return checksum_type, parse_checksum_file(
+            checksum_path,
+            checksum_config.get("expected_name") or expected_name,
+        )
+    return None
+
+
+def verify_download_checksum(
+    path: Path,
+    *,
+    checksum_config: dict[str, Any] | None,
+    scratch_dir: Path,
+) -> str:
+    """Verify one downloaded file checksum when the manifest provides one."""
+    resolved = resolve_expected_checksum(
+        checksum_config,
+        expected_name=path.name,
+        scratch_dir=scratch_dir,
+    )
+    if resolved is None:
+        return "unchecked"
+    checksum_type, expected = resolved
+    observed = compute_checksum(path, checksum_type)
+    if observed.lower() != expected.lower():
+        raise PrepareRuntimeDatabasesError(
+            f"Checksum mismatch for {path.name}: expected {expected}, observed {observed}"
+        )
+    return f"{checksum_type}:{expected.lower()}"
+
+
+def build_remote_scratch_dir(destination: Path, scratch_root: Path | None) -> Path:
+    """Create one scratch directory for remote downloads."""
+    scratch_base = normalise_path(scratch_root) if scratch_root else destination.parent
+    scratch_base.mkdir(parents=True, exist_ok=True)
+    scratch_dir = scratch_base / f".download-{destination.name}-{timestamp_token()}"
+    if scratch_dir.exists():
+        raise PrepareRuntimeDatabasesError(f"Download scratch directory already exists: {scratch_dir}")
+    scratch_dir.mkdir(parents=True, exist_ok=False)
+    return scratch_dir
+
+
+def decompress_gzip(source: Path, destination: Path) -> None:
+    """Decompress one gzip file into its destination path."""
+    ensure_parent_directory(destination)
+    with gzip.open(source, "rb") as input_handle, destination.open("wb") as output_handle:
+        shutil.copyfileobj(input_handle, output_handle)
+
+
+def prepare_remote_archive_component(
+    *,
+    component: str,
+    destination: Path,
+    validator: Validator,
+    scratch_root: Path | None,
+    url: str,
+    archive_name: str,
+    checksum_config: dict[str, Any] | None,
+) -> tuple[ValidationResult, str, dict[str, str]]:
+    """Download and prepare one remote archive-backed component."""
+    scratch_dir = build_remote_scratch_dir(destination, scratch_root)
+    try:
+        archive_path = scratch_dir / archive_name
+        download_with_aria2(url, archive_path)
+        checksum_status = verify_download_checksum(
+            archive_path,
+            checksum_config=checksum_config,
+            scratch_dir=scratch_dir,
+        )
+        validation = prepare_from_archive(
+            component=component,
+            source=archive_path,
+            destination=destination,
+            validator=validator,
+            scratch_root=scratch_root,
+        )
+    finally:
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+    metadata = {
+        "source_mode": "remote",
+        "transport": "aria2",
+        "url": url,
+        "checksum": checksum_status,
+    }
+    return validation, url, metadata
+
+
+def prepare_remote_file_bundle_component(
+    *,
+    component: str,
+    destination: Path,
+    validator: Validator,
+    scratch_root: Path | None,
+    files: Sequence[dict[str, Any]],
+) -> tuple[ValidationResult, str, dict[str, str]]:
+    """Download and materialise one remote multi-file component."""
+    if destination.exists():
+        if destination.is_dir() and destination_is_empty(destination):
+            destination.rmdir()
+        else:
+            raise PrepareRuntimeDatabasesError(
+                f"Destination must be absent or empty before preparation: {destination}"
+            )
+    destination.mkdir(parents=True, exist_ok=False)
+
+    scratch_dir = build_remote_scratch_dir(destination, scratch_root)
+    urls: list[str] = []
+    checksum_tokens: list[str] = []
+    try:
+        for file_config in files:
+            url = file_config.get("url")
+            if not isinstance(url, str) or not url:
+                raise PrepareRuntimeDatabasesError(
+                    f"Remote file bundle entry for {component} is missing its URL."
+                )
+            download_name = file_config.get("name")
+            if not isinstance(download_name, str) or not download_name:
+                download_name = infer_download_name(url, f"{component}.download")
+            downloaded_path = scratch_dir / download_name
+            download_with_aria2(url, downloaded_path)
+            checksum_status = verify_download_checksum(
+                downloaded_path,
+                checksum_config=file_config.get("checksum"),
+                scratch_dir=scratch_dir,
+            )
+            checksum_tokens.append(f"{download_name}:{checksum_status}")
+
+            final_name = file_config.get("final_name")
+            if not isinstance(final_name, str) or not final_name:
+                final_name = download_name[:-3] if download_name.endswith(".gz") else download_name
+            final_path = destination / final_name
+            compression = file_config.get("compression")
+            if compression == "gz":
+                decompress_gzip(downloaded_path, final_path)
+            else:
+                shutil.copy2(downloaded_path, final_path)
+            urls.append(url)
+        validation = validator(destination)
+    except Exception:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise
+    finally:
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+    metadata = {
+        "source_mode": "remote",
+        "transport": "aria2",
+        "url_count": str(len(urls)),
+        "urls": ",".join(urls),
+        "checksums": ",".join(checksum_tokens) if checksum_tokens else "unchecked",
+    }
+    return validation, ",".join(urls), metadata
+
+
+def prepare_remote_component(
+    *,
+    manifest: dict[str, Any],
+    remote_component: str,
+    component_label: str,
+    version: str | None,
+    destination: Path,
+    validator: Validator,
+    scratch_root: Path | None,
+    lineage: str | None = None,
+) -> tuple[ValidationResult, str, dict[str, str]]:
+    """Prepare one component from the curated remote manifest."""
+    ensure_remote_download_support()
+    version_key, version_config = resolve_remote_version(
+        manifest=manifest,
+        component=remote_component,
+        requested_version=version,
+    )
+    kind = version_config.get("kind")
+    if not isinstance(kind, str) or not kind:
+        raise PrepareRuntimeDatabasesError(
+            f"Remote version {version_key!r} for {remote_component} is missing its kind."
+        )
+
+    metadata_prefix = {
+        "component": component_label,
+        "remote_component": remote_component,
+        "version": version_key,
+    }
+    if kind == "archive":
+        url = version_config.get("url")
+        if not isinstance(url, str) or not url:
+            raise PrepareRuntimeDatabasesError(
+                f"Remote archive version {version_key!r} for {remote_component} is missing its URL."
+            )
+        archive_name = version_config.get("archive_name")
+        if not isinstance(archive_name, str) or not archive_name:
+            archive_name = infer_download_name(url, f"{remote_component}-{version_key}.archive")
+        validation, source, metadata = prepare_remote_archive_component(
+            component=component_label,
+            destination=destination,
+            validator=validator,
+            scratch_root=scratch_root,
+            url=url,
+            archive_name=archive_name,
+            checksum_config=version_config.get("checksum"),
+        )
+        metadata.update(metadata_prefix)
+        return validation, source, metadata
+
+    if kind == "file_bundle":
+        files = version_config.get("files")
+        if not isinstance(files, list) or not files:
+            raise PrepareRuntimeDatabasesError(
+                f"Remote file bundle version {version_key!r} for {remote_component} has no files."
+            )
+        validation, source, metadata = prepare_remote_file_bundle_component(
+            component=component_label,
+            destination=destination,
+            validator=validator,
+            scratch_root=scratch_root,
+            files=files,
+        )
+        metadata.update(metadata_prefix)
+        return validation, source, metadata
+
+    if kind == "lineage_archives":
+        if not lineage:
+            raise PrepareRuntimeDatabasesError(
+                f"Remote BUSCO version {version_key!r} requires a lineage name."
+            )
+        url_template = version_config.get("lineage_url_template")
+        if not isinstance(url_template, str) or not url_template:
+            raise PrepareRuntimeDatabasesError(
+                f"Remote BUSCO version {version_key!r} is missing its lineage URL template."
+            )
+        archive_name_template = version_config.get("archive_name_template")
+        if not isinstance(archive_name_template, str) or not archive_name_template:
+            archive_name_template = "{lineage}.tar.gz"
+        url = url_template.format(lineage=lineage)
+        archive_name = archive_name_template.format(lineage=lineage)
+        validation, source, metadata = prepare_remote_archive_component(
+            component=component_label,
+            destination=destination,
+            validator=validator,
+            scratch_root=scratch_root,
+            url=url,
+            archive_name=archive_name,
+            checksum_config=None,
+        )
+        metadata.update(metadata_prefix)
+        metadata["lineage"] = lineage
+        return validation, source, metadata
+
+    raise PrepareRuntimeDatabasesError(
+        f"Unsupported remote source kind {kind!r} for {remote_component}."
+    )
+
+
+def resolve_existing_source(path: Path | None) -> Path | None:
+    """Resolve one source path only when it exists."""
+    if path is None:
+        return None
+    source = normalise_path(path)
+    if source.exists():
+        return source
+    return None
 
 
 def prepare_component(
     *,
     component: str,
-    source: Path,
+    remote_component: str,
+    source: Path | None,
     destination: Path,
     validator: Validator,
     link_mode: str,
     scratch_root: Path | None,
     force: bool,
     allow_file_source: bool = False,
+    download: bool = False,
+    version: str | None = None,
+    manifest: dict[str, Any] | None = None,
+    lineage: str | None = None,
 ) -> PreparationRecord:
     """Prepare one non-BUSCO database destination."""
-    source = ensure_existing_path(source, f"{component} source")
     destination = normalise_path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    original_source = normalise_path(source) if source is not None else None
+    local_source = resolve_existing_source(source)
 
     try:
-        _state, existing_validation = assess_destination(
+        _state, existing_validation, marker = assess_destination(
             component=component,
             destination=destination,
             validator=validator,
         )
-        if existing_validation is not None:
+        if existing_validation is not None and marker is not None:
             LOGGER.info("Reusing ready %s destination: %s", component, destination)
             return PreparationRecord(
                 component=component,
                 status="present",
-                source=source,
+                source=str(marker.get("source", "NA")),
                 destination=destination,
                 details=describe_validation(existing_validation),
             )
@@ -600,34 +1014,67 @@ def prepare_component(
         LOGGER.warning("Replacing existing %s destination at %s", component, destination)
         remove_path(destination)
 
+    if local_source is None and original_source is not None and not download:
+        raise PrepareRuntimeDatabasesError(f"Missing {component} source: {original_source}")
+    if local_source is None and original_source is not None and download:
+        LOGGER.warning(
+            "Local %s source does not exist and will be replaced by a remote download: %s",
+            component,
+            original_source,
+        )
+
     with preparation_lock(destination, force=force):
-        if source.is_dir():
-            resolved_source = resolve_directory_source(source, validator, component)
-            materialise_directory(resolved_source, destination, link_mode)
-            validation = validator(destination)
-        elif allow_file_source and source.is_file() and source.suffix == ".dmnd":
-            materialise_checkm2_file(source, destination, link_mode)
-            validation = validator(destination)
+        if local_source is not None:
+            if local_source.is_dir():
+                resolved_source = resolve_directory_source(local_source, validator, component)
+                materialise_directory(resolved_source, destination, link_mode)
+                validation = validator(destination)
+            elif allow_file_source and local_source.is_file() and local_source.suffix == ".dmnd":
+                materialise_checkm2_file(local_source, destination, link_mode)
+                validation = validator(destination)
+            else:
+                validation = prepare_from_archive(
+                    component=component,
+                    source=local_source,
+                    destination=destination,
+                    validator=validator,
+                    scratch_root=scratch_root,
+                )
+            source_description = str(local_source)
+            source_metadata = {"source_mode": "local"}
         else:
-            validation = prepare_from_archive(
-                component=component,
-                source=source,
+            if not download:
+                raise PrepareRuntimeDatabasesError(
+                    f"No local source was supplied for {component}, and remote download is disabled."
+                )
+            if manifest is None:
+                raise PrepareRuntimeDatabasesError(
+                    f"Remote download was requested for {component}, but no manifest was loaded."
+                )
+            validation, source_description, source_metadata = prepare_remote_component(
+                manifest=manifest,
+                remote_component=remote_component,
+                component_label=component,
+                version=version,
                 destination=destination,
                 validator=validator,
                 scratch_root=scratch_root,
+                lineage=lineage,
             )
+        details = describe_validation(validation, extras=source_metadata)
         write_marker(
             component=component,
-            source=source,
+            source=source_description,
             destination=destination,
             validation=validation,
+            source_metadata=source_metadata,
         )
     return PreparationRecord(
         component=component,
         status="prepared",
-        source=source,
+        source=source_description,
         destination=destination,
-        details=describe_validation(validation),
+        details=details,
     )
 
 
@@ -645,6 +1092,9 @@ def prepare_busco_lineages(
     link_mode: str,
     scratch_root: Path | None,
     force: bool,
+    download: bool,
+    version: str | None,
+    manifest: dict[str, Any] | None,
 ) -> list[PreparationRecord]:
     """Prepare the requested BUSCO lineage directories beneath one root."""
     destination_root = normalise_path(destination_root)
@@ -656,45 +1106,20 @@ def prepare_busco_lineages(
         destination = destination_root / lineage
         validator = build_busco_lineage_validator(lineage)
         component = f"busco:{lineage}"
-        try:
-            _state, existing_validation = assess_destination(
-                component=component,
-                destination=destination,
-                validator=validator,
-            )
-            if existing_validation is not None:
-                LOGGER.info("Reusing ready BUSCO lineage %s at %s", lineage, destination)
-                records.append(
-                    PreparationRecord(
-                        component=component,
-                        status="present",
-                        source=source,
-                        destination=destination,
-                        details=describe_validation(existing_validation),
-                    )
-                )
-                continue
-        except PrepareRuntimeDatabasesError:
-            if destination.exists() and not force:
-                raise
-            if destination.exists():
-                LOGGER.warning("Replacing existing BUSCO lineage at %s", destination)
-                remove_path(destination)
-
-        if source is None:
-            raise PrepareRuntimeDatabasesError(
-                f"BUSCO lineage {lineage} is missing at {destination} and no source was supplied."
-            )
-
         records.append(
             prepare_component(
                 component=component,
+                remote_component="busco",
                 source=source,
                 destination=destination,
                 validator=validator,
                 link_mode=link_mode,
                 scratch_root=scratch_root,
                 force=force,
+                download=download,
+                version=version,
+                manifest=manifest,
+                lineage=lineage,
             )
         )
 
@@ -703,7 +1128,7 @@ def prepare_busco_lineages(
         PreparationRecord(
             component="busco_root",
             status="prepared",
-            source=None,
+            source="derived",
             destination=destination_root,
             details=describe_validation(root_validation),
         )
@@ -711,32 +1136,33 @@ def prepare_busco_lineages(
     return records
 
 
-def validate_argument_pair(
-    source: Path | None,
-    destination: Path | None,
-    label: str,
-) -> None:
-    """Require one source and destination to be supplied together."""
-    if (source is None) == (destination is None):
-        return
-    raise PrepareRuntimeDatabasesError(
-        f"{label} requires both source and destination arguments."
-    )
-
-
 def build_component_records(args: argparse.Namespace) -> list[PreparationRecord]:
     """Prepare the requested database destinations and return report records."""
-    validate_argument_pair(args.taxdump_source, args.taxdump_dest, "Taxdump")
-    validate_argument_pair(args.checkm2_source, args.checkm2_dest, "CheckM2")
-    validate_argument_pair(args.eggnog_source, args.eggnog_dest, "eggNOG")
-    validate_argument_pair(args.padloc_source, args.padloc_dest, "PADLOC")
-    if args.busco_dest_root is None and args.busco_lineage_source:
+    manifest = load_remote_source_manifest(args.remote_source_manifest) if args.download else None
+
+    if args.taxdump_source and not args.taxdump_dest:
+        raise PrepareRuntimeDatabasesError("Taxdump source requires --taxdump-dest.")
+    if args.taxdump_version and not args.taxdump_dest:
+        raise PrepareRuntimeDatabasesError("Taxdump version requires --taxdump-dest.")
+    if args.checkm2_source and not args.checkm2_dest:
+        raise PrepareRuntimeDatabasesError("CheckM2 source requires --checkm2-dest.")
+    if args.checkm2_version and not args.checkm2_dest:
+        raise PrepareRuntimeDatabasesError("CheckM2 version requires --checkm2-dest.")
+    if args.eggnog_source and not args.eggnog_dest:
+        raise PrepareRuntimeDatabasesError("eggNOG source requires --eggnog-dest.")
+    if args.eggnog_version and not args.eggnog_dest:
+        raise PrepareRuntimeDatabasesError("eggNOG version requires --eggnog-dest.")
+    if args.padloc_source and not args.padloc_dest:
+        raise PrepareRuntimeDatabasesError("PADLOC source requires --padloc-dest.")
+    if args.padloc_version and not args.padloc_dest:
+        raise PrepareRuntimeDatabasesError("PADLOC version requires --padloc-dest.")
+    if args.busco_dest_root is None and (args.busco_lineage_source or args.busco_version):
         raise PrepareRuntimeDatabasesError(
-            "BUSCO lineage sources require --busco-dest-root."
+            "BUSCO lineage sources or a BUSCO version require --busco-dest-root."
         )
 
     busco_sources = {
-        lineage: ensure_existing_path(path, f"BUSCO lineage source for {lineage}")
+        lineage: path
         for lineage, path in (
             parse_name_path(token, "--busco-lineage-source")
             for token in args.busco_lineage_source
@@ -744,22 +1170,27 @@ def build_component_records(args: argparse.Namespace) -> list[PreparationRecord]
     }
 
     records: list[PreparationRecord] = []
-    if args.taxdump_source and args.taxdump_dest:
+    if args.taxdump_dest:
         records.append(
             prepare_component(
                 component="taxdump",
+                remote_component="taxdump",
                 source=args.taxdump_source,
                 destination=args.taxdump_dest,
                 validator=validate_taxdump,
                 link_mode=args.link_mode,
                 scratch_root=args.scratch_root,
                 force=args.force,
+                download=args.download,
+                version=args.taxdump_version,
+                manifest=manifest,
             )
         )
-    if args.checkm2_source and args.checkm2_dest:
+    if args.checkm2_dest:
         records.append(
             prepare_component(
                 component="checkm2",
+                remote_component="checkm2",
                 source=args.checkm2_source,
                 destination=args.checkm2_dest,
                 validator=validate_checkm2,
@@ -767,6 +1198,9 @@ def build_component_records(args: argparse.Namespace) -> list[PreparationRecord]
                 scratch_root=args.scratch_root,
                 force=args.force,
                 allow_file_source=True,
+                download=args.download,
+                version=args.checkm2_version,
+                manifest=manifest,
             )
         )
     if args.busco_dest_root:
@@ -777,35 +1211,46 @@ def build_component_records(args: argparse.Namespace) -> list[PreparationRecord]
                 link_mode=args.link_mode,
                 scratch_root=args.scratch_root,
                 force=args.force,
+                download=args.download,
+                version=args.busco_version,
+                manifest=manifest,
             )
         )
-    if args.eggnog_source and args.eggnog_dest:
+    if args.eggnog_dest:
         records.append(
             prepare_component(
                 component="eggnog",
+                remote_component="eggnog",
                 source=args.eggnog_source,
                 destination=args.eggnog_dest,
                 validator=validate_eggnog,
                 link_mode=args.link_mode,
                 scratch_root=args.scratch_root,
                 force=args.force,
+                download=args.download,
+                version=args.eggnog_version,
+                manifest=manifest,
             )
         )
-    if args.padloc_source and args.padloc_dest:
+    if args.padloc_dest:
         records.append(
             prepare_component(
                 component="padloc",
+                remote_component="padloc",
                 source=args.padloc_source,
                 destination=args.padloc_dest,
                 validator=validate_padloc,
                 link_mode=args.link_mode,
                 scratch_root=args.scratch_root,
                 force=args.force,
+                download=args.download,
+                version=args.padloc_version,
+                manifest=manifest,
             )
         )
     if not records:
         raise PrepareRuntimeDatabasesError(
-            "No database targets were requested. Supply at least one source/destination pair."
+            "No database targets were requested. Supply at least one destination."
         )
     return records
 
