@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NEXTFLOW_CONFIG = ROOT / "nextflow.config"
 DOCKER_CONFIG = ROOT / "conf" / "docker.config"
 SINGULARITY_CONFIG = ROOT / "conf" / "singularity.config"
+OIST_CONFIG = ROOT / "conf" / "oist.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
 DEBUG_CONFIG = ROOT / "conf" / "debug.config"
 BASE_CONFIG = ROOT / "conf" / "base.config"
@@ -29,6 +30,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("singularity_cache_dir = null", config_text)
         self.assertIn("singularity_run_options = ''", config_text)
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
+        self.assertIn("includeConfig 'conf/oist.config'", config_text)
         self.assertNotIn("apptainer_cache_dir", config_text)
         self.assertNotIn("apptainer_run_options", config_text)
 
@@ -51,6 +53,30 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("params.singularity_run_options", singularity_text)
         self.assertIn("singularity.enabled = false", docker_text)
         self.assertNotIn("apptainer.enabled = false", docker_text)
+
+    def test_oist_profile_is_available_as_one_standalone_runtime(self) -> None:
+        """Keep the OIST profile self-contained for SLURM plus Singularity runs."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+        oist_text = OIST_CONFIG.read_text(encoding="utf-8")
+
+        self.assertTrue(OIST_CONFIG.is_file())
+        self.assertIn("includeConfig 'conf/oist.config'", config_text)
+        self.assertIn("profiles {", oist_text)
+        self.assertIn("oist {", oist_text)
+        self.assertIn("process.executor = 'slurm'", oist_text)
+        self.assertIn("executor.queueSize = params.executor_queue_size", oist_text)
+        self.assertIn("process.queue = params.slurm_queue ?: 'short'", oist_text)
+        self.assertIn('params.slurm_account ? "--account=${params.slurm_account}" : null', oist_text)
+        self.assertIn("params.slurm_cluster_options ?: null", oist_text)
+        self.assertIn("singularity.enabled = true", oist_text)
+        self.assertIn("singularity.autoMounts = true", oist_text)
+        self.assertIn("singularity.cacheDir = params.singularity_cache_dir ?: null", oist_text)
+        self.assertIn("docker.enabled = false", oist_text)
+        self.assertIn("process.containerOptions = params.singularity_run_options ?: ''", oist_text)
+        self.assertIn("process.resourceLimits = [", oist_text)
+        self.assertIn("withLabel: process_medium", oist_text)
+        self.assertIn("withLabel: process_high", oist_text)
+        self.assertNotIn("beforeScript", oist_text)
 
     def test_debug_profile_sets_default_eggnog_smoke_accession(self) -> None:
         """Provide one composable debug profile for single-sample eggNOG runs."""
