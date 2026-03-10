@@ -16,5 +16,3 @@ COPY assets/runtime_database_sources.json /opt/nf-myco_annotation/runtime_databa
 RUN chmod +x /usr/local/bin/prepare_runtime_databases.py /usr/local/bin/finalise_runtime_database.py /usr/local/bin/merge_runtime_database_reports.py
 
 ENV NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST=/opt/nf-myco_annotation/runtime_database_sources.json
-
-ENTRYPOINT ["python3", "/usr/local/bin/prepare_runtime_databases.py"]

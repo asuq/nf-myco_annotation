@@ -42,10 +42,6 @@ class RuntimeDbHelperContainerContractTestCase(unittest.TestCase):
             'ENV NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST=/opt/nf-myco_annotation/runtime_database_sources.json',
             dockerfile_text,
         )
-        self.assertIn(
-            'ENTRYPOINT ["python3", "/usr/local/bin/prepare_runtime_databases.py"]',
-            dockerfile_text,
-        )
 
     @unittest.skipUnless(
         RUN_DOCKER_TESTS,
