@@ -78,6 +78,7 @@ The helper prints a copy-pastable Nextflow argument block on success.
 - `local`: local executor
 - `slurm`: SLURM executor with optional `params.slurm_queue`, `params.slurm_account`, and `params.slurm_cluster_options`
 - `singularity`: Singularity execution with optional `params.singularity_cache_dir` and `params.singularity_run_options`
+- `oist`: standalone OIST HPC profile with SLURM and Singularity enabled
 - `test`: local fixture profile for `-stub-run`
 
 ## Minimal test path
@@ -131,6 +132,10 @@ still execute eggNOG for every gcode-qualified sample unless you opt into
 `debug` or set that parameter explicitly. If you override `--local-profile` or
 `--slurm-profile` in the harness, include `debug` yourself if you still want
 the smoke-only eggNOG behaviour.
+
+For OIST or any other full-eggNOG HPC validation, use raw `nextflow run .`
+instead of the default SLURM acceptance wrapper. The wrapper's SLURM mode is
+still centred on the debug acceptance cohort and local-baseline comparison.
 
 Example local acceptance run:
 
@@ -228,6 +233,95 @@ nextflow run . -profile singularity \
   --padloc_db /path/to/padloc-db \
   --outdir results
 ```
+
+OIST:
+
+```bash
+nextflow run . -profile oist \
+  --sample_csv samples.csv \
+  --metadata metadata.tsv \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2_db /path/to/checkm2-db \
+  --busco_download_dir /path/to/busco-lineages \
+  --eggnog_db /path/to/eggnog-db \
+  --padloc_db /path/to/padloc-db \
+  --singularity_cache_dir /path/to/singularity-cache \
+  --outdir results
+```
+
+## OIST HPC testing
+
+Use the OIST profile directly for full eggNOG runs:
+
+```bash
+nextflow run . -profile oist ...
+```
+
+Do not include `debug` and do not set `--eggnog_only_accessions` when the goal
+is to validate full eggNOG execution on HPC.
+
+Recommended test order:
+
+1. Prepare runtime databases with `python3 bin/prepare_runtime_databases.py`.
+2. Re-run the same preparation command to confirm reusable `present` states.
+3. Exercise one archive-source preparation case in a disposable destination.
+4. Exercise one invalid-destination case without `--force`, then recover with
+   `--force`.
+5. Run one optional `-stub-run` smoke test.
+6. Generate the tracked 9-sample cohort with
+   `python3 bin/run_acceptance_tests.py prepare --work-root ...`.
+7. Run that tracked cohort on OIST with raw `nextflow run . -profile oist`.
+8. Run one medium real-data cohort of about 20 to 30 samples.
+9. Run one large or full real-data cohort.
+
+Database-preparation smoke example:
+
+```bash
+python3 bin/prepare_runtime_databases.py \
+  --taxdump-source /staged/db_sources/taxdump_20240914 \
+  --taxdump-dest /shared/db_runtime/taxdump_20240914 \
+  --checkm2-source /staged/db_sources/checkm2/CheckM2_database.dmnd \
+  --checkm2-dest /shared/db_runtime/checkm2 \
+  --busco-lineage-source bacillota_odb12=/staged/db_sources/busco/bacillota_odb12 \
+  --busco-lineage-source mycoplasmatota_odb12=/staged/db_sources/busco/mycoplasmatota_odb12 \
+  --busco-dest-root /shared/db_runtime/busco \
+  --eggnog-source /staged/db_sources/eggnog_data \
+  --eggnog-dest /shared/db_runtime/eggnog \
+  --padloc-source /staged/db_sources/padloc_data \
+  --padloc-dest /shared/db_runtime/padloc \
+  --link-mode symlink \
+  --scratch-root /shared/db_runtime/.scratch \
+  --report /shared/db_runtime/runtime_report.tsv
+```
+
+Tracked-cohort OIST run:
+
+```bash
+python3 bin/run_acceptance_tests.py prepare --work-root /shared/nf_myco_hpc/p1
+
+nextflow run . -profile oist \
+  -work-dir /shared/nf_myco_hpc/p1/runs/full_eggnog/work \
+  --sample_csv /shared/nf_myco_hpc/p1/generated/sample_sheet.csv \
+  --metadata /shared/nf_myco_hpc/p1/generated/metadata.tsv \
+  --taxdump /shared/db_runtime/taxdump_20240914 \
+  --checkm2_db /shared/db_runtime/checkm2 \
+  --busco_download_dir /shared/db_runtime/busco \
+  --eggnog_db /shared/db_runtime/eggnog \
+  --padloc_db /shared/db_runtime/padloc \
+  --singularity_cache_dir /shared/nf_myco_hpc/singularity_cache \
+  --outdir /shared/nf_myco_hpc/p1/results \
+  --max_cpus 64 \
+  --max_memory 256.GB \
+  --max_time 72.h
+```
+
+Full-eggNOG success criteria:
+
+- `results/tables/master_table.tsv`, `sample_status.tsv`, and `tool_and_db_versions.tsv` exist
+- `results/pipeline_info/trace.tsv`, `report.html`, `timeline.html`, and `dag.html` exist
+- `tool_and_db_versions.tsv` points at the prepared runtime database root
+- `eggnog_status` is `done` for gcode-qualified samples and `skipped` only when `gcode = NA`
+- eligible sample folders contain fresh eggNOG, PADLOC, and CCFINDER outputs
 
 ## Final outputs
 

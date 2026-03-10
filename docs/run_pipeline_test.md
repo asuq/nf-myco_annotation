@@ -16,6 +16,10 @@ For runtime database preparation, use `python3 bin/prepare_runtime_databases.py`
 instead. The wrapper's `prepare` mode only prepares the tracked acceptance
 cohort and its cached source genomes.
 
+For OIST or any other full-eggNOG HPC validation, prefer raw `nextflow run .`
+over this wrapper. The wrapper's SLURM path remains centred on the debug
+acceptance cohort and local-baseline comparison.
+
 ## Command
 
 ```bash
