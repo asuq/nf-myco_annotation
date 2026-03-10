@@ -180,12 +180,20 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("trace {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/trace.tsv\"\n    overwrite = true", config_text)
         self.assertIn("dag {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/dag.html\"\n    overwrite = true", config_text)
 
-    def test_prepare_workflow_suppresses_process_selector_validation_only_locally(self) -> None:
-        """Keep selector-validation suppression scoped to the prep entry point."""
+    def test_prepare_workflow_registers_shared_process_names_without_global_suppression(self) -> None:
+        """Keep prep-only selector handling out of the main workflow entry point."""
         prep_text = PREP_WORKFLOW.read_text(encoding="utf-8")
         main_text = MAIN_WORKFLOW.read_text(encoding="utf-8")
 
-        self.assertIn("nextflow.enable.configProcessNamesValidation = false", prep_text)
+        self.assertIn(
+            "include { INPUT_VALIDATION_AND_STAGING as UNUSED_INPUT_VALIDATION_AND_STAGING }",
+            prep_text,
+        )
+        self.assertIn(
+            "include { PER_SAMPLE_ANNOTATION as UNUSED_PER_SAMPLE_ANNOTATION }",
+            prep_text,
+        )
+        self.assertNotIn("nextflow.enable.configProcessNamesValidation = false", prep_text)
         self.assertNotIn("nextflow.enable.configProcessNamesValidation = false", main_text)
 
 

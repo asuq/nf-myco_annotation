@@ -326,7 +326,32 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn("At least one database destination must be set for prepare_databases.nf.", workflow_text)
         self.assertIn("params.busco_lineages must be a non-empty list.", workflow_text)
-        self.assertIn("nextflow.enable.configProcessNamesValidation = false", workflow_text)
+        self.assertNotIn("nextflow.enable.configProcessNamesValidation = false", workflow_text)
+
+    def test_prepare_databases_registers_main_subworkflows_for_shared_config_selectors(self) -> None:
+        """Require the prep entry point to register main workflow process names."""
+        workflow_text = (ROOT / "prepare_databases.nf").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "include { BUSCO_DATASET_PREP as UNUSED_BUSCO_DATASET_PREP }",
+            workflow_text,
+        )
+        self.assertIn("include { COHORT_16S as UNUSED_COHORT_16S }", workflow_text)
+        self.assertIn("include { COHORT_ANI as UNUSED_COHORT_ANI }", workflow_text)
+        self.assertIn(
+            "include { COHORT_TAXONOMY as UNUSED_COHORT_TAXONOMY }",
+            workflow_text,
+        )
+        self.assertIn("include { FINAL_OUTPUTS as UNUSED_FINAL_OUTPUTS }", workflow_text)
+        self.assertIn(
+            "include { INPUT_VALIDATION_AND_STAGING as UNUSED_INPUT_VALIDATION_AND_STAGING }",
+            workflow_text,
+        )
+        self.assertIn(
+            "include { PER_SAMPLE_ANNOTATION as UNUSED_PER_SAMPLE_ANNOTATION }",
+            workflow_text,
+        )
+        self.assertIn("include { PER_SAMPLE_QC as UNUSED_PER_SAMPLE_QC }", workflow_text)
 
     def test_prepare_databases_uses_main_database_params_directly(self) -> None:
         """Require the prep workflow to reuse the main DB params directly."""
