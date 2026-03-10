@@ -85,9 +85,9 @@ under `--outdir` on success.
 
 - `debug`: composable behaviour profile that defaults eggNOG smoke runs to `GCA_000027325.1`
 - `local`: local executor
-- `slurm`: SLURM executor with optional `params.slurm_queue`, `params.slurm_account`, and `params.slurm_cluster_options`
+- `slurm`: SLURM executor with optional `params.slurm_queue` and `params.slurm_cluster_options`
 - `singularity`: Singularity execution with optional `params.singularity_cache_dir` and `params.singularity_run_options`
-- `oist`: standalone OIST HPC profile with SLURM and Singularity enabled, using the submitting user account rather than `params.slurm_account`
+- `oist`: standalone OIST HPC profile with SLURM and Singularity enabled, using the submitting user account
 - `test`: local fixture profile for `-stub-run`
 
 ## Minimal test path
@@ -167,8 +167,7 @@ python3 bin/run_acceptance_tests.py slurm \
   --busco-download-dir /path/to/busco-lineages \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db \
-  --slurm-queue short \
-  --slurm-account my_account
+  --slurm-queue short
 ```
 
 Example SLURM database-prep run:

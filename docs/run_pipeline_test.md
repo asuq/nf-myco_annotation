@@ -134,8 +134,7 @@ bin/run_pipeline_test.sh slurm \
   --busco-download-dir /path/to/busco-lineages \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db \
-  --slurm-queue short \
-  --slurm-account my_account
+  --slurm-queue short
 ```
 
 Run the SLURM runtime database-prep validation:
