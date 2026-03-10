@@ -1095,7 +1095,7 @@ Recommended params include:
 - `params.taxdump`
 - `params.checkm2_db`
 - `params.busco_lineages`
-- `params.busco_download_dir`
+- `params.busco_db`
 - `params.eggnog_db`
 - `params.outdir`
 - `params.ani_threshold`

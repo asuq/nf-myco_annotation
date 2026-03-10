@@ -7,8 +7,8 @@ The pipeline requires:
 - `--sample_csv`: manifest CSV with the locked lower-case headers
 - `--metadata`: metadata table with `Accession` or `accession`
 - `--taxdump`: pinned NCBI taxdump directory containing `names.dmp` and `nodes.dmp`
-- `--checkm2_db`: CheckM2 database path
-- `--busco_download_dir` or `--prepare_busco_datasets true`
+- `--checkm2_db`: CheckM2 database directory containing one top-level `.dmnd`
+- `--busco_db` or `--prepare_busco_datasets true`
 - `--eggnog_db` for real eggNOG runs
 - `--padloc_db` for real PADLOC runs
 
@@ -44,10 +44,14 @@ missing on the target machine.
 
 - It is a separate operator-facing Nextflow entry point, not part of the normal
   analysis workflow runtime.
-- It prepares databases in place under one canonical `--db_root`.
-- It can reuse local staged sources, download curated remote sources, or mix the
-  two in one run.
-- Archive extraction uses destination-local scratch by default, not system tmp.
+- It uses the same database directory params as the main workflow.
+- An existing valid database directory is reused in place.
+- A missing database directory is populated there when
+  `--download_missing_databases true` is set.
+- Taxdump uses the shared helper downloader. CheckM2, BUSCO, eggNOG, and PADLOC
+  use their own tool-native download or update commands.
+- Scratch work uses `--runtime_db_scratch_root` when set and otherwise stays
+  beside the destination rather than in system tmp.
 - A prepared destination is reusable only when it validates and contains
   `.nf_myco_ready.json`.
 - Concurrent preparation is blocked by a per-destination lock sidecar ending in
@@ -68,13 +72,13 @@ Example:
 
 ```bash
 nextflow run prepare_databases.nf -profile oist \
-  --db_root /shared/db/runtime \
-  --taxdump_source /staged/db_sources/taxdump_20240914 \
-  --checkm2_source /staged/db_sources/checkm2/CheckM2_database.dmnd \
-  --busco_source_root /staged/db_sources/busco \
-  --eggnog_source /staged/db_sources/eggnog_data \
-  --padloc_source /staged/db_sources/padloc_data \
-  --runtime_db_link_mode symlink \
+  --taxdump /shared/db/ncbi_taxdump_20240914 \
+  --checkm2_db /shared/db/checkm2/CheckM2_database \
+  --busco_db /shared/db/busco \
+  --eggnog_db /shared/db/Eggnog_db/Eggnog_Diamond_db \
+  --padloc_db /shared/db/padloc \
+  --download_missing_databases true \
+  --runtime_db_scratch_root /shared/db/.scratch \
   --outdir /shared/db/runtime-prep
 ```
 
@@ -128,7 +132,7 @@ Real-data `local`, `slurm`, and `all` runs require:
 
 - `--taxdump`
 - `--checkm2-db`
-- `--busco-download-dir` or `--prepare-busco-datasets`
+- `--busco-db` or `--prepare-busco-datasets`
 - `--eggnog-db`
 - `--padloc-db`
 
@@ -153,7 +157,7 @@ Example local acceptance run:
 python3 bin/run_acceptance_tests.py local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
-  --busco-download-dir /path/to/busco-lineages \
+  --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db
 ```
@@ -164,7 +168,7 @@ Example SLURM acceptance run:
 python3 bin/run_acceptance_tests.py slurm \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
-  --busco-download-dir /path/to/busco-lineages \
+  --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db \
   --slurm-queue short
@@ -176,6 +180,11 @@ Example SLURM database-prep run:
 python3 bin/run_acceptance_tests.py dbprep-slurm \
   --dbprep-profile oist \
   --work-root /path/to/work-root \
+  --taxdump /path/to/db/ncbi_taxdump_20240914 \
+  --checkm2-db /path/to/db/checkm2/CheckM2_database \
+  --busco-db /path/to/db/busco \
+  --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
+  --padloc-db /path/to/db/padloc \
   --slurm-queue short \
   --singularity-cache-dir /path/to/singularity-cache
 ```
@@ -190,7 +199,7 @@ nextflow run . \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
-  --busco_download_dir /path/to/busco-lineages \
+  --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
   --outdir results
@@ -204,7 +213,7 @@ nextflow run . -profile debug,local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
-  --busco_download_dir /path/to/busco-lineages \
+  --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
   --outdir results
@@ -218,7 +227,7 @@ nextflow run . -profile debug,local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
-  --busco_download_dir /path/to/busco-lineages \
+  --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
   --eggnog_only_accessions SOME_OTHER_ACCESSION \
@@ -233,7 +242,7 @@ nextflow run . -profile slurm \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
-  --busco_download_dir /path/to/busco-lineages \
+  --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
   --outdir results
@@ -247,7 +256,7 @@ nextflow run . -profile singularity \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
-  --busco_download_dir /path/to/busco-lineages \
+  --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
   --outdir results
@@ -261,7 +270,7 @@ nextflow run . -profile oist \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
-  --busco_download_dir /path/to/busco-lineages \
+  --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --padloc_db /path/to/padloc-db \
   --singularity_cache_dir /path/to/singularity-cache \
@@ -312,17 +321,17 @@ sbatch --version
 nextflow config -profile oist >/dev/null
 ```
 
-4. Test runtime database preparation from directory sources.
+4. Test runtime database preparation by downloading into explicit tool
+directories.
 
 ```bash
 nextflow run prepare_databases.nf -profile oist \
-  --db_root "$DB_TEST_ROOT/db1" \
-  --taxdump_source "$DB_SRC_ROOT/taxdump_20240914" \
-  --checkm2_source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
-  --busco_source_root "$DB_SRC_ROOT/busco" \
-  --eggnog_source "$DB_SRC_ROOT/eggnog_data" \
-  --padloc_source "$DB_SRC_ROOT/padloc_data" \
-  --runtime_db_link_mode symlink \
+  --taxdump "$DB_TEST_ROOT/db1/ncbi_taxdump_20240914" \
+  --checkm2_db "$DB_TEST_ROOT/db1/checkm2/CheckM2_database" \
+  --busco_db "$DB_TEST_ROOT/db1/busco" \
+  --eggnog_db "$DB_TEST_ROOT/db1/Eggnog_db/Eggnog_Diamond_db" \
+  --padloc_db "$DB_TEST_ROOT/db1/padloc" \
+  --download_missing_databases true \
   --runtime_db_scratch_root "$DB_TEST_ROOT/db1/.scratch" \
   --outdir "$DB_TEST_ROOT/db1/out"
 ```
@@ -339,24 +348,16 @@ Expected result:
 
 - report rows become `present`
 
-6. Test archive-source handling in a disposable destination.
+6. Test partial preparation by reusing four existing destinations and creating
+one missing destination.
 
 ```bash
-mkdir -p "$DB_TEST_ROOT/archives"
-tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/taxdump.tar.gz" taxdump_20240914
-tar -C "$DB_SRC_ROOT/busco" -czf "$DB_TEST_ROOT/archives/bacillota_odb12.tar.gz" bacillota_odb12
-tar -C "$DB_SRC_ROOT/busco" -czf "$DB_TEST_ROOT/archives/mycoplasmatota_odb12.tar.gz" mycoplasmatota_odb12
-tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/eggnog.tar.gz" eggnog_data
-tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/padloc.tar.gz" padloc_data
+cp -R "$DB_TEST_ROOT/db1" "$DB_TEST_ROOT/db2"
+rm -rf "$DB_TEST_ROOT/db2/padloc"
 
 nextflow run prepare_databases.nf -profile oist \
-  --db_root "$DB_TEST_ROOT/db2" \
-  --taxdump_source "$DB_TEST_ROOT/archives/taxdump.tar.gz" \
-  --checkm2_source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
-  --busco_source_root "$DB_TEST_ROOT/archives" \
-  --eggnog_source "$DB_TEST_ROOT/archives/eggnog.tar.gz" \
-  --padloc_source "$DB_TEST_ROOT/archives/padloc.tar.gz" \
-  --runtime_db_link_mode symlink \
+  --padloc_db "$DB_TEST_ROOT/db2/padloc" \
+  --download_missing_databases true \
   --runtime_db_scratch_root "$DB_TEST_ROOT/db2/.scratch" \
   --outdir "$DB_TEST_ROOT/db2/out"
 ```
@@ -364,7 +365,8 @@ nextflow run prepare_databases.nf -profile oist \
 Expected result:
 
 - preparation succeeds
-- no `.prepare-*` directories remain after success
+- the existing taxdump, CheckM2, BUSCO, and eggNOG directories are reused
+- PADLOC is freshly prepared under the requested directory
 
 7. Test invalid-destination failure and `--force` recovery.
 
@@ -373,8 +375,8 @@ mkdir -p "$DB_TEST_ROOT/db3/padloc"
 printf 'broken\n' > "$DB_TEST_ROOT/db3/padloc/broken.txt"
 
 nextflow run prepare_databases.nf -profile oist \
-  --db_root "$DB_TEST_ROOT/db3" \
-  --padloc_source "$DB_SRC_ROOT/padloc_data" \
+  --padloc_db "$DB_TEST_ROOT/db3/padloc" \
+  --download_missing_databases true \
   --outdir "$DB_TEST_ROOT/db3/out"
 ```
 
@@ -386,8 +388,8 @@ Then rerun with `--force`:
 
 ```bash
 nextflow run prepare_databases.nf -profile oist \
-  --db_root "$DB_TEST_ROOT/db3" \
-  --padloc_source "$DB_SRC_ROOT/padloc_data" \
+  --padloc_db "$DB_TEST_ROOT/db3/padloc" \
+  --download_missing_databases true \
   --force_runtime_database_rebuild true \
   --outdir "$DB_TEST_ROOT/db3/out"
 ```
@@ -397,17 +399,16 @@ Expected result:
 - success
 - `broken.txt` is gone
 
-8. Prepare the final runtime database root that all real HPC runs will share.
+8. Prepare the final shared runtime database directories for the real HPC runs.
 
 ```bash
 nextflow run prepare_databases.nf -profile oist \
-  --db_root "$DB_RUNTIME_ROOT" \
-  --taxdump_source "$DB_SRC_ROOT/taxdump_20240914" \
-  --checkm2_source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
-  --busco_source_root "$DB_SRC_ROOT/busco" \
-  --eggnog_source "$DB_SRC_ROOT/eggnog_data" \
-  --padloc_source "$DB_SRC_ROOT/padloc_data" \
-  --runtime_db_link_mode symlink \
+  --taxdump "$DB_RUNTIME_ROOT/ncbi_taxdump_20240914" \
+  --checkm2_db "$DB_RUNTIME_ROOT/checkm2/CheckM2_database" \
+  --busco_db "$DB_RUNTIME_ROOT/busco" \
+  --eggnog_db "$DB_RUNTIME_ROOT/Eggnog_db/Eggnog_Diamond_db" \
+  --padloc_db "$DB_RUNTIME_ROOT/padloc" \
+  --download_missing_databases true \
   --runtime_db_scratch_root "$DB_RUNTIME_ROOT/.scratch" \
   --outdir "$DB_RUNTIME_ROOT/out"
 ```
@@ -434,10 +435,10 @@ nextflow run . -profile oist \
   -work-dir "$WORK_ROOT/p1/runs/full_eggnog/work" \
   --sample_csv "$WORK_ROOT/p1/generated/sample_sheet.csv" \
   --metadata "$WORK_ROOT/p1/generated/metadata.tsv" \
-  --taxdump "$DB_RUNTIME_ROOT/taxdump_20240914" \
-  --checkm2_db "$DB_RUNTIME_ROOT/checkm2" \
-  --busco_download_dir "$DB_RUNTIME_ROOT/busco" \
-  --eggnog_db "$DB_RUNTIME_ROOT/eggnog" \
+  --taxdump "$DB_RUNTIME_ROOT/ncbi_taxdump_20240914" \
+  --checkm2_db "$DB_RUNTIME_ROOT/checkm2/CheckM2_database" \
+  --busco_db "$DB_RUNTIME_ROOT/busco" \
+  --eggnog_db "$DB_RUNTIME_ROOT/Eggnog_db/Eggnog_Diamond_db" \
   --padloc_db "$DB_RUNTIME_ROOT/padloc" \
   --singularity_cache_dir "$SINGULARITY_CACHE" \
   --outdir "$RESULTS_ROOT/p1" \

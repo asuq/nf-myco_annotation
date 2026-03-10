@@ -70,7 +70,7 @@ Required by real-data modes:
 
 - `--taxdump`
 - `--checkm2-db`
-- `--busco-download-dir` or `--prepare-busco-datasets`
+- `--busco-db` or `--prepare-busco-datasets`
 - `--eggnog-db`
 - `--padloc-db`
 
@@ -109,7 +109,7 @@ Preview a real local run without executing it:
 bin/run_pipeline_test.sh --dry-run local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
-  --busco-download-dir /path/to/busco-lineages \
+  --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db
 ```
@@ -120,7 +120,7 @@ Run the local real-data acceptance cohort:
 bin/run_pipeline_test.sh local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
-  --busco-download-dir /path/to/busco-lineages \
+  --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db
 ```
@@ -131,7 +131,7 @@ Run the SLURM real-data acceptance cohort:
 bin/run_pipeline_test.sh slurm \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
-  --busco-download-dir /path/to/busco-lineages \
+  --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db \
   --slurm-queue short
@@ -143,6 +143,11 @@ Run the SLURM runtime database-prep validation:
 bin/run_pipeline_test.sh dbprep-slurm \
   --dbprep-profile oist \
   --work-root /path/to/work-root \
+  --taxdump /path/to/db/ncbi_taxdump_20240914 \
+  --checkm2-db /path/to/db/checkm2/CheckM2_database \
+  --busco-db /path/to/db/busco \
+  --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
+  --padloc-db /path/to/db/padloc \
   --slurm-queue short \
   --singularity-cache-dir /path/to/singularity-cache
 ```
@@ -153,7 +158,7 @@ Run the full layered workflow:
 bin/run_pipeline_test.sh all \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
-  --busco-download-dir /path/to/busco-lineages \
+  --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --padloc-db /path/to/padloc-db
 ```
