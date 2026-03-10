@@ -361,12 +361,13 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn('script_path="\\$(command -v prepare_runtime_databases.py)"', prepare_module_text)
+        self.assertIn('script_path="\\$(type -P prepare_runtime_databases.py)"', prepare_module_text)
+        self.assertIn("--taxdump-dest", prepare_module_text)
         self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
         self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
-        self.assertIn('script_path="\\$(command -v finalise_runtime_database.py)"', finalise_module_text)
+        self.assertIn('script_path="\\$(type -P finalise_runtime_database.py)"', finalise_module_text)
         self.assertIn('python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
-        self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
+        self.assertIn('script_path="\\$(type -P merge_runtime_database_reports.py)"', merge_module_text)
         self.assertIn('python3 "\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_respects_configured_busco_lineages(self) -> None:

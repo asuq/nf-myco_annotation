@@ -14,10 +14,10 @@ process PREP_TAXDUMP_DATABASE {
 
     script:
     """
-    script_path="\$(command -v prepare_runtime_databases.py)"
+    script_path="\$(type -P prepare_runtime_databases.py)"
 
     helper_args=(
-        --taxdump
+        --taxdump-dest
         "${destination}"
         --report
         taxdump_report.tsv

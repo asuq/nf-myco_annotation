@@ -14,7 +14,7 @@ process FINALISE_RUNTIME_DATABASE {
 
     script:
     """
-    script_path="\$(command -v finalise_runtime_database.py)"
+    script_path="\$(type -P finalise_runtime_database.py)"
     mode="\$(tr -d '\n' < "${mode_file}")"
 
     helper_args=(
