@@ -228,7 +228,7 @@ Recommended columns:
 Even though the primary runtime target was not locked explicitly, Codex should implement at least:
 
 - `-profile local,docker`
-- `-profile slurm,apptainer`
+- `-profile slurm,singularity`
 
 This is an implementation convenience, not a scientific rule.
 
@@ -245,7 +245,7 @@ This is an implementation convenience, not a scientific rule.
 │   ├── local.config
 │   ├── slurm.config
 │   ├── docker.config
-│   └── apptainer.config
+│   └── singularity.config
 ├── modules/local/
 │   ├── validate_inputs.nf
 │   ├── stage_inputs.nf

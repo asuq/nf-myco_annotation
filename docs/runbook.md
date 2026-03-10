@@ -27,7 +27,7 @@ Shared helper image requirement:
 - it must provide `numpy` and `scipy`
 - the repo-owned Dockerfile for this image lives under
   `docker/python_helper/Dockerfile`
-- local Docker and HPC Apptainer runs should reuse that one helper image to
+- local Docker and HPC Singularity runs should reuse that one helper image to
   reduce container pulls
 
 ## Runtime database preparation
@@ -77,7 +77,7 @@ The helper prints a copy-pastable Nextflow argument block on success.
 - `debug`: composable behaviour profile that defaults eggNOG smoke runs to `GCA_000027325.1`
 - `local`: local executor
 - `slurm`: SLURM executor with optional `params.slurm_queue`, `params.slurm_account`, and `params.slurm_cluster_options`
-- `apptainer`: Apptainer execution with optional `params.apptainer_cache_dir` and `params.apptainer_run_options`
+- `singularity`: Singularity execution with optional `params.singularity_cache_dir` and `params.singularity_run_options`
 - `test`: local fixture profile for `-stub-run`
 
 ## Minimal test path
@@ -106,7 +106,7 @@ Use `bin/run_acceptance_tests.py` for the layered acceptance workflow:
 - `unit`: run the Python unit-test layer for fine-grained and minor edge cases
 - `stub`: run the full-pipeline `-stub-run` smoke test
 - `local`: run the generated positive cohort with `-profile debug,local,docker`
-- `slurm`: run the same cohort with `-profile debug,slurm,apptainer` and compare its stable outputs against the latest successful local run
+- `slurm`: run the same cohort with `-profile debug,slurm,singularity` and compare its stable outputs against the latest successful local run
 - `all`: run `prepare`, `unit`, `stub`, `local`, and `slurm` in sequence
 
 Tracked cohort descriptors live under `assets/testdata/acceptance/`. Large
@@ -215,10 +215,10 @@ nextflow run . -profile slurm \
   --outdir results
 ```
 
-Apptainer:
+Singularity:
 
 ```bash
-nextflow run . -profile apptainer \
+nextflow run . -profile singularity \
   --sample_csv samples.csv \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
