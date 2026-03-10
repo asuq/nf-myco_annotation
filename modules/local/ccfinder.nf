@@ -72,7 +72,7 @@ process CCFINDER {
         -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
         -DIRrepeat "\${ccfinder_root}/supplementary_files/repeatDirection.tsv" \
         -cpuMacSyFinder ${task.cpus} -cpuProkka ${task.cpus} \
-        -log -html -levelMin 2 \
+        -log -html -levelMin 3 \
         -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \
         ${extraArgs}
     exit_code=\$?
