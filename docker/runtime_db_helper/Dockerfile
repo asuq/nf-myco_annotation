@@ -4,6 +4,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         aria2 \
         ca-certificates \
+        procps \
         tar \
         unzip \
     && rm -rf /var/lib/apt/lists/*
