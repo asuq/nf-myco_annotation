@@ -260,59 +260,213 @@ nextflow run . -profile oist ...
 Do not include `debug` and do not set `--eggnog_only_accessions` when the goal
 is to validate full eggNOG execution on HPC.
 
-Recommended test order:
+Step-by-step procedure:
 
-1. Prepare runtime databases with `python3 bin/prepare_runtime_databases.py`.
-2. Re-run the same preparation command to confirm reusable `present` states.
-3. Exercise one archive-source preparation case in a disposable destination.
-4. Exercise one invalid-destination case without `--force`, then recover with
-   `--force`.
-5. Run one optional `-stub-run` smoke test.
-6. Generate the tracked 9-sample cohort with
-   `python3 bin/run_acceptance_tests.py prepare --work-root ...`.
-7. Run that tracked cohort on OIST with raw `nextflow run . -profile oist`.
-8. Run one medium real-data cohort of about 20 to 30 samples.
-9. Run one large or full real-data cohort.
+1. Start a persistent shell on the login node and move into the repository.
 
-Database-preparation smoke example:
+```bash
+tmux new -s nf_myco_hpc
+cd /path/to/nf-myco_annotation
+```
+
+2. Define one clean test root and the shared working paths.
+
+```bash
+export HPC_ROOT=/scratch/$USER/nf_myco_hpc_$(date +%Y%m%d)
+export DB_SRC_ROOT=/shared/staged_db_sources
+export DB_TEST_ROOT=$HPC_ROOT/db_prep_tests
+export DB_RUNTIME_ROOT=$HPC_ROOT/db_runtime
+export WORK_ROOT=$HPC_ROOT/work
+export RESULTS_ROOT=$HPC_ROOT/results
+export SINGULARITY_CACHE=$HPC_ROOT/singularity_cache
+
+mkdir -p "$DB_TEST_ROOT" "$DB_RUNTIME_ROOT" "$WORK_ROOT" "$RESULTS_ROOT" "$SINGULARITY_CACHE"
+```
+
+3. Run preflight checks.
+
+```bash
+python3 --version
+nextflow -version
+singularity --version
+sbatch --version
+nextflow config -profile oist >/dev/null
+```
+
+4. Test runtime database preparation from directory sources.
 
 ```bash
 python3 bin/prepare_runtime_databases.py \
-  --taxdump-source /staged/db_sources/taxdump_20240914 \
-  --taxdump-dest /shared/db_runtime/taxdump_20240914 \
-  --checkm2-source /staged/db_sources/checkm2/CheckM2_database.dmnd \
-  --checkm2-dest /shared/db_runtime/checkm2 \
-  --busco-lineage-source bacillota_odb12=/staged/db_sources/busco/bacillota_odb12 \
-  --busco-lineage-source mycoplasmatota_odb12=/staged/db_sources/busco/mycoplasmatota_odb12 \
-  --busco-dest-root /shared/db_runtime/busco \
-  --eggnog-source /staged/db_sources/eggnog_data \
-  --eggnog-dest /shared/db_runtime/eggnog \
-  --padloc-source /staged/db_sources/padloc_data \
-  --padloc-dest /shared/db_runtime/padloc \
+  --taxdump-source "$DB_SRC_ROOT/taxdump_20240914" \
+  --taxdump-dest "$DB_TEST_ROOT/db1/taxdump" \
+  --checkm2-source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
+  --checkm2-dest "$DB_TEST_ROOT/db1/checkm2" \
+  --busco-lineage-source "bacillota_odb12=$DB_SRC_ROOT/busco/bacillota_odb12" \
+  --busco-lineage-source "mycoplasmatota_odb12=$DB_SRC_ROOT/busco/mycoplasmatota_odb12" \
+  --busco-dest-root "$DB_TEST_ROOT/db1/busco" \
+  --eggnog-source "$DB_SRC_ROOT/eggnog_data" \
+  --eggnog-dest "$DB_TEST_ROOT/db1/eggnog" \
+  --padloc-source "$DB_SRC_ROOT/padloc_data" \
+  --padloc-dest "$DB_TEST_ROOT/db1/padloc" \
   --link-mode symlink \
-  --scratch-root /shared/db_runtime/.scratch \
-  --report /shared/db_runtime/runtime_report.tsv
+  --scratch-root "$DB_TEST_ROOT/db1/.scratch" \
+  --report "$DB_TEST_ROOT/db1/report.tsv"
 ```
 
-Tracked-cohort OIST run:
+Expected result:
+
+- report rows are `prepared`
+- every destination contains `.nf_myco_ready.json`
+- the helper prints a reusable Nextflow argument block
+
+5. Re-run the exact same command from step 4.
+
+Expected result:
+
+- report rows become `present`
+
+6. Test archive-source handling in a disposable destination.
 
 ```bash
-python3 bin/run_acceptance_tests.py prepare --work-root /shared/nf_myco_hpc/p1
+mkdir -p "$DB_TEST_ROOT/archives"
+tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/taxdump.tar.gz" taxdump_20240914
+tar -C "$DB_SRC_ROOT/busco" -czf "$DB_TEST_ROOT/archives/bacillota_odb12.tar.gz" bacillota_odb12
+tar -C "$DB_SRC_ROOT/busco" -czf "$DB_TEST_ROOT/archives/mycoplasmatota_odb12.tar.gz" mycoplasmatota_odb12
+tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/eggnog.tar.gz" eggnog_data
+tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/padloc.tar.gz" padloc_data
 
+python3 bin/prepare_runtime_databases.py \
+  --taxdump-source "$DB_TEST_ROOT/archives/taxdump.tar.gz" \
+  --taxdump-dest "$DB_TEST_ROOT/db2/taxdump" \
+  --checkm2-source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
+  --checkm2-dest "$DB_TEST_ROOT/db2/checkm2" \
+  --busco-lineage-source "bacillota_odb12=$DB_TEST_ROOT/archives/bacillota_odb12.tar.gz" \
+  --busco-lineage-source "mycoplasmatota_odb12=$DB_TEST_ROOT/archives/mycoplasmatota_odb12.tar.gz" \
+  --busco-dest-root "$DB_TEST_ROOT/db2/busco" \
+  --eggnog-source "$DB_TEST_ROOT/archives/eggnog.tar.gz" \
+  --eggnog-dest "$DB_TEST_ROOT/db2/eggnog" \
+  --padloc-source "$DB_TEST_ROOT/archives/padloc.tar.gz" \
+  --padloc-dest "$DB_TEST_ROOT/db2/padloc" \
+  --link-mode symlink \
+  --scratch-root "$DB_TEST_ROOT/db2/.scratch" \
+  --report "$DB_TEST_ROOT/db2/report.tsv"
+```
+
+Expected result:
+
+- preparation succeeds
+- no `.prepare-*` directories remain after success
+
+7. Test invalid-destination failure and `--force` recovery.
+
+```bash
+mkdir -p "$DB_TEST_ROOT/db3/bad_padloc"
+printf 'broken\n' > "$DB_TEST_ROOT/db3/bad_padloc/broken.txt"
+
+python3 bin/prepare_runtime_databases.py \
+  --padloc-source "$DB_SRC_ROOT/padloc_data" \
+  --padloc-dest "$DB_TEST_ROOT/db3/bad_padloc"
+```
+
+Expected result:
+
+- non-zero exit because the destination is invalid
+
+Then rerun with `--force`:
+
+```bash
+python3 bin/prepare_runtime_databases.py \
+  --padloc-source "$DB_SRC_ROOT/padloc_data" \
+  --padloc-dest "$DB_TEST_ROOT/db3/bad_padloc" \
+  --force
+```
+
+Expected result:
+
+- success
+- `broken.txt` is gone
+
+8. Prepare the final runtime database root that all real HPC runs will share.
+
+```bash
+python3 bin/prepare_runtime_databases.py \
+  --taxdump-source "$DB_SRC_ROOT/taxdump_20240914" \
+  --taxdump-dest "$DB_RUNTIME_ROOT/taxdump_20240914" \
+  --checkm2-source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
+  --checkm2-dest "$DB_RUNTIME_ROOT/checkm2" \
+  --busco-lineage-source "bacillota_odb12=$DB_SRC_ROOT/busco/bacillota_odb12" \
+  --busco-lineage-source "mycoplasmatota_odb12=$DB_SRC_ROOT/busco/mycoplasmatota_odb12" \
+  --busco-dest-root "$DB_RUNTIME_ROOT/busco" \
+  --eggnog-source "$DB_SRC_ROOT/eggnog_data" \
+  --eggnog-dest "$DB_RUNTIME_ROOT/eggnog" \
+  --padloc-source "$DB_SRC_ROOT/padloc_data" \
+  --padloc-dest "$DB_RUNTIME_ROOT/padloc" \
+  --link-mode symlink \
+  --scratch-root "$DB_RUNTIME_ROOT/.scratch" \
+  --report "$DB_RUNTIME_ROOT/runtime_report.tsv"
+```
+
+9. Run one optional structural smoke test.
+
+```bash
+nextflow run . -profile test -stub-run --outdir "$RESULTS_ROOT/stub"
+```
+
+10. Generate the tracked 9-sample cohort from the locked acceptance assets.
+
+```bash
+python3 bin/run_acceptance_tests.py prepare --work-root "$WORK_ROOT/p1"
+```
+
+This creates the sample sheet and metadata from the tracked cohort plan under
+`assets/testdata/acceptance/`.
+
+11. Run the tracked 9-sample cohort on OIST with full eggNOG.
+
+```bash
 nextflow run . -profile oist \
-  -work-dir /shared/nf_myco_hpc/p1/runs/full_eggnog/work \
-  --sample_csv /shared/nf_myco_hpc/p1/generated/sample_sheet.csv \
-  --metadata /shared/nf_myco_hpc/p1/generated/metadata.tsv \
-  --taxdump /shared/db_runtime/taxdump_20240914 \
-  --checkm2_db /shared/db_runtime/checkm2 \
-  --busco_download_dir /shared/db_runtime/busco \
-  --eggnog_db /shared/db_runtime/eggnog \
-  --padloc_db /shared/db_runtime/padloc \
-  --singularity_cache_dir /shared/nf_myco_hpc/singularity_cache \
-  --outdir /shared/nf_myco_hpc/p1/results \
+  -work-dir "$WORK_ROOT/p1/runs/full_eggnog/work" \
+  --sample_csv "$WORK_ROOT/p1/generated/sample_sheet.csv" \
+  --metadata "$WORK_ROOT/p1/generated/metadata.tsv" \
+  --taxdump "$DB_RUNTIME_ROOT/taxdump_20240914" \
+  --checkm2_db "$DB_RUNTIME_ROOT/checkm2" \
+  --busco_download_dir "$DB_RUNTIME_ROOT/busco" \
+  --eggnog_db "$DB_RUNTIME_ROOT/eggnog" \
+  --padloc_db "$DB_RUNTIME_ROOT/padloc" \
+  --singularity_cache_dir "$SINGULARITY_CACHE" \
+  --outdir "$RESULTS_ROOT/p1" \
   --max_cpus 64 \
   --max_memory 256.GB \
   --max_time 72.h
+```
+
+12. Prepare and run a medium real-data cohort of about 20 to 30 samples.
+
+Use your own `sample_csv` and `metadata.tsv`, but make sure the cohort includes:
+
+- gcode4 candidates
+- gcode11 candidates
+- at least one CRISPR-positive sample
+- at least one CRISPR-negative sample
+- at least one atypical-excluded sample
+- at least one atypical-exception sample
+- at least one ANI-near pair
+- at least two `is_new=true` rows
+
+Run it with the same command pattern, but use a fresh `-work-dir` and
+`--outdir`.
+
+13. Run the large or full real-data cohort.
+
+Use the same command pattern again with its own `-work-dir` and `--outdir`.
+Increase `--max_time`, `--max_memory`, or `--slurm_queue` only if your site
+policy or the earlier runs show that the defaults are too tight.
+
+14. Monitor all real runs.
+
+```bash
+squeue -u "$USER"
+tail -f .nextflow.log
 ```
 
 Full-eggNOG success criteria:
