@@ -44,7 +44,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "prepare_busco_datasets": False,
             "busco_download_dir": Path("/tmp/busco"),
             "slurm_queue": None,
-            "slurm_account": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
             "singularity_run_options": None,
@@ -59,7 +58,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "dbprep_profile": "slurm,singularity",
             "db_root": None,
             "slurm_queue": None,
-            "slurm_account": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
             "singularity_run_options": None,
@@ -618,6 +616,15 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertEqual(args.command, "slurm")
         self.assertEqual(args.singularity_cache_dir, "/tmp/singularity-cache")
         self.assertEqual(args.singularity_run_options, "bind=/db")
+
+    def test_parse_args_rejects_removed_slurm_account_flag(self) -> None:
+        """Reject the removed SLURM account override flag."""
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit):
+                run_acceptance_tests.parse_args(["slurm", "--slurm-account", "my_account"])
+
+        self.assertIn("unrecognized arguments", stderr.getvalue())
 
     def test_parse_args_accepts_dbprep_slurm_mode(self) -> None:
         """Accept the dedicated database-prep SLURM mode and its flags."""

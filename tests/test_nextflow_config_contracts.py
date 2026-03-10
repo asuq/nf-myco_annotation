@@ -46,6 +46,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("singularity_run_options = ''", config_text)
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
+        self.assertNotIn("slurm_account", config_text)
         self.assertNotIn("use_biocontainers", config_text)
         self.assertNotIn("runtime_db_helper_container", config_text)
         self.assertNotIn("apptainer_cache_dir", config_text)
@@ -70,7 +71,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("params.singularity_cache_dir", singularity_text)
         self.assertIn("params.singularity_run_options", singularity_text)
         self.assertIn("singularity.enabled = false", docker_text)
-        self.assertIn('params.slurm_account ? "--account=${params.slurm_account}" : null', slurm_text)
+        self.assertNotIn("params.slurm_account", slurm_text)
         self.assertNotIn("apptainer.enabled = false", docker_text)
 
     def test_oist_profile_is_available_as_one_standalone_runtime(self) -> None:

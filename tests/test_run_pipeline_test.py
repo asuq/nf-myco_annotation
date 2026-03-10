@@ -95,6 +95,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("--singularity-cache-dir SINGULARITY_CACHE_DIR", result.stdout)
         self.assertIn("--singularity-run-options SINGULARITY_RUN_OPTIONS", result.stdout)
+        self.assertNotIn("--slurm-account", result.stdout)
 
     def test_wrapper_dry_run_slurm_preserves_singularity_arguments(self) -> None:
         """Forward renamed Singularity arguments unchanged during dry-run output."""
