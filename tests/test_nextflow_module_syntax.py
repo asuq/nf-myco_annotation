@@ -326,6 +326,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn("At least one database destination must be set for prepare_databases.nf.", workflow_text)
         self.assertIn("params.busco_lineages must be a non-empty list.", workflow_text)
+        self.assertIn("nextflow.enable.configProcessNamesValidation = false", workflow_text)
 
     def test_prepare_databases_uses_main_database_params_directly(self) -> None:
         """Require the prep workflow to reuse the main DB params directly."""

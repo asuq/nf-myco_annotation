@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NEXTFLOW_CONFIG = ROOT / "nextflow.config"
+MAIN_WORKFLOW = ROOT / "main.nf"
+PREP_WORKFLOW = ROOT / "prepare_databases.nf"
 DOCKER_CONFIG = ROOT / "conf" / "docker.config"
 SINGULARITY_CONFIG = ROOT / "conf" / "singularity.config"
 SLURM_CONFIG = ROOT / "conf" / "slurm.config"
@@ -177,6 +179,14 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("report {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/report.html\"\n    overwrite = true", config_text)
         self.assertIn("trace {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/trace.tsv\"\n    overwrite = true", config_text)
         self.assertIn("dag {\n    enabled = true\n    file = \"${params.outdir}/pipeline_info/dag.html\"\n    overwrite = true", config_text)
+
+    def test_prepare_workflow_suppresses_process_selector_validation_only_locally(self) -> None:
+        """Keep selector-validation suppression scoped to the prep entry point."""
+        prep_text = PREP_WORKFLOW.read_text(encoding="utf-8")
+        main_text = MAIN_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("nextflow.enable.configProcessNamesValidation = false", prep_text)
+        self.assertNotIn("nextflow.enable.configProcessNamesValidation = false", main_text)
 
 
 if __name__ == "__main__":

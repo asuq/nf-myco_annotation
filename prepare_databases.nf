@@ -1,6 +1,7 @@
 #!/usr/bin/env nextflow
 
 nextflow.enable.dsl = 2
+nextflow.enable.configProcessNamesValidation = false
 
 include { RUNTIME_DATABASE_PREP } from './subworkflows/local/runtime_database_prep'
 
