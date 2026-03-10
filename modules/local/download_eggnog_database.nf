@@ -63,15 +63,15 @@ import sys
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 source = source.replace(
     "http://eggnogdb.embl.de/download/emapperdb-",
-    "https://eggnog5.embl.de/download/emapperdb-",
+    "http://eggnog5.embl.de/download/emapperdb-",
 )
 source = source.replace(
     "http://eggnog5.embl.de/download/eggnog_5.0/per_tax_level",
-    "https://eggnog5.embl.de/download/eggnog_5.0/per_tax_level",
+    "http://eggnog5.embl.de/download/eggnog_5.0/per_tax_level",
 )
 source = source.replace(
     "http://eggnogdb.embl.de/download/novel_fams-",
-    "https://eggnog5.embl.de/download/novel_fams-",
+    "http://eggnog5.embl.de/download/novel_fams-",
 )
 Path(sys.argv[2]).write_text(source, encoding="utf-8")
 PY
