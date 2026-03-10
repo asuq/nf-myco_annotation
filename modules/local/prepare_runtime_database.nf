@@ -14,7 +14,7 @@ process PREP_TAXDUMP_DATABASE {
 
     script:
     """
-    script_path="\$(type -P prepare_runtime_databases.py)"
+    script_path="${projectDir}/bin/prepare_runtime_databases.py"
 
     helper_args=(
         --taxdump-dest
