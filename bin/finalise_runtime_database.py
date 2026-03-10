@@ -55,7 +55,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=("reuse", "write"),
+        choices=("reuse", "write", "prepared"),
         required=True,
         help="Reuse an existing ready marker or validate and write a new marker.",
     )
@@ -99,8 +99,9 @@ def finalise_runtime_database(args: argparse.Namespace) -> PreparationRecord:
     """Validate one database destination and emit a report record."""
     destination = normalise_path(args.destination)
     validator = build_validator(args.component, args.busco_lineage)
+    mode = "write" if args.mode == "prepared" else args.mode
 
-    if args.mode == "reuse":
+    if mode == "reuse":
         _state, validation, marker = assess_destination(
             component=args.component,
             destination=destination,
