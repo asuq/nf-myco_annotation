@@ -42,6 +42,13 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("python_container = 'quay.io/asuq1617/python-scipy:3.12'", config_text)
         self.assertNotIn("python_container = 'python:3.12'", config_text)
 
+    def test_ccfinder_container_points_at_the_clean_runtime_tag(self) -> None:
+        """Use the cleaned CRISPRCasFinder image tag by default."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("ccfinder_container = 'quay.io/asuq1617/ccfinder:4.2.30'", config_text)
+        self.assertNotIn("ccfinder_container = 'quay.io/asuq1617/ccfinder:4.3.2'", config_text)
+
     def test_python_helper_processes_are_pinned_explicitly(self) -> None:
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
