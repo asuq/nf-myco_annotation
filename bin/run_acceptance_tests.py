@@ -27,9 +27,14 @@ DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "sour
 DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
 DEFAULT_LOCAL_PROFILE = "debug,local,docker"
 DEFAULT_SLURM_PROFILE = "debug,slurm,singularity"
+DEFAULT_DBPREP_PROFILE = "slurm,singularity"
 REAL_RUN_NOTE = (
     "CRISPRCasFinder uses params.ccfinder_container from pipeline config; "
     "the acceptance harness does not override it."
+)
+DBPREP_RUN_NOTE = (
+    "This mode runs prepare_databases.nf on SLURM, downloads the curated "
+    "runtime databases, and validates the prepared database tree."
 )
 DOWNLOAD_COLUMNS = ("source_accession", "sha256", "fasta_path")
 SOURCE_STATS_COLUMNS = (
@@ -55,6 +60,15 @@ METADATA_COLUMNS = (
 )
 SAMPLE_COLUMNS = ("accession", "is_new", "assembly_level", "genome_fasta")
 FINAL_TABLES = ("master_table.tsv", "sample_status.tsv", "tool_and_db_versions.tsv")
+DBPREP_OUTPUTS = (
+    "runtime_database_report.tsv",
+    "nextflow_args.txt",
+    "pipeline_info/trace.tsv",
+    "pipeline_info/report.html",
+    "pipeline_info/timeline.html",
+    "pipeline_info/dag.html",
+)
+DEFAULT_DBPREP_BUSCO_LINEAGES = ("bacillota_odb12", "mycoplasmatota_odb12")
 SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
 REQUIRED_ROLE_TAGS = {
     "gcode4_candidate",
@@ -689,6 +703,40 @@ def build_nextflow_command(
     return command
 
 
+def build_dbprep_command(
+    *,
+    profile: str,
+    work_dir: Path,
+    outdir: Path,
+    db_root: Path,
+    args: argparse.Namespace,
+) -> list[str]:
+    """Build the Nextflow command for one runtime database prep execution."""
+    command = [
+        "nextflow",
+        "run",
+        "prepare_databases.nf",
+        "-profile",
+        profile,
+        "-work-dir",
+        str(work_dir),
+        "--db_root",
+        str(db_root),
+        "--download_missing_databases",
+        "true",
+        "--outdir",
+        str(outdir),
+    ]
+    if args.resume:
+        command.append("-resume")
+    maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
+    maybe_add_parameter(command, "--slurm_account", args.slurm_account)
+    maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
+    maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
+    maybe_add_parameter(command, "--singularity_run_options", args.singularity_run_options)
+    return command
+
+
 def read_sample_status_columns() -> list[str]:
     """Read the locked sample-status column order."""
     return [
@@ -707,6 +755,66 @@ def require_output_tables(outdir: Path) -> dict[str, Path]:
             "missing_output_tables:" + ",".join(sorted(missing))
         )
     return {name: table_dir / name for name in FINAL_TABLES}
+
+
+def require_dbprep_outputs(outdir: Path) -> dict[str, Path]:
+    """Require the published artefacts for one successful database prep run."""
+    missing = [name for name in DBPREP_OUTPUTS if not (outdir / name).is_file()]
+    if missing:
+        raise AcceptanceTestError("missing_dbprep_outputs:" + ",".join(sorted(missing)))
+    return {name: outdir / name for name in DBPREP_OUTPUTS}
+
+
+def assert_dbprep_database_tree(db_root: Path) -> None:
+    """Assert that the prepared runtime database tree is complete."""
+    taxdump_dir = db_root / "taxdump"
+    checkm2_dir = db_root / "checkm2"
+    busco_root = db_root / "busco"
+    eggnog_dir = db_root / "eggnog"
+    padloc_dir = db_root / "padloc"
+
+    required_files = (
+        taxdump_dir / "names.dmp",
+        taxdump_dir / "nodes.dmp",
+        eggnog_dir / "eggnog.db",
+        eggnog_dir / "eggnog_proteins.dmnd",
+        padloc_dir / "hmm" / "padlocdb.hmm",
+        taxdump_dir / ".nf_myco_ready.json",
+        checkm2_dir / ".nf_myco_ready.json",
+        eggnog_dir / ".nf_myco_ready.json",
+        padloc_dir / ".nf_myco_ready.json",
+    )
+    missing = [str(path) for path in required_files if not path.is_file()]
+    if missing:
+        raise AcceptanceTestError("missing_dbprep_paths:" + ",".join(sorted(missing)))
+
+    dmnd_candidates = sorted(path for path in checkm2_dir.glob("*.dmnd") if path.is_file())
+    if len(dmnd_candidates) != 1:
+        raise AcceptanceTestError("invalid_dbprep_checkm2_dmnd_count")
+
+    for lineage in DEFAULT_DBPREP_BUSCO_LINEAGES:
+        lineage_dir = busco_root / lineage
+        marker = lineage_dir / ".nf_myco_ready.json"
+        dataset_cfg = lineage_dir / "dataset.cfg"
+        if not marker.is_file() or not dataset_cfg.is_file():
+            raise AcceptanceTestError(f"missing_dbprep_busco_lineage:{lineage}")
+
+
+def assert_dbprep_report_contract(report_path: Path) -> None:
+    """Assert that the merged prep report includes all required components."""
+    _header, rows = read_tsv(report_path)
+    seen_components = {row["component"] for row in rows}
+    required_components = {
+        "taxdump",
+        "checkm2",
+        "busco_root",
+        "eggnog",
+        "padloc",
+        *(f"busco:{lineage}" for lineage in DEFAULT_DBPREP_BUSCO_LINEAGES),
+    }
+    missing = sorted(required_components - seen_components)
+    if missing:
+        raise AcceptanceTestError("missing_dbprep_report_rows:" + ",".join(missing))
 
 
 def read_rows_indexed_by(
@@ -1004,6 +1112,29 @@ def run_slurm_with_comparison(args: argparse.Namespace) -> None:
     )
 
 
+def run_dbprep_slurm(args: argparse.Namespace) -> None:
+    """Run the runtime database prep workflow on SLURM and validate outputs."""
+    require_command("nextflow")
+    require_command("sbatch")
+
+    run_dir = args.work_root / "runs" / "dbprep-slurm"
+    outdir = run_dir / "results"
+    work_dir = run_dir / "work"
+    db_root = args.db_root if args.db_root else run_dir / "db_root"
+
+    command = build_dbprep_command(
+        profile=args.dbprep_profile,
+        work_dir=work_dir,
+        outdir=outdir,
+        db_root=db_root,
+        args=args,
+    )
+    run_command(command, cwd=ROOT_DIR)
+    outputs = require_dbprep_outputs(outdir)
+    assert_dbprep_database_tree(db_root)
+    assert_dbprep_report_contract(outputs["runtime_database_report.tsv"])
+
+
 def build_common_parser() -> argparse.ArgumentParser:
     """Build the parent parser for shared arguments."""
     parser = argparse.ArgumentParser(add_help=False)
@@ -1086,6 +1217,40 @@ def build_real_run_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_dbprep_run_parser() -> argparse.ArgumentParser:
+    """Build the parent parser for SLURM database prep arguments."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--dbprep-profile",
+        default=DEFAULT_DBPREP_PROFILE,
+        help="Nextflow profile string for SLURM database prep runs.",
+    )
+    parser.add_argument(
+        "--db-root",
+        type=Path,
+        default=None,
+        help="Optional prepared database root override for dbprep-slurm.",
+    )
+    parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
+    parser.add_argument("--slurm-account", default=None, help="Optional SLURM account.")
+    parser.add_argument(
+        "--slurm-cluster-options",
+        default=None,
+        help="Optional extra SLURM cluster options.",
+    )
+    parser.add_argument(
+        "--singularity-cache-dir",
+        default=None,
+        help="Optional Singularity cache directory.",
+    )
+    parser.add_argument(
+        "--singularity-run-options",
+        default=None,
+        help="Optional extra Singularity run options.",
+    )
+    return parser
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     common_parser = build_common_parser()
@@ -1094,6 +1259,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         description="Run layered acceptance tests for local and SLURM execution paths."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    dbprep_parser = build_dbprep_run_parser()
     subparsers.add_parser("prepare", parents=[common_parser], help="Prepare the acceptance cohort.")
     subparsers.add_parser("unit", parents=[common_parser], help="Run the Python unit-test layer.")
     subparsers.add_parser("stub", parents=[common_parser], help="Run the stub Nextflow smoke test.")
@@ -1114,6 +1280,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Run the real-data SLURM acceptance cohort. "
             f"{REAL_RUN_NOTE}"
         ),
+    )
+    subparsers.add_parser(
+        "dbprep-slurm",
+        parents=[common_parser, dbprep_parser],
+        help="Run the runtime database prep workflow on SLURM.",
+        description=DBPREP_RUN_NOTE,
     )
     subparsers.add_parser(
         "all",
@@ -1148,6 +1320,9 @@ def dispatch(args: argparse.Namespace) -> None:
         return
     if args.command == "slurm":
         run_slurm_with_comparison(args)
+        return
+    if args.command == "dbprep-slurm":
+        run_dbprep_slurm(args)
         return
     if args.command == "all":
         prepare_cohort(

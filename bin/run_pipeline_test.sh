@@ -4,12 +4,12 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly RUNNER="bin/run_acceptance_tests.py"
-readonly VALID_MODES="prepare unit stub local slurm all"
+readonly VALID_MODES="prepare unit stub local slurm dbprep-slurm all"
 
 show_usage() {
     cat <<'EOF'
 Usage:
-  bin/run_pipeline_test.sh [--dry-run] <prepare|unit|stub|local|slurm|all> [args...]
+  bin/run_pipeline_test.sh [--dry-run] <prepare|unit|stub|local|slurm|dbprep-slurm|all> [args...]
 
 Manual wrapper around bin/run_acceptance_tests.py.
 
@@ -27,7 +27,7 @@ EOF
 is_valid_mode() {
     local mode="$1"
     case "${mode}" in
-        prepare | unit | stub | local | slurm | all)
+        prepare | unit | stub | local | slurm | dbprep-slurm | all)
             return 0
             ;;
         *)

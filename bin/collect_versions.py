@@ -69,11 +69,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Container engine name or NA.",
     )
     parser.add_argument(
-        "--use-biocontainers",
-        default="NA",
-        help="Whether BioContainers are preferred for the run.",
-    )
-    parser.add_argument(
         "--checkm2-db",
         default="NA",
         help="CheckM2 database path.",
@@ -260,7 +255,6 @@ def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         build_row("pipeline", "pipeline", args.pipeline_version, notes="workflow manifest"),
         build_row("pipeline_git_commit", "pipeline", args.git_commit, notes="workflow revision"),
         build_row("container_engine", "runtime", args.container_engine, notes="workflow"),
-        build_row("use_biocontainers", "pipeline", args.use_biocontainers, notes="config flag"),
         build_row(
             "checkm2_db",
             "database",

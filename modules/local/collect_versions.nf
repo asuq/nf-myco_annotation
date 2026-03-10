@@ -51,7 +51,6 @@ process COLLECT_VERSIONS {
         --pipeline-version "${pipeline_version}" \
         --git-commit "${git_commit}" \
         --container-engine "${container_engine}" \
-        --use-biocontainers "${params.use_biocontainers}" \
         --checkm2-db "${params.checkm2_db ?: 'NA'}" \
         --checkm2-db-label "${params.checkm2_db_label ?: 'NA'}" \
         --taxdump "${params.taxdump ?: 'NA'}" \
