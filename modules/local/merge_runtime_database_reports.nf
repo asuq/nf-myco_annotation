@@ -21,7 +21,7 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
 
     script:
     """
-    script_path="${projectDir}/bin/merge_runtime_database_reports.py"
+    script_path="/usr/local/bin/merge_runtime_database_reports.py"
     report_args=()
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
@@ -40,7 +40,7 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
 
     stub:
     """
-    script_path="${projectDir}/bin/merge_runtime_database_reports.py"
+    script_path="/usr/local/bin/merge_runtime_database_reports.py"
     report_args=()
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
