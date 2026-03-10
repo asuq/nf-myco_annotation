@@ -52,6 +52,21 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         defaults.update(overrides)
         return argparse.Namespace(**defaults)
 
+    def make_dbprep_args(self, **overrides: object) -> argparse.Namespace:
+        """Build one Namespace matching the dbprep parser defaults used in tests."""
+        defaults = {
+            "resume": False,
+            "dbprep_profile": "slurm,singularity",
+            "db_root": None,
+            "slurm_queue": None,
+            "slurm_account": None,
+            "slurm_cluster_options": None,
+            "singularity_cache_dir": None,
+            "singularity_run_options": None,
+        }
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
     def write_text_file(self, path: Path, content: str) -> Path:
         """Write text to a file and return the path."""
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -424,6 +439,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         """Use the debug profile by default for acceptance real-data runs."""
         self.assertEqual(run_acceptance_tests.DEFAULT_LOCAL_PROFILE, "debug,local,docker")
         self.assertEqual(run_acceptance_tests.DEFAULT_SLURM_PROFILE, "debug,slurm,singularity")
+        self.assertEqual(run_acceptance_tests.DEFAULT_DBPREP_PROFILE, "slurm,singularity")
 
     def test_build_nextflow_command_uses_pipeline_ccfinder_container(self) -> None:
         """Build Nextflow commands without any harness CCFINDER parameter."""
@@ -491,6 +507,88 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertNotIn("--apptainer_cache_dir", command)
         self.assertNotIn("--apptainer_run_options", command)
 
+    def test_build_dbprep_command_uses_prepare_databases_entry_point(self) -> None:
+        """Build the dedicated runtime database prep command."""
+        args = self.make_dbprep_args(
+            dbprep_profile="oist",
+            db_root=Path("/tmp/prepared-db"),
+            singularity_cache_dir="/tmp/singularity-cache",
+            singularity_run_options="bind=/db",
+        )
+
+        command = run_acceptance_tests.build_dbprep_command(
+            profile=args.dbprep_profile,
+            work_dir=Path("/tmp/dbprep-work"),
+            outdir=Path("/tmp/dbprep-results"),
+            db_root=Path("/tmp/prepared-db"),
+            args=args,
+        )
+
+        self.assertEqual(command[:4], ["nextflow", "run", "prepare_databases.nf", "-profile"])
+        self.assertIn("oist", command)
+        self.assertIn("--db_root", command)
+        self.assertIn("/tmp/prepared-db", command)
+        self.assertIn("--download_missing_databases", command)
+        self.assertIn("true", command)
+        self.assertIn("--singularity_cache_dir", command)
+        self.assertIn("/tmp/singularity-cache", command)
+        self.assertIn("--singularity_run_options", command)
+        self.assertIn("bind=/db", command)
+
+    def test_assert_dbprep_database_tree_accepts_complete_layout(self) -> None:
+        """Accept a prepared runtime database tree with the required markers."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            db_root = Path(tmpdir_name)
+            (db_root / "taxdump").mkdir()
+            (db_root / "checkm2").mkdir()
+            (db_root / "busco" / "bacillota_odb12").mkdir(parents=True)
+            (db_root / "busco" / "mycoplasmatota_odb12").mkdir(parents=True)
+            (db_root / "eggnog").mkdir()
+            (db_root / "padloc" / "hmm").mkdir(parents=True)
+
+            for path in (
+                db_root / "taxdump" / "names.dmp",
+                db_root / "taxdump" / "nodes.dmp",
+                db_root / "checkm2" / "CheckM2_database.dmnd",
+                db_root / "busco" / "bacillota_odb12" / "dataset.cfg",
+                db_root / "busco" / "mycoplasmatota_odb12" / "dataset.cfg",
+                db_root / "eggnog" / "eggnog.db",
+                db_root / "eggnog" / "eggnog_proteins.dmnd",
+                db_root / "padloc" / "hmm" / "padlocdb.hmm",
+                db_root / "taxdump" / ".nf_myco_ready.json",
+                db_root / "checkm2" / ".nf_myco_ready.json",
+                db_root / "busco" / "bacillota_odb12" / ".nf_myco_ready.json",
+                db_root / "busco" / "mycoplasmatota_odb12" / ".nf_myco_ready.json",
+                db_root / "eggnog" / ".nf_myco_ready.json",
+                db_root / "padloc" / ".nf_myco_ready.json",
+            ):
+                path.write_text("stub\n", encoding="utf-8")
+
+            run_acceptance_tests.assert_dbprep_database_tree(db_root)
+
+    def test_assert_dbprep_report_contract_requires_all_components(self) -> None:
+        """Reject prep reports that omit one required runtime database component."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report_path = self.write_tsv_rows(
+                tmpdir / "runtime_database_report.tsv",
+                ["component", "status", "source", "destination", "details"],
+                [
+                    {"component": "taxdump", "status": "prepared", "source": "stub", "destination": "/db/taxdump", "details": "ok"},
+                    {"component": "checkm2", "status": "prepared", "source": "stub", "destination": "/db/checkm2", "details": "ok"},
+                    {"component": "busco:bacillota_odb12", "status": "prepared", "source": "stub", "destination": "/db/busco/bacillota_odb12", "details": "ok"},
+                    {"component": "busco:mycoplasmatota_odb12", "status": "prepared", "source": "stub", "destination": "/db/busco/mycoplasmatota_odb12", "details": "ok"},
+                    {"component": "busco_root", "status": "prepared", "source": "derived", "destination": "/db/busco", "details": "ok"},
+                    {"component": "eggnog", "status": "prepared", "source": "stub", "destination": "/db/eggnog", "details": "ok"},
+                ],
+            )
+
+            with self.assertRaisesRegex(
+                run_acceptance_tests.AcceptanceTestError,
+                "missing_dbprep_report_rows:padloc",
+            ):
+                run_acceptance_tests.assert_dbprep_report_contract(report_path)
+
     def test_parse_args_rejects_ccfinder_override_flag(self) -> None:
         """Reject a harness-level CCFINDER override flag."""
         stderr = io.StringIO()
@@ -520,6 +618,25 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertEqual(args.command, "slurm")
         self.assertEqual(args.singularity_cache_dir, "/tmp/singularity-cache")
         self.assertEqual(args.singularity_run_options, "bind=/db")
+
+    def test_parse_args_accepts_dbprep_slurm_mode(self) -> None:
+        """Accept the dedicated database-prep SLURM mode and its flags."""
+        args = run_acceptance_tests.parse_args(
+            [
+                "dbprep-slurm",
+                "--dbprep-profile",
+                "oist",
+                "--db-root",
+                "/tmp/db-root",
+                "--singularity-cache-dir",
+                "/tmp/singularity-cache",
+            ]
+        )
+
+        self.assertEqual(args.command, "dbprep-slurm")
+        self.assertEqual(args.dbprep_profile, "oist")
+        self.assertEqual(args.db_root, Path("/tmp/db-root"))
+        self.assertEqual(args.singularity_cache_dir, "/tmp/singularity-cache")
 
 
 if __name__ == "__main__":

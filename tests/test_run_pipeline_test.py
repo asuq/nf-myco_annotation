@@ -30,7 +30,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn(
-            "bin/run_pipeline_test.sh [--dry-run] <prepare|unit|stub|local|slurm|all>",
+            "bin/run_pipeline_test.sh [--dry-run] <prepare|unit|stub|local|slurm|dbprep-slurm|all>",
             result.stdout,
         )
         self.assertIn("Manual wrapper around bin/run_acceptance_tests.py.", result.stdout)
@@ -78,7 +78,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Error: unsupported mode bogus.", result.stderr)
-        self.assertIn("Expected one of: prepare unit stub local slurm all", result.stderr)
+        self.assertIn("Expected one of: prepare unit stub local slurm dbprep-slurm all", result.stderr)
 
     def test_wrapper_forwards_mode_help_to_acceptance_harness(self) -> None:
         """Delegate per-mode help text to the Python harness."""
@@ -125,6 +125,39 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc "
             "--singularity-cache-dir /tmp/singularity-cache "
             "--singularity-run-options bind=/db",
+        )
+        self.assertEqual(result.stderr, "")
+
+    def test_wrapper_dbprep_slurm_help_shows_prep_specific_flags(self) -> None:
+        """Expose the dedicated database-prep SLURM mode through delegated help."""
+        result = self.run_wrapper("dbprep-slurm", "--help")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("This mode runs prepare_databases.nf on SLURM", result.stdout)
+        self.assertIn("--dbprep-profile DBPREP_PROFILE", result.stdout)
+        self.assertIn("--db-root DB_ROOT", result.stdout)
+
+    def test_wrapper_dry_run_dbprep_slurm_preserves_runtime_arguments(self) -> None:
+        """Forward dbprep-slurm arguments unchanged during dry-run output."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "dbprep-slurm",
+            "--dbprep-profile",
+            "oist",
+            "--db-root",
+            "/tmp/db-root",
+            "--slurm-queue",
+            "short",
+            "--singularity-cache-dir",
+            "/tmp/singularity-cache",
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            result.stdout.strip(),
+            "python3 bin/run_acceptance_tests.py dbprep-slurm --dbprep-profile oist "
+            "--db-root /tmp/db-root --slurm-queue short "
+            "--singularity-cache-dir /tmp/singularity-cache",
         )
         self.assertEqual(result.stderr, "")
 

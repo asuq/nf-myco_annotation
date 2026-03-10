@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NEXTFLOW_CONFIG = ROOT / "nextflow.config"
 DOCKER_CONFIG = ROOT / "conf" / "docker.config"
 SINGULARITY_CONFIG = ROOT / "conf" / "singularity.config"
+SLURM_CONFIG = ROOT / "conf" / "slurm.config"
 OIST_CONFIG = ROOT / "conf" / "oist.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
 DEBUG_CONFIG = ROOT / "conf" / "debug.config"
@@ -24,12 +25,10 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn("ani_score_profile = 'default'", config_text)
-        self.assertIn("use_biocontainers = true", config_text)
         self.assertIn("padloc_db = null", config_text)
         self.assertIn("db_root = null", config_text)
         self.assertIn("download_missing_databases = false", config_text)
         self.assertIn("force_runtime_database_rebuild = false", config_text)
-        self.assertIn("runtime_db_helper_container = null", config_text)
         self.assertIn("runtime_db_link_mode = 'copy'", config_text)
         self.assertIn("runtime_db_scratch_root = null", config_text)
         self.assertIn("taxdump_source = null", config_text)
@@ -47,6 +46,8 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("singularity_run_options = ''", config_text)
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
+        self.assertNotIn("use_biocontainers", config_text)
+        self.assertNotIn("runtime_db_helper_container", config_text)
         self.assertNotIn("apptainer_cache_dir", config_text)
         self.assertNotIn("apptainer_run_options", config_text)
 
@@ -55,6 +56,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
         singularity_text = SINGULARITY_CONFIG.read_text(encoding="utf-8")
         docker_text = DOCKER_CONFIG.read_text(encoding="utf-8")
+        slurm_text = SLURM_CONFIG.read_text(encoding="utf-8")
 
         self.assertTrue(SINGULARITY_CONFIG.is_file())
         self.assertFalse((ROOT / "conf" / "apptainer.config").exists())
@@ -68,6 +70,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("params.singularity_cache_dir", singularity_text)
         self.assertIn("params.singularity_run_options", singularity_text)
         self.assertIn("singularity.enabled = false", docker_text)
+        self.assertIn('params.slurm_account ? "--account=${params.slurm_account}" : null', slurm_text)
         self.assertNotIn("apptainer.enabled = false", docker_text)
 
     def test_oist_profile_is_available_as_one_standalone_runtime(self) -> None:
@@ -82,7 +85,6 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("process.executor = 'slurm'", oist_text)
         self.assertIn("executor.queueSize = params.executor_queue_size", oist_text)
         self.assertIn("process.queue = params.slurm_queue ?: 'short'", oist_text)
-        self.assertIn('params.slurm_account ? "--account=${params.slurm_account}" : null', oist_text)
         self.assertIn("params.slurm_cluster_options ?: null", oist_text)
         self.assertIn("singularity.enabled = true", oist_text)
         self.assertIn("singularity.autoMounts = true", oist_text)
@@ -92,6 +94,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("process.resourceLimits = [", oist_text)
         self.assertIn("withLabel: process_medium", oist_text)
         self.assertIn("withLabel: process_high", oist_text)
+        self.assertNotIn("params.slurm_account", oist_text)
         self.assertNotIn("beforeScript", oist_text)
 
     def test_debug_profile_sets_default_eggnog_smoke_accession(self) -> None:
@@ -136,15 +139,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
-            "withName: PREP_RUNTIME_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.runtime_db_helper_container",
+            "withName: PREP_RUNTIME_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
             config_text,
         )
         self.assertIn(
-            "withName: PREP_BUSCO_DATABASES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.runtime_db_helper_container",
+            "withName: PREP_BUSCO_DATABASES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
             config_text,
         )
         self.assertIn(
-            "withName: MERGE_RUNTIME_DATABASE_REPORTS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.runtime_db_helper_container",
+            "withName: MERGE_RUNTIME_DATABASE_REPORTS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco-db:0.1'",
             config_text,
         )
 

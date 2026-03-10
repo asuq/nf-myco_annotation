@@ -73,8 +73,6 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "abc1234",
                     "--container-engine",
                     "singularity",
-                    "--use-biocontainers",
-                    "true",
                     "--checkm2-db",
                     "/db/checkm2",
                     "--taxdump",
@@ -138,6 +136,7 @@ class CollectVersionsTestCase(unittest.TestCase):
                 row_map[("checkm2", "tool", "reported by CHECKM2")]["version"],
                 "1.0.2",
             )
+            self.assertNotIn(("use_biocontainers", "pipeline", "config flag"), row_map)
 
     def test_missing_version_file_fails(self) -> None:
         """Fail cleanly when an input versions file is missing."""
