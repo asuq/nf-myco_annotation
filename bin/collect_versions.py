@@ -89,7 +89,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Optional pinned taxdump label.",
     )
     parser.add_argument(
-        "--busco-download-dir",
+        "--busco-db",
         default="NA",
         help="BUSCO dataset root path.",
     )
@@ -267,7 +267,7 @@ def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             "busco_datasets",
             "database",
             ";".join(args.busco_lineage) if args.busco_lineage else "NA",
-            args.busco_download_dir,
+            args.busco_db,
             "Configured BUSCO lineages in order",
         ),
         build_row(
@@ -292,8 +292,8 @@ def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                 kind="database",
                 version="NA",
                 image_or_path=(
-                    str(Path(args.busco_download_dir) / lineage)
-                    if normalise_value(args.busco_download_dir) != "NA"
+                    str(Path(args.busco_db) / lineage)
+                    if normalise_value(args.busco_db) != "NA"
                     else "NA"
                 ),
                 notes="BUSCO lineage dataset",

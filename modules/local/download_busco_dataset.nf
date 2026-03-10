@@ -14,7 +14,7 @@ process DOWNLOAD_BUSCO_DATASET {
     path 'versions.yml', emit: versions
 
     script:
-    def downloadRoot = params.busco_download_dir ?: "${params.outdir}/resources/busco"
+    def downloadRoot = params.busco_db ?: "${params.outdir}/resources/busco"
     """
     mkdir -p "${downloadRoot}"
 
@@ -45,10 +45,10 @@ process DOWNLOAD_BUSCO_DATASET {
 
     ln -s "\${dataset_dir}" "${lineage}"
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      busco: "\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    {
+        printf '"%s":\n' "${task.process}"
+        printf '  busco: "%s"\n' "\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
+    } > versions.yml
     """
 
     stub:
@@ -56,9 +56,9 @@ process DOWNLOAD_BUSCO_DATASET {
     mkdir -p "${lineage}"
     : > "${lineage}/dataset.cfg"
     : > download.log
-    cat <<'EOF' > versions.yml
-    "${task.process}":
-      busco: "stub"
-    EOF
+    {
+        printf '"%s":\n' "${task.process}"
+        printf '  busco: "%s"\n' 'stub'
+    } > versions.yml
     """
 }

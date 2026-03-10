@@ -30,12 +30,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="One per-component TSV report. May be supplied multiple times.",
     )
     parser.add_argument(
-        "--db-root",
-        type=Path,
-        required=True,
-        help="Canonical runtime database root used by the prep workflow.",
-    )
-    parser.add_argument(
         "--output-report",
         type=Path,
         required=True,
@@ -62,14 +56,11 @@ def component_sort_key(row: dict[str, str]) -> tuple[int, str]:
     ordering = {
         "taxdump": 0,
         "checkm2": 1,
-        "busco_root": 4,
-        "eggnog": 5,
-        "padloc": 6,
+        "busco_root": 2,
+        "eggnog": 3,
+        "padloc": 4,
     }
-    component = row["component"]
-    if component.startswith("busco:"):
-        return (2, component)
-    return (ordering.get(component, 99), component)
+    return (ordering.get(row["component"], 99), row["component"])
 
 
 def merge_rows(report_paths: Sequence[Path]) -> list[dict[str, str]]:
@@ -90,26 +81,31 @@ def write_merged_report(path: Path, rows: Sequence[dict[str, str]]) -> None:
             writer.writerow(row)
 
 
-def build_nextflow_args(db_root: Path) -> str:
+def build_nextflow_args(rows: Sequence[dict[str, str]]) -> str:
     """Build the paste-ready Nextflow argument block."""
+    flag_map = {
+        "taxdump": "--taxdump",
+        "checkm2": "--checkm2_db",
+        "busco_root": "--busco_db",
+        "eggnog": "--eggnog_db",
+        "padloc": "--padloc_db",
+    }
     arguments = [
-        ("--taxdump", db_root / "taxdump"),
-        ("--checkm2_db", db_root / "checkm2"),
-        ("--busco_download_dir", db_root / "busco"),
-        ("--eggnog_db", db_root / "eggnog"),
-        ("--padloc_db", db_root / "padloc"),
+        (flag_map[row["component"]], row["destination"])
+        for row in rows
+        if row["component"] in flag_map
     ]
     lines = ["nextflow run . \\"]
     for index, (flag, value) in enumerate(arguments):
         suffix = " \\" if index < len(arguments) - 1 else ""
-        lines.append(f"  {flag} {shlex.quote(str(value))}{suffix}")
+        lines.append(f"  {flag} {shlex.quote(value)}{suffix}")
     return "\n".join(lines) + "\n"
 
 
-def write_nextflow_args(path: Path, db_root: Path) -> None:
+def write_nextflow_args(path: Path, rows: Sequence[dict[str, str]]) -> None:
     """Write the Nextflow argument block."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(build_nextflow_args(db_root), encoding="utf-8")
+    path.write_text(build_nextflow_args(rows), encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -117,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     rows = merge_rows(args.report)
     write_merged_report(args.output_report, rows)
-    write_nextflow_args(args.output_args, args.db_root.expanduser().resolve(strict=False))
+    write_nextflow_args(args.output_args, rows)
     return 0
 
 

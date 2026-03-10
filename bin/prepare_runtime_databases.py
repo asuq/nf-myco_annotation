@@ -1275,7 +1275,7 @@ def build_nextflow_arguments(records: Sequence[PreparationRecord]) -> list[tuple
         elif record.component == "checkm2":
             mapping["--checkm2_db"] = str(record.destination)
         elif record.component == "busco_root":
-            mapping["--busco_download_dir"] = str(record.destination)
+            mapping["--busco_db"] = str(record.destination)
         elif record.component == "eggnog":
             mapping["--eggnog_db"] = str(record.destination)
         elif record.component == "padloc":

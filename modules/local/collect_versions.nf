@@ -56,7 +56,7 @@ process COLLECT_VERSIONS {
         --taxdump "${params.taxdump ?: 'NA'}" \
         --taxdump-label "${params.taxdump_label ?: 'NA'}" \
         ${lineageArgs} \
-        --busco-download-dir "${params.busco_download_dir ?: 'NA'}" \
+        --busco-db "${params.busco_db ?: 'NA'}" \
         --eggnog-db "${params.eggnog_db ?: 'NA'}" \
         --eggnog-db-label "${params.eggnog_db_label ?: 'NA'}" \
         --padloc-db "${params.padloc_db ?: 'NA'}" \

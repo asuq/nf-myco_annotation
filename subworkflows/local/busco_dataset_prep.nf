@@ -15,14 +15,14 @@ workflow BUSCO_DATASET_PREP {
         logs = DOWNLOAD_BUSCO_DATASET.out.log
         versions = DOWNLOAD_BUSCO_DATASET.out.versions
     } else {
-        if (!params.busco_download_dir) {
-            error "params.busco_download_dir is required unless params.prepare_busco_datasets=true"
+        if (!params.busco_db) {
+            error "params.busco_db is required unless params.prepare_busco_datasets=true"
         }
 
         datasets = lineages.map { lineage ->
             tuple(
                 lineage,
-                file("${params.busco_download_dir}/${lineage}", checkIfExists: true),
+                file("${params.busco_db}/${lineage}", checkIfExists: true),
             )
         }
         logs = Channel.empty()

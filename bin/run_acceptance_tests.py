@@ -33,8 +33,8 @@ REAL_RUN_NOTE = (
     "the acceptance harness does not override it."
 )
 DBPREP_RUN_NOTE = (
-    "This mode runs prepare_databases.nf on SLURM, downloads the curated "
-    "runtime databases, and validates the prepared database tree."
+    "This mode runs prepare_databases.nf on SLURM, downloads the runtime "
+    "databases into explicit tool directories, and validates the prepared tree."
 )
 DOWNLOAD_COLUMNS = ("source_accession", "sha256", "fasta_path")
 SOURCE_STATS_COLUMNS = (
@@ -649,11 +649,30 @@ def validate_real_run_args(args: argparse.Namespace) -> None:
         missing.append("--eggnog-db")
     if not args.padloc_db:
         missing.append("--padloc-db")
-    if not args.prepare_busco_datasets and not args.busco_download_dir:
-        missing.append("--busco-download-dir or --prepare-busco-datasets")
+    if not args.prepare_busco_datasets and not args.busco_db:
+        missing.append("--busco-db or --prepare-busco-datasets")
     if missing:
         raise AcceptanceTestError(
             "Missing required arguments for real-data runs: " + ", ".join(missing)
+        )
+
+
+def validate_dbprep_run_args(args: argparse.Namespace) -> None:
+    """Validate the required destination arguments for dbprep-slurm."""
+    missing: list[str] = []
+    if not args.taxdump:
+        missing.append("--taxdump")
+    if not args.checkm2_db:
+        missing.append("--checkm2-db")
+    if not args.busco_db:
+        missing.append("--busco-db")
+    if not args.eggnog_db:
+        missing.append("--eggnog-db")
+    if not args.padloc_db:
+        missing.append("--padloc-db")
+    if missing:
+        raise AcceptanceTestError(
+            "Missing required arguments for dbprep-slurm: " + ", ".join(missing)
         )
 
 
@@ -693,8 +712,8 @@ def build_nextflow_command(
         command.append("-resume")
     if args.prepare_busco_datasets:
         command.extend(["--prepare_busco_datasets", "true"])
-    if args.busco_download_dir:
-        command.extend(["--busco_download_dir", str(Path(args.busco_download_dir).resolve())])
+    if args.busco_db:
+        command.extend(["--busco_db", str(Path(args.busco_db).resolve())])
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
     maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
@@ -707,7 +726,6 @@ def build_dbprep_command(
     profile: str,
     work_dir: Path,
     outdir: Path,
-    db_root: Path,
     args: argparse.Namespace,
 ) -> list[str]:
     """Build the Nextflow command for one runtime database prep execution."""
@@ -719,8 +737,16 @@ def build_dbprep_command(
         profile,
         "-work-dir",
         str(work_dir),
-        "--db_root",
-        str(db_root),
+        "--taxdump",
+        str(Path(args.taxdump).resolve()),
+        "--checkm2_db",
+        str(Path(args.checkm2_db).resolve()),
+        "--busco_db",
+        str(Path(args.busco_db).resolve()),
+        "--eggnog_db",
+        str(Path(args.eggnog_db).resolve()),
+        "--padloc_db",
+        str(Path(args.padloc_db).resolve()),
         "--download_missing_databases",
         "true",
         "--outdir",
@@ -763,14 +789,14 @@ def require_dbprep_outputs(outdir: Path) -> dict[str, Path]:
     return {name: outdir / name for name in DBPREP_OUTPUTS}
 
 
-def assert_dbprep_database_tree(db_root: Path) -> None:
+def assert_dbprep_database_tree(
+    taxdump_dir: Path,
+    checkm2_dir: Path,
+    busco_root: Path,
+    eggnog_dir: Path,
+    padloc_dir: Path,
+) -> None:
     """Assert that the prepared runtime database tree is complete."""
-    taxdump_dir = db_root / "taxdump"
-    checkm2_dir = db_root / "checkm2"
-    busco_root = db_root / "busco"
-    eggnog_dir = db_root / "eggnog"
-    padloc_dir = db_root / "padloc"
-
     required_files = (
         taxdump_dir / "names.dmp",
         taxdump_dir / "nodes.dmp",
@@ -779,6 +805,7 @@ def assert_dbprep_database_tree(db_root: Path) -> None:
         padloc_dir / "hmm" / "padlocdb.hmm",
         taxdump_dir / ".nf_myco_ready.json",
         checkm2_dir / ".nf_myco_ready.json",
+        busco_root / ".nf_myco_ready.json",
         eggnog_dir / ".nf_myco_ready.json",
         padloc_dir / ".nf_myco_ready.json",
     )
@@ -792,9 +819,8 @@ def assert_dbprep_database_tree(db_root: Path) -> None:
 
     for lineage in DEFAULT_DBPREP_BUSCO_LINEAGES:
         lineage_dir = busco_root / lineage
-        marker = lineage_dir / ".nf_myco_ready.json"
         dataset_cfg = lineage_dir / "dataset.cfg"
-        if not marker.is_file() or not dataset_cfg.is_file():
+        if not dataset_cfg.is_file():
             raise AcceptanceTestError(f"missing_dbprep_busco_lineage:{lineage}")
 
 
@@ -808,7 +834,6 @@ def assert_dbprep_report_contract(report_path: Path) -> None:
         "busco_root",
         "eggnog",
         "padloc",
-        *(f"busco:{lineage}" for lineage in DEFAULT_DBPREP_BUSCO_LINEAGES),
     }
     missing = sorted(required_components - seen_components)
     if missing:
@@ -1112,24 +1137,29 @@ def run_slurm_with_comparison(args: argparse.Namespace) -> None:
 
 def run_dbprep_slurm(args: argparse.Namespace) -> None:
     """Run the runtime database prep workflow on SLURM and validate outputs."""
+    validate_dbprep_run_args(args)
     require_command("nextflow")
     require_command("sbatch")
 
     run_dir = args.work_root / "runs" / "dbprep-slurm"
     outdir = run_dir / "results"
     work_dir = run_dir / "work"
-    db_root = args.db_root if args.db_root else run_dir / "db_root"
 
     command = build_dbprep_command(
         profile=args.dbprep_profile,
         work_dir=work_dir,
         outdir=outdir,
-        db_root=db_root,
         args=args,
     )
     run_command(command, cwd=ROOT_DIR)
     outputs = require_dbprep_outputs(outdir)
-    assert_dbprep_database_tree(db_root)
+    assert_dbprep_database_tree(
+        Path(args.taxdump).resolve(),
+        Path(args.checkm2_db).resolve(),
+        Path(args.busco_db).resolve(),
+        Path(args.eggnog_db).resolve(),
+        Path(args.padloc_db).resolve(),
+    )
     assert_dbprep_report_contract(outputs["runtime_database_report.tsv"])
 
 
@@ -1173,7 +1203,7 @@ def build_real_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--taxdump", type=Path, default=None, help="Pinned taxdump directory.")
     parser.add_argument("--checkm2-db", type=Path, default=None, help="CheckM2 database path.")
     parser.add_argument(
-        "--busco-download-dir",
+        "--busco-db",
         type=Path,
         default=None,
         help="Pre-downloaded BUSCO lineage directory root.",
@@ -1222,12 +1252,11 @@ def build_dbprep_run_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DBPREP_PROFILE,
         help="Nextflow profile string for SLURM database prep runs.",
     )
-    parser.add_argument(
-        "--db-root",
-        type=Path,
-        default=None,
-        help="Optional prepared database root override for dbprep-slurm.",
-    )
+    parser.add_argument("--taxdump", type=Path, default=None, help="Pinned taxdump directory.")
+    parser.add_argument("--checkm2-db", type=Path, default=None, help="CheckM2 database path.")
+    parser.add_argument("--busco-db", type=Path, default=None, help="BUSCO database root.")
+    parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
+    parser.add_argument("--padloc-db", type=Path, default=None, help="PADLOC database path.")
     parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
     parser.add_argument(
         "--slurm-cluster-options",

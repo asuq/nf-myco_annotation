@@ -31,16 +31,19 @@ process CHECKM2 {
     fi
 
     database_path="${checkm2Db}"
-    if [[ -d "\${database_path}" ]]; then
-        shopt -s nullglob
-        dmnd_candidates=("\${database_path}"/*.dmnd)
-        shopt -u nullglob
-        if [[ \${#dmnd_candidates[@]} -ne 1 ]]; then
-            echo "CHECKM2 expected exactly one .dmnd file in \${database_path}." >&2
-            exit 1
-        fi
-        database_path="\${dmnd_candidates[0]}"
+    if [[ ! -d "\${database_path}" ]]; then
+        echo "params.checkm2_db must point to a CheckM2 database directory." >&2
+        exit 1
     fi
+
+    shopt -s nullglob
+    dmnd_candidates=("\${database_path}"/*.dmnd)
+    shopt -u nullglob
+    if [[ \${#dmnd_candidates[@]} -ne 1 ]]; then
+        echo "CHECKM2 expected exactly one .dmnd file in \${database_path}." >&2
+        exit 1
+    fi
+    database_path="\${dmnd_candidates[0]}"
 
     output_dir="checkm2_gcode${translation_table}"
 
