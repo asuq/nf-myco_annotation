@@ -696,7 +696,6 @@ def build_nextflow_command(
     if args.busco_download_dir:
         command.extend(["--busco_download_dir", str(Path(args.busco_download_dir).resolve())])
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
-    maybe_add_parameter(command, "--slurm_account", args.slurm_account)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
     maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
     maybe_add_parameter(command, "--singularity_run_options", args.singularity_run_options)
@@ -730,7 +729,6 @@ def build_dbprep_command(
     if args.resume:
         command.append("-resume")
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
-    maybe_add_parameter(command, "--slurm_account", args.slurm_account)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
     maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
     maybe_add_parameter(command, "--singularity_run_options", args.singularity_run_options)
@@ -1198,7 +1196,6 @@ def build_real_run_parser() -> argparse.ArgumentParser:
         help="Nextflow profile string for SLURM real-data runs.",
     )
     parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
-    parser.add_argument("--slurm-account", default=None, help="Optional SLURM account.")
     parser.add_argument(
         "--slurm-cluster-options",
         default=None,
@@ -1232,7 +1229,6 @@ def build_dbprep_run_parser() -> argparse.ArgumentParser:
         help="Optional prepared database root override for dbprep-slurm.",
     )
     parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
-    parser.add_argument("--slurm-account", default=None, help="Optional SLURM account.")
     parser.add_argument(
         "--slurm-cluster-options",
         default=None,
