@@ -43,6 +43,8 @@ class RuntimeDbHelperContainerContractTestCase(unittest.TestCase):
             'ENV NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST=/opt/nf-myco_annotation/runtime_database_sources.json',
             dockerfile_text,
         )
+        helper_text = (ROOT / "bin" / "prepare_runtime_databases.py").read_text(encoding="utf-8")
+        self.assertIn("NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST", helper_text)
 
     @unittest.skipUnless(
         RUN_DOCKER_TESTS,

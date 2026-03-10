@@ -30,8 +30,11 @@ LOCK_FILE_SUFFIX = ".nf_myco_prepare.lock"
 DEFAULT_BUSCO_LINEAGES = ("bacillota_odb12", "mycoplasmatota_odb12")
 REPORT_COLUMNS = ("component", "status", "source", "destination", "details")
 LINK_MODES = ("copy", "symlink", "hardlink")
-DEFAULT_REMOTE_SOURCE_MANIFEST = (
-    Path(__file__).resolve().parents[1] / "assets" / "runtime_database_sources.json"
+DEFAULT_REMOTE_SOURCE_MANIFEST = Path(
+    os.environ.get(
+        "NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST",
+        Path(__file__).resolve().parents[1] / "assets" / "runtime_database_sources.json",
+    )
 )
 
 
