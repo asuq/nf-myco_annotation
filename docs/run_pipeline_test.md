@@ -12,7 +12,7 @@ The wrapper does not re-implement pipeline logic. It forwards work to the
 acceptance harness, which remains the single source of truth for validation,
 Nextflow command construction, and output checks.
 
-For runtime database preparation, use `python3 bin/prepare_runtime_databases.py`
+For runtime database preparation, use `nextflow run prepare_databases.nf`
 instead. The wrapper's `prepare` mode only prepares the tracked acceptance
 cohort and its cached source genomes.
 

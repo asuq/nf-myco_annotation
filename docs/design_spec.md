@@ -53,8 +53,10 @@ This is a **behaviour-preserving v1 refactor**, not a methodological redesign.
 
 ### 2.3 Taxonomy policy
 
-- Do **not** fetch the latest taxdump automatically.
-- The end user must provide a **pinned** taxdump.
+- The main analysis workflow must **not** fetch taxdump automatically.
+- A separate runtime-database prep entry point may download curated taxdump
+  releases before the main workflow runs.
+- The main analysis workflow still consumes a resolved taxdump path.
 - Do **not** infer taxonomy for newly assembled genomes lacking valid `Tax_ID`.
 
 ### 2.4 Barrnap / 16S policy
@@ -483,7 +485,7 @@ Purpose:
 
 Rules:
 
-- do not fetch any taxdump
+- consume the prepared taxdump path supplied to the main workflow
 - do not infer taxonomy for new genomes missing valid `Tax_ID`
 - join lineage back by `Tax_ID`
 

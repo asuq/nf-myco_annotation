@@ -30,19 +30,33 @@ Shared helper image requirement:
 - local Docker and HPC Singularity runs should reuse that one helper image to
   reduce container pulls
 
+Runtime database prep helper image:
+
+- `params.runtime_db_helper_container` is the optional dedicated helper image
+  for `prepare_databases.nf`
+- the repo-owned Dockerfile for this image lives under
+  `docker/runtime_db_helper/Dockerfile`
+- if `params.runtime_db_helper_container` is unset, the prep workflow runs on
+  the host and requires `aria2c` plus Python 3.12 on `PATH`
+
 ## Runtime database preparation
 
-Use `bin/prepare_runtime_databases.py` when one or more runtime databases are
+Use `nextflow run prepare_databases.nf` when one or more runtime databases are
 missing on the target machine.
 
-- It is a standalone operator helper, not part of the normal pipeline runtime.
-- It accepts only caller-supplied local pinned sources.
-- It prepares databases in place under the final destination roots.
+- It is a separate operator-facing Nextflow entry point, not part of the normal
+  analysis workflow runtime.
+- It prepares databases in place under one canonical `--db_root`.
+- It can reuse local staged sources, download curated remote sources, or mix the
+  two in one run.
 - Archive extraction uses destination-local scratch by default, not system tmp.
 - A prepared destination is reusable only when it validates and contains
   `.nf_myco_ready.json`.
 - Concurrent preparation is blocked by a per-destination lock sidecar ending in
   `.nf_myco_prepare.lock`.
+- The helper logic lives in `bin/prepare_runtime_databases.py`, but that script
+  is now the implementation detail behind the prep workflow rather than the
+  main operator interface.
 
 Supported runtime databases:
 
@@ -55,22 +69,19 @@ Supported runtime databases:
 Example:
 
 ```bash
-python3 bin/prepare_runtime_databases.py \
-  --taxdump-source /staged/db_sources/taxdump_20240914 \
-  --taxdump-dest /shared/db/taxdump_20240914 \
-  --checkm2-source /staged/db_sources/checkm2/CheckM2_database.dmnd \
-  --checkm2-dest /shared/db/checkm2 \
-  --busco-lineage-source bacillota_odb12=/staged/db_sources/busco/bacillota_odb12 \
-  --busco-lineage-source mycoplasmatota_odb12=/staged/db_sources/busco/mycoplasmatota_odb12 \
-  --busco-dest-root /shared/db/busco \
-  --eggnog-source /staged/db_sources/eggnog_data \
-  --eggnog-dest /shared/db/eggnog \
-  --padloc-source /staged/db_sources/padloc_data \
-  --padloc-dest /shared/db/padloc \
-  --report /shared/db/runtime_db_prepare.tsv
+nextflow run prepare_databases.nf -profile oist \
+  --db_root /shared/db/runtime \
+  --taxdump_source /staged/db_sources/taxdump_20240914 \
+  --checkm2_source /staged/db_sources/checkm2/CheckM2_database.dmnd \
+  --busco_source_root /staged/db_sources/busco \
+  --eggnog_source /staged/db_sources/eggnog_data \
+  --padloc_source /staged/db_sources/padloc_data \
+  --runtime_db_link_mode symlink \
+  --outdir /shared/db/runtime-prep
 ```
 
-The helper prints a copy-pastable Nextflow argument block on success.
+The prep workflow writes `runtime_database_report.tsv` and `nextflow_args.txt`
+under `--outdir` on success.
 
 ## Profiles
 
@@ -296,28 +307,23 @@ nextflow config -profile oist >/dev/null
 4. Test runtime database preparation from directory sources.
 
 ```bash
-python3 bin/prepare_runtime_databases.py \
-  --taxdump-source "$DB_SRC_ROOT/taxdump_20240914" \
-  --taxdump-dest "$DB_TEST_ROOT/db1/taxdump" \
-  --checkm2-source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
-  --checkm2-dest "$DB_TEST_ROOT/db1/checkm2" \
-  --busco-lineage-source "bacillota_odb12=$DB_SRC_ROOT/busco/bacillota_odb12" \
-  --busco-lineage-source "mycoplasmatota_odb12=$DB_SRC_ROOT/busco/mycoplasmatota_odb12" \
-  --busco-dest-root "$DB_TEST_ROOT/db1/busco" \
-  --eggnog-source "$DB_SRC_ROOT/eggnog_data" \
-  --eggnog-dest "$DB_TEST_ROOT/db1/eggnog" \
-  --padloc-source "$DB_SRC_ROOT/padloc_data" \
-  --padloc-dest "$DB_TEST_ROOT/db1/padloc" \
-  --link-mode symlink \
-  --scratch-root "$DB_TEST_ROOT/db1/.scratch" \
-  --report "$DB_TEST_ROOT/db1/report.tsv"
+nextflow run prepare_databases.nf -profile oist \
+  --db_root "$DB_TEST_ROOT/db1" \
+  --taxdump_source "$DB_SRC_ROOT/taxdump_20240914" \
+  --checkm2_source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
+  --busco_source_root "$DB_SRC_ROOT/busco" \
+  --eggnog_source "$DB_SRC_ROOT/eggnog_data" \
+  --padloc_source "$DB_SRC_ROOT/padloc_data" \
+  --runtime_db_link_mode symlink \
+  --runtime_db_scratch_root "$DB_TEST_ROOT/db1/.scratch" \
+  --outdir "$DB_TEST_ROOT/db1/out"
 ```
 
 Expected result:
 
-- report rows are `prepared`
+- `runtime_database_report.tsv` shows `prepared`
 - every destination contains `.nf_myco_ready.json`
-- the helper prints a reusable Nextflow argument block
+- `nextflow_args.txt` is ready to paste into the main workflow
 
 5. Re-run the exact same command from step 4.
 
@@ -335,21 +341,16 @@ tar -C "$DB_SRC_ROOT/busco" -czf "$DB_TEST_ROOT/archives/mycoplasmatota_odb12.ta
 tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/eggnog.tar.gz" eggnog_data
 tar -C "$DB_SRC_ROOT" -czf "$DB_TEST_ROOT/archives/padloc.tar.gz" padloc_data
 
-python3 bin/prepare_runtime_databases.py \
-  --taxdump-source "$DB_TEST_ROOT/archives/taxdump.tar.gz" \
-  --taxdump-dest "$DB_TEST_ROOT/db2/taxdump" \
-  --checkm2-source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
-  --checkm2-dest "$DB_TEST_ROOT/db2/checkm2" \
-  --busco-lineage-source "bacillota_odb12=$DB_TEST_ROOT/archives/bacillota_odb12.tar.gz" \
-  --busco-lineage-source "mycoplasmatota_odb12=$DB_TEST_ROOT/archives/mycoplasmatota_odb12.tar.gz" \
-  --busco-dest-root "$DB_TEST_ROOT/db2/busco" \
-  --eggnog-source "$DB_TEST_ROOT/archives/eggnog.tar.gz" \
-  --eggnog-dest "$DB_TEST_ROOT/db2/eggnog" \
-  --padloc-source "$DB_TEST_ROOT/archives/padloc.tar.gz" \
-  --padloc-dest "$DB_TEST_ROOT/db2/padloc" \
-  --link-mode symlink \
-  --scratch-root "$DB_TEST_ROOT/db2/.scratch" \
-  --report "$DB_TEST_ROOT/db2/report.tsv"
+nextflow run prepare_databases.nf -profile oist \
+  --db_root "$DB_TEST_ROOT/db2" \
+  --taxdump_source "$DB_TEST_ROOT/archives/taxdump.tar.gz" \
+  --checkm2_source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
+  --busco_source_root "$DB_TEST_ROOT/archives" \
+  --eggnog_source "$DB_TEST_ROOT/archives/eggnog.tar.gz" \
+  --padloc_source "$DB_TEST_ROOT/archives/padloc.tar.gz" \
+  --runtime_db_link_mode symlink \
+  --runtime_db_scratch_root "$DB_TEST_ROOT/db2/.scratch" \
+  --outdir "$DB_TEST_ROOT/db2/out"
 ```
 
 Expected result:
@@ -360,12 +361,13 @@ Expected result:
 7. Test invalid-destination failure and `--force` recovery.
 
 ```bash
-mkdir -p "$DB_TEST_ROOT/db3/bad_padloc"
-printf 'broken\n' > "$DB_TEST_ROOT/db3/bad_padloc/broken.txt"
+mkdir -p "$DB_TEST_ROOT/db3/padloc"
+printf 'broken\n' > "$DB_TEST_ROOT/db3/padloc/broken.txt"
 
-python3 bin/prepare_runtime_databases.py \
-  --padloc-source "$DB_SRC_ROOT/padloc_data" \
-  --padloc-dest "$DB_TEST_ROOT/db3/bad_padloc"
+nextflow run prepare_databases.nf -profile oist \
+  --db_root "$DB_TEST_ROOT/db3" \
+  --padloc_source "$DB_SRC_ROOT/padloc_data" \
+  --outdir "$DB_TEST_ROOT/db3/out"
 ```
 
 Expected result:
@@ -375,10 +377,11 @@ Expected result:
 Then rerun with `--force`:
 
 ```bash
-python3 bin/prepare_runtime_databases.py \
-  --padloc-source "$DB_SRC_ROOT/padloc_data" \
-  --padloc-dest "$DB_TEST_ROOT/db3/bad_padloc" \
-  --force
+nextflow run prepare_databases.nf -profile oist \
+  --db_root "$DB_TEST_ROOT/db3" \
+  --padloc_source "$DB_SRC_ROOT/padloc_data" \
+  --force_runtime_database_rebuild true \
+  --outdir "$DB_TEST_ROOT/db3/out"
 ```
 
 Expected result:
@@ -389,21 +392,16 @@ Expected result:
 8. Prepare the final runtime database root that all real HPC runs will share.
 
 ```bash
-python3 bin/prepare_runtime_databases.py \
-  --taxdump-source "$DB_SRC_ROOT/taxdump_20240914" \
-  --taxdump-dest "$DB_RUNTIME_ROOT/taxdump_20240914" \
-  --checkm2-source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
-  --checkm2-dest "$DB_RUNTIME_ROOT/checkm2" \
-  --busco-lineage-source "bacillota_odb12=$DB_SRC_ROOT/busco/bacillota_odb12" \
-  --busco-lineage-source "mycoplasmatota_odb12=$DB_SRC_ROOT/busco/mycoplasmatota_odb12" \
-  --busco-dest-root "$DB_RUNTIME_ROOT/busco" \
-  --eggnog-source "$DB_SRC_ROOT/eggnog_data" \
-  --eggnog-dest "$DB_RUNTIME_ROOT/eggnog" \
-  --padloc-source "$DB_SRC_ROOT/padloc_data" \
-  --padloc-dest "$DB_RUNTIME_ROOT/padloc" \
-  --link-mode symlink \
-  --scratch-root "$DB_RUNTIME_ROOT/.scratch" \
-  --report "$DB_RUNTIME_ROOT/runtime_report.tsv"
+nextflow run prepare_databases.nf -profile oist \
+  --db_root "$DB_RUNTIME_ROOT" \
+  --taxdump_source "$DB_SRC_ROOT/taxdump_20240914" \
+  --checkm2_source "$DB_SRC_ROOT/checkm2/CheckM2_database.dmnd" \
+  --busco_source_root "$DB_SRC_ROOT/busco" \
+  --eggnog_source "$DB_SRC_ROOT/eggnog_data" \
+  --padloc_source "$DB_SRC_ROOT/padloc_data" \
+  --runtime_db_link_mode symlink \
+  --runtime_db_scratch_root "$DB_RUNTIME_ROOT/.scratch" \
+  --outdir "$DB_RUNTIME_ROOT/out"
 ```
 
 9. Run one optional structural smoke test.
