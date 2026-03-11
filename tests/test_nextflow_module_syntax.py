@@ -45,9 +45,34 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_path = MODULES_DIR / "checkm2.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
-        self.assertIn('database_path="${checkm2Db}"', module_text)
+        self.assertIn("tuple val(meta), path(genome), path(checkm2_db)", module_text)
+        self.assertIn('database_path="${checkm2_db}"', module_text)
         self.assertIn('dmnd_candidates=("\\${database_path}"/*.dmnd)', module_text)
         self.assertIn('--database_path "\\${database_path}"', module_text)
+
+    def test_runtime_database_dirs_are_staged_into_checkm2_and_eggnog(self) -> None:
+        """Require external database directories to enter containers as path inputs."""
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
+        per_sample_qc_text = (
+            ROOT / "subworkflows" / "local" / "per_sample_qc.nf"
+        ).read_text(encoding="utf-8")
+        per_sample_annotation_text = (
+            ROOT / "subworkflows" / "local" / "per_sample_annotation.nf"
+        ).read_text(encoding="utf-8")
+        eggnog_text = (MODULES_DIR / "eggnog.nf").read_text(encoding="utf-8")
+
+        self.assertIn("checkm2Db = Channel.fromPath(params.checkm2_db, checkIfExists: true)", main_text)
+        self.assertIn("eggnogDb = Channel.fromPath(params.eggnog_db, checkIfExists: true)", main_text)
+        self.assertIn("PER_SAMPLE_QC(", main_text)
+        self.assertIn("checkm2Db,", main_text)
+        self.assertIn("PER_SAMPLE_ANNOTATION(", main_text)
+        self.assertIn("eggnogDb,", main_text)
+        self.assertIn("take:\n    sample_genomes\n    checkm2_db\n    busco_datasets", per_sample_qc_text)
+        self.assertIn(".combine(checkm2_db)", per_sample_qc_text)
+        self.assertIn("take:\n    sample_genomes\n    gcode_summaries\n    eggnog_db\n    padloc_db", per_sample_annotation_text)
+        self.assertIn("EGGNOG(eggnog_inputs.combine(eggnog_db))", per_sample_annotation_text)
+        self.assertIn("tuple val(meta), path(faa), path(eggnog_db)", eggnog_text)
+        self.assertIn('--data_dir "${eggnog_db}"', eggnog_text)
 
     def test_summarise_busco_emits_lineage_specific_summary_names(self) -> None:
         """Require unique BUSCO summary filenames per lineage."""
@@ -132,6 +157,92 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('script_path="\\$(command -v collect_versions.py)"', module_text)
         self.assertIn('python3 "\\${script_path}"', module_text)
+
+    def test_validate_inputs_stages_sample_status_columns_asset(self) -> None:
+        """Require input validation to stage the sample-status asset into the container."""
+        module_text = (MODULES_DIR / "validate_inputs.nf").read_text(encoding="utf-8")
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "input_validation_and_staging.nf"
+        ).read_text(encoding="utf-8")
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
+
+        self.assertIn("path sample_status_columns", module_text)
+        self.assertIn('--sample-status-columns "${sample_status_columns}"', module_text)
+        self.assertIn("--defer-genome-fasta-check", module_text)
+        self.assertIn("sample_status_columns", workflow_text)
+        self.assertIn("sampleStatusColumns = Channel.value", main_text)
+        self.assertIn("INPUT_VALIDATION_AND_STAGING(sampleCsv, metadata, sampleStatusColumns)", main_text)
+
+    def test_runtime_tool_modules_write_versions_without_indented_headers(self) -> None:
+        """Require runtime tool modules to emit versions via printf, not heredoc indentation."""
+        expected_modules = (
+            "barrnap.nf",
+            "busco.nf",
+            "calculate_assembly_stats.nf",
+            "checkm2.nf",
+            "eggnog.nf",
+            "padloc.nf",
+            "prokka.nf",
+            "stage_inputs.nf",
+        )
+
+        for module_name in expected_modules:
+            module_text = (MODULES_DIR / module_name).read_text(encoding="utf-8")
+            self.assertIn("printf ", module_text, module_name)
+            self.assertNotIn("cat <<EOF > versions.yml", module_text, module_name)
+
+    def test_stage_inputs_extracts_seqtk_version_from_version_line(self) -> None:
+        """Require seqtk version probing to ignore the multi-line usage banner."""
+        module_text = (MODULES_DIR / "stage_inputs.nf").read_text(encoding="utf-8")
+
+        self.assertIn("/^Version:/ { print \\$2; exit }", module_text)
+        self.assertIn('seqtk_version="\\${seqtk_version:-NA}"', module_text)
+
+    def test_calculate_assembly_stats_extracts_seqtk_version_from_version_line(self) -> None:
+        """Require assembly-stats provenance to use the same stable seqtk probe."""
+        module_text = (MODULES_DIR / "calculate_assembly_stats.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("/^Version:/ { print \\$2; exit }", module_text)
+        self.assertIn('seqtk_version="\\${seqtk_version:-NA}"', module_text)
+
+    def test_barrnap_uses_the_last_non_blank_version_line(self) -> None:
+        """Require the Barrnap probe to avoid its leading program-name line."""
+        module_text = (MODULES_DIR / "barrnap.nf").read_text(encoding="utf-8")
+
+        self.assertIn("awk 'NF { value=\\$0 } END { if (value) print value }'", module_text)
+
+    def test_busco_uses_the_last_non_blank_version_line(self) -> None:
+        """Require the BUSCO probe to avoid its leading program-name line."""
+        module_text = (MODULES_DIR / "busco.nf").read_text(encoding="utf-8")
+
+        self.assertIn("awk 'NF { value=\\$0 } END { if (value) print value }'", module_text)
+        self.assertIn('busco_version="\\${busco_version:-NA}"', module_text)
+
+    def test_prokka_uses_the_last_non_blank_version_line(self) -> None:
+        """Require the Prokka probe to avoid its leading program-name line."""
+        module_text = (MODULES_DIR / "prokka.nf").read_text(encoding="utf-8")
+
+        self.assertIn("awk 'NF { value=\\$0 } END { if (value) print value }'", module_text)
+        self.assertIn('prokka_version="\\${prokka_version:-NA}"', module_text)
+
+    def test_padloc_uses_the_version_flag_for_provenance(self) -> None:
+        """Require PADLOC provenance to capture the version string, not the banner."""
+        module_text = (MODULES_DIR / "padloc.nf").read_text(encoding="utf-8")
+
+        self.assertIn('padloc_version="\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"', module_text)
+        self.assertNotIn('padloc --help 2>&1 | awk \'NF { print; exit }\'', module_text)
+
+    def test_ccfinder_extracts_a_numeric_version_from_verbose_output(self) -> None:
+        """Require CRISPRCasFinder provenance to store a clean version token."""
+        module_text = (MODULES_DIR / "ccfinder.nf").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "sed -n 's/.*version \\\\([^,[:space:]]*\\\\).*/\\\\1/p' | head -n 1",
+            module_text,
+        )
+        self.assertIn('ccfinder_version="\\${ccfinder_version:-NA}"', module_text)
 
     def test_ccfinder_does_not_pass_removed_casfinder_path_flags(self) -> None:
         """Require the pinned CRISPRCasFinder invocation to omit dead path flags."""
@@ -290,7 +401,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn("eggnog_only_accessions = null", config_text)
         self.assertIn("params.eggnog_only_accessions", workflow_text)
-        self.assertIn("EGGNOG(eggnog_inputs)", workflow_text)
+        self.assertIn("EGGNOG(eggnog_inputs.combine(eggnog_db))", workflow_text)
         self.assertNotIn("PROKKA(annotation_candidates.filter", workflow_text)
         self.assertNotIn("CCFINDER(annotation_candidates.filter", workflow_text)
         self.assertNotIn("PADLOC(PROKKA.out.padloc_inputs.filter", workflow_text)

@@ -49,11 +49,12 @@ process PADLOC {
 
     printf 'exit_code=%s\n' "\$exit_code" >> padloc.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      transform: "strip_prokka_prefix_and_fasta_tail"
-      padloc: "\$(padloc --help 2>&1 | head -n 1 || echo NA)"
-    EOF
+    padloc_version="\$(padloc --version 2>&1 | awk 'NF { print; exit }' || echo NA)"
+    printf '"%s":\n  transform: "%s"\n  padloc: "%s"\n' \
+      "${task.process}" \
+      'strip_prokka_prefix_and_fasta_tail' \
+      "\${padloc_version}" \
+      > versions.yml
     """
 
     stub:
