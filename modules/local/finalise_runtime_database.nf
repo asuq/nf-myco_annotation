@@ -4,6 +4,7 @@
 process FINALISE_RUNTIME_DATABASE {
     tag "${component}"
     label 'process_single'
+    label 'finalise_runtime_database'
 
     input:
     tuple val(component), val(destination), path(mode_file), val(source_label), path(lineages_file)

@@ -4,6 +4,7 @@
 process DOWNLOAD_PADLOC_DATABASE {
     tag "padloc"
     label 'process_medium'
+    label 'download_padloc_database'
 
     input:
     tuple val(destination), val(download_enabled), val(force)

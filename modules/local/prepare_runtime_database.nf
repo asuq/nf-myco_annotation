@@ -4,6 +4,7 @@
 process PREP_TAXDUMP_DATABASE {
     tag "taxdump"
     label 'process_medium'
+    label 'prep_taxdump_database'
 
     input:
     tuple val(destination), val(download_enabled), val(version), val(scratch_root), val(force)

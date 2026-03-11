@@ -4,6 +4,7 @@
 process MERGE_RUNTIME_DATABASE_REPORTS {
     tag "runtime-database-report"
     label 'process_single'
+    label 'merge_runtime_database_reports'
     publishDir(
         "${params.outdir}",
         mode: 'copy',

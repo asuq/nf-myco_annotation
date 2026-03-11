@@ -4,6 +4,7 @@
 process DOWNLOAD_CHECKM2_DATABASE {
     tag "checkm2"
     label 'process_medium'
+    label 'download_checkm2_database'
 
     input:
     tuple val(destination), val(download_enabled), val(force)

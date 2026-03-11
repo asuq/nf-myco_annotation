@@ -4,6 +4,7 @@
 process DOWNLOAD_BUSCO_DATABASES {
     tag "busco"
     label 'process_medium'
+    label 'download_busco_databases'
 
     input:
     tuple val(destination), val(download_enabled), val(lineages), val(force)

@@ -4,6 +4,7 @@
 process DOWNLOAD_EGGNOG_DATABASE {
     tag "eggnog"
     label 'process_high'
+    label 'download_eggnog_database'
 
     input:
     tuple val(destination), val(download_enabled), val(force)

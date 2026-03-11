@@ -132,25 +132,32 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
-            "withName: PREP_TAXDUMP_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
             config_text,
         )
         self.assertIn(
-            "withName: FINALISE_RUNTIME_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
+            "withLabel: finalise_runtime_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
             config_text,
         )
         self.assertIn(
-            "withName: MERGE_RUNTIME_DATABASE_REPORTS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
+            "withLabel: merge_runtime_database_reports {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
             config_text,
         )
         self.assertIn(
-            "withName: DOWNLOAD_CHECKM2_DATABASE {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.checkm2_container",
+            "withLabel: download_checkm2_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.checkm2_container",
             config_text,
         )
         self.assertIn(
-            "withName: DOWNLOAD_BUSCO_DATABASES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.busco_container",
+            "withLabel: download_busco_databases {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.busco_container",
             config_text,
         )
+        self.assertNotIn("withName: PREP_TAXDUMP_DATABASE", config_text)
+        self.assertNotIn("withName: DOWNLOAD_CHECKM2_DATABASE", config_text)
+        self.assertNotIn("withName: DOWNLOAD_BUSCO_DATABASES", config_text)
+        self.assertNotIn("withName: DOWNLOAD_EGGNOG_DATABASE", config_text)
+        self.assertNotIn("withName: DOWNLOAD_PADLOC_DATABASE", config_text)
+        self.assertNotIn("withName: FINALISE_RUNTIME_DATABASE", config_text)
+        self.assertNotIn("withName: MERGE_RUNTIME_DATABASE_REPORTS", config_text)
 
     def test_docker_profile_forces_amd64_ccfinder_on_arm_hosts(self) -> None:
         """Allow Apple Silicon Docker runs to pull the pinned CCFINDER image."""
