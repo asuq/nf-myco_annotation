@@ -55,7 +55,7 @@ process DOWNLOAD_EGGNOG_DATABASE {
             mkdir -p "\${destination_path}"
 
             script_path="\$(command -v download_eggnog_data.py)"
-            patched_script="${PWD}/download_eggnog_data.py.patched"
+            patched_script="\$PWD/download_eggnog_data.py.patched"
 
             python - "\${script_path}" "\${patched_script}" <<'PY'
 from pathlib import Path
