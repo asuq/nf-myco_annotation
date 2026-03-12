@@ -29,6 +29,18 @@ For OIST or any other full-eggNOG HPC validation, use this sequence:
 2. `bin/run_pipeline_test.sh dbprep-slurm` on SLURM
 3. raw `nextflow run . -profile oist` for the real pipeline run
 
+For the broader OIST campaign through the medium real-data case, use the
+dedicated wrapper:
+
+```bash
+bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all \
+  --medium-sample-csv /path/to/medium_sample_sheet.csv \
+  --medium-metadata /path/to/medium_metadata.tsv
+```
+
+That wrapper keeps using the coded OIST resource defaults. It does not add
+`--max_cpus`, `--max_memory`, or `--max_time` overrides.
+
 The wrapper's normal `slurm` path remains centred on the debug acceptance
 cohort and local-baseline comparison.
 

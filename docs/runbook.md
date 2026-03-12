@@ -285,6 +285,26 @@ HPC. Use three stages in order:
 2. prepare runtime databases on SLURM with `dbprep-slurm`
 3. run the real pipeline with raw `nextflow run . -profile oist`
 
+For the scripted campaign through the medium Mycoplasmatota/Bacillota run, use
+the dedicated wrapper:
+
+```bash
+bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all \
+  --medium-sample-csv /path/to/medium_sample_sheet.csv \
+  --medium-metadata /path/to/medium_metadata.tsv
+```
+
+That wrapper:
+
+- prepares the tracked 9-sample cohort on HPC-native storage
+- runs the full runtime DB gate and the disposable DB existence-state cases
+- runs the tracked 9-sample real pipeline gate
+- runs the medium Mycoplasmatota/Bacillota real-data gate
+
+It intentionally uses the resource defaults already coded in the OIST profile
+and process configuration. It does not pass explicit `--max_cpus`,
+`--max_memory`, or `--max_time` overrides.
+
 Step-by-step procedure:
 
 1. Start a persistent shell on the login node and move into the repository.
@@ -408,10 +428,7 @@ nextflow run . -profile oist \
   --busco_db "$BUSCO_DIR" \
   --eggnog_db "$EGGNOG_DIR" \
   --singularity_cache_dir "$SINGULARITY_CACHE" \
-  --outdir "$RESULT_ROOT/p1/out" \
-  --max_cpus 64 \
-  --max_memory 256.GB \
-  --max_time 72.h
+  --outdir "$RESULT_ROOT/p1/out"
 ```
 
 Do not include `debug` and do not set `--eggnog_only_accessions`.
