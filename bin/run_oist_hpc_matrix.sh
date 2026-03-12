@@ -5,6 +5,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly PIPELINE_WRAPPER="bin/run_pipeline_test.sh"
 readonly VALIDATOR="bin/validate_hpc_matrix.py"
+readonly MEDIUM_INPUT_BUILDER="bin/build_real_run_inputs.py"
 readonly VALID_MODES="prepare db-full db-reuse db-matrix p1 p2 all"
 
 show_usage() {
@@ -20,8 +21,10 @@ Required:
 Options:
   --dry-run                   Print commands and filesystem actions without executing them.
   --resume                    Pass -resume to Nextflow and wrapper runs where supported.
-  --medium-sample-csv PATH    Medium-cohort sample sheet. Required for p2 and all.
-  --medium-metadata PATH      Medium-cohort metadata TSV. Required for p2 and all.
+  --medium-candidates-tsv PATH
+                              Candidate TSV for generating medium-cohort inputs.
+  --medium-sample-csv PATH    Medium-cohort sample sheet. Used when candidates TSV is omitted.
+  --medium-metadata PATH      Medium-cohort metadata TSV. Used when candidates TSV is omitted.
   --sample-count N            Expected medium-cohort size. Default: 20.
   --singularity-cache PATH    Override the Singularity cache root.
   -h, --help                  Show this help message.
@@ -96,9 +99,26 @@ run_expect_failure() {
 }
 
 ensure_medium_inputs() {
-    if [[ -z "${MEDIUM_SAMPLE_CSV}" || -z "${MEDIUM_METADATA}" ]]; then
-        fail "--medium-sample-csv and --medium-metadata are required for ${MODE}"
+    if [[ -n "${MEDIUM_CANDIDATES_TSV}" ]]; then
+        generate_medium_inputs
+        return 0
     fi
+    if [[ -z "${MEDIUM_SAMPLE_CSV}" || -z "${MEDIUM_METADATA}" ]]; then
+        fail "--medium-candidates-tsv or both --medium-sample-csv and --medium-metadata are required for ${MODE}"
+    fi
+}
+
+generate_medium_inputs() {
+    local generated_dir="${HPC_ROOT}/medium_inputs/generated"
+
+    run_or_print \
+        python3 "${MEDIUM_INPUT_BUILDER}" \
+        --candidate-tsv "${MEDIUM_CANDIDATES_TSV}" \
+        --outdir "${generated_dir}" \
+        --sample-count "${SAMPLE_COUNT}"
+
+    MEDIUM_SAMPLE_CSV="${generated_dir}/sample_sheet.csv"
+    MEDIUM_METADATA="${generated_dir}/metadata.tsv"
 }
 
 require_path() {
@@ -558,6 +578,7 @@ main() {
     HPC_ROOT=""
     MEDIUM_SAMPLE_CSV=""
     MEDIUM_METADATA=""
+    MEDIUM_CANDIDATES_TSV=""
     SAMPLE_COUNT=20
     SINGULARITY_CACHE=""
 
@@ -577,6 +598,10 @@ main() {
                 ;;
             --medium-sample-csv)
                 MEDIUM_SAMPLE_CSV="$2"
+                shift 2
+                ;;
+            --medium-candidates-tsv)
+                MEDIUM_CANDIDATES_TSV="$2"
                 shift 2
                 ;;
             --medium-metadata)
