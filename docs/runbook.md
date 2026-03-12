@@ -33,7 +33,7 @@ Shared helper image requirement:
 Runtime database prep helper image:
 
 - `prepare_databases.nf` always uses the dedicated helper image
-  `quay.io/asuq1617/nf-myco_db:0.1`
+  `quay.io/asuq1617/nf-myco_db:0.2`
 - the repo-owned Dockerfile for this image lives under
   `docker/runtime_db_helper/Dockerfile`
 

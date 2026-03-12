@@ -132,15 +132,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
-            "withLabel: finalise_runtime_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
+            "withLabel: finalise_runtime_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
-            "withLabel: merge_runtime_database_reports {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.1'",
+            "withLabel: merge_runtime_database_reports {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
