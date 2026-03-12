@@ -234,6 +234,15 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('padloc_version="\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"', module_text)
         self.assertNotIn('padloc --help 2>&1 | awk \'NF { print; exit }\'', module_text)
 
+    def test_fastani_materialises_inputs_and_fails_early_on_empty_matrix(self) -> None:
+        """Require FastANI to copy-stage inputs and fail before cluster parsing on broken output."""
+        module_text = (MODULES_DIR / "fastani.nf").read_text(encoding="utf-8")
+
+        self.assertIn("stageInMode 'copy'", module_text)
+        self.assertIn("grep -q 'Could not open ' fastani.log", module_text)
+        self.assertIn('if [[ -s "${fastani_paths}" && ! -s fastani.matrix ]]; then', module_text)
+        self.assertIn('FastANI did not produce a matrix for a non-empty input list.', module_text)
+
     def test_ccfinder_extracts_a_numeric_version_from_verbose_output(self) -> None:
         """Require CRISPRCasFinder provenance to store a clean version token."""
         module_text = (MODULES_DIR / "ccfinder.nf").read_text(encoding="utf-8")

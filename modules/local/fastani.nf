@@ -5,6 +5,7 @@
 process FASTANI {
     tag "fastani"
     label 'process_high'
+    stageInMode 'copy'
     publishDir(
         { "${params.outdir}/cohort/fastani" },
         mode: 'copy',
@@ -44,6 +45,18 @@ process FASTANI {
 
     if [[ ! -f fastani.tsv ]]; then
         : > fastani.tsv
+    fi
+
+    if grep -q 'Could not open ' fastani.log; then
+        echo "FastANI could not open one or more staged inputs." >&2
+        sed -n '1,120p' fastani.log >&2
+        exit 1
+    fi
+
+    if [[ -s "${fastani_paths}" && ! -s fastani.matrix ]]; then
+        echo "FastANI did not produce a matrix for a non-empty input list." >&2
+        sed -n '1,120p' fastani.log >&2
+        exit 1
     fi
 
     cat <<EOF > versions.yml

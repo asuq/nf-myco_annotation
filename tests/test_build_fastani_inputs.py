@@ -146,6 +146,8 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             self.assertEqual(metadata_rows[0]["checkm2_completeness"], "95")
             self.assertEqual(metadata_rows[1]["assembly_level"], "Scaffold")
             self.assertTrue((outdir / "fastani_inputs" / "ACC1.fasta").exists())
+            self.assertFalse((outdir / "fastani_inputs" / "ACC1.fasta").is_symlink())
+            self.assertFalse((outdir / "fastani_inputs" / "ACC2.fasta").is_symlink())
             self.assertEqual(
                 (outdir / "fastani_paths.txt").read_text(encoding="utf-8").splitlines(),
                 ["fastani_inputs/ACC1.fasta", "fastani_inputs/ACC2.fasta"],

@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -257,7 +256,7 @@ def ensure_fastani_input(
     internal_id: str,
     output_dir: Path,
 ) -> tuple[str, str]:
-    """Create the canonical FastANI input symlink or copy and return its path strings."""
+    """Materialise one canonical FastANI input FASTA and return its path strings."""
     source = Path(staged_filename)
     if not source.is_absolute():
         source = manifest_dir / source
@@ -270,10 +269,7 @@ def ensure_fastani_input(
     if target.exists() or target.is_symlink():
         target.unlink()
 
-    try:
-        os.symlink(source.resolve(), target)
-    except OSError:
-        shutil.copy2(source, target)
+    shutil.copy2(source, target)
 
     relative_path = str(Path(output_dir.name) / target_name)
     return relative_path, str(target)
