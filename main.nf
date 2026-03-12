@@ -21,6 +21,12 @@ workflow {
     if (!params.taxdump) {
         error "params.taxdump is required."
     }
+    if (!params.checkm2_db) {
+        error "params.checkm2_db is required."
+    }
+    if (!params.eggnog_db) {
+        error "params.eggnog_db is required."
+    }
     if (!(params.busco_lineages instanceof List) || params.busco_lineages.isEmpty()) {
         error "params.busco_lineages must be a non-empty list."
     }
@@ -33,22 +39,27 @@ workflow {
     sampleCsv = Channel.fromPath(params.sample_csv, checkIfExists: true)
     metadata = Channel.fromPath(params.metadata, checkIfExists: true)
     taxdump = Channel.fromPath(params.taxdump, checkIfExists: true)
+    checkm2Db = Channel.fromPath(params.checkm2_db, checkIfExists: true)
+    eggnogDb = Channel.fromPath(params.eggnog_db, checkIfExists: true)
+    sampleStatusColumns = Channel.value(file("${projectDir}/assets/sample_status_columns.txt"))
     buscoLineages = Channel.fromList(params.busco_lineages as List<String>)
     padlocDb = params.padloc_db
         ? Channel.fromPath(params.padloc_db, checkIfExists: true)
         : Channel.value(file("${projectDir}/assets/testdata/stub/padloc_db"))
 
-    INPUT_VALIDATION_AND_STAGING(sampleCsv, metadata)
+    INPUT_VALIDATION_AND_STAGING(sampleCsv, metadata, sampleStatusColumns)
     BUSCO_DATASET_PREP(buscoLineages)
     COHORT_TAXONOMY(INPUT_VALIDATION_AND_STAGING.out.validated_samples, metadata, taxdump)
     PER_SAMPLE_QC(
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
+        checkm2Db,
         BUSCO_DATASET_PREP.out.datasets,
     )
     COHORT_16S(PER_SAMPLE_QC.out.barrnap)
     PER_SAMPLE_ANNOTATION(
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
         PER_SAMPLE_QC.out.gcode_qc,
+        eggnogDb,
         padlocDb,
     )
     COHORT_ANI(

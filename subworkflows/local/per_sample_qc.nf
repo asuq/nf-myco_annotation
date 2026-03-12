@@ -11,13 +11,14 @@ include { BUSCO } from '../../modules/local/busco'
 workflow PER_SAMPLE_QC {
     take:
     sample_genomes
+    checkm2_db
     busco_datasets
 
     main:
     BARRNAP(sample_genomes)
 
-    CHECKM2_GCODE4(sample_genomes, Channel.value(4))
-    CHECKM2_GCODE11(sample_genomes, Channel.value(11))
+    CHECKM2_GCODE4(sample_genomes.combine(checkm2_db), Channel.value(4))
+    CHECKM2_GCODE11(sample_genomes.combine(checkm2_db), Channel.value(11))
 
     paired_checkm2_reports = CHECKM2_GCODE4.out.quality_report
         .mix(CHECKM2_GCODE11.out.quality_report)

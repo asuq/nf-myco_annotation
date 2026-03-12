@@ -14,7 +14,7 @@ process CHECKM2 {
     )
 
     input:
-    tuple val(meta), path(genome)
+    tuple val(meta), path(genome), path(checkm2_db)
     val translation_table
 
     output:
@@ -23,14 +23,8 @@ process CHECKM2 {
     path 'versions.yml', emit: versions
 
     script:
-    def checkm2Db = params.checkm2_db ?: ''
     """
-    if [[ -z "${checkm2Db}" ]]; then
-        echo "params.checkm2_db is required for CHECKM2." >&2
-        exit 1
-    fi
-
-    database_path="${checkm2Db}"
+    database_path="${checkm2_db}"
     if [[ ! -d "\${database_path}" ]]; then
         echo "params.checkm2_db must point to a CheckM2 database directory." >&2
         exit 1
@@ -69,10 +63,11 @@ process CHECKM2 {
 
     printf 'exit_code=%s\n' "\$exit_code" >> checkm2.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      checkm2: "\$(command -v checkm2 >/dev/null 2>&1 && checkm2 --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    checkm2_version="\$(command -v checkm2 >/dev/null 2>&1 && checkm2 --version 2>&1 | awk 'NF { print; exit }' || echo NA)"
+    printf '"%s":\n  checkm2: "%s"\n' \
+      "${task.process}" \
+      "\${checkm2_version}" \
+      > versions.yml
     """
 
     stub:

@@ -13,7 +13,7 @@ process EGGNOG {
     )
 
     input:
-    tuple val(meta), path(faa)
+    tuple val(meta), path(faa), path(eggnog_db)
 
     output:
     tuple val(meta), path('eggnog'), path('eggnog_annotations.tsv'), path('eggnog.log'), emit: results
@@ -21,15 +21,9 @@ process EGGNOG {
     path 'versions.yml', emit: versions
 
     script:
-    def eggnogDb = (params.eggnog_db ?: '').toString()
     def prefix = (meta.internal_id ?: meta.accession).toString()
     def extraArgs = (params.eggnog_extra_args ?: '').toString()
     """
-    if [[ -z '${eggnogDb}' ]]; then
-        echo "params.eggnog_db is required for EGGNOG." >&2
-        exit 1
-    fi
-
     awk '
         /^>/ { gsub(/[[:space:]]+/, "_") }
         { print }
@@ -47,7 +41,7 @@ process EGGNOG {
         -o "${prefix}" \
         --temp_dir "\${tmp_dir}" \
         --report_orthologs \
-        --data_dir "${eggnogDb}" \
+        --data_dir "${eggnog_db}" \
         --sensmode ultra-sensitive \
         --override \
         ${extraArgs} \
@@ -65,10 +59,11 @@ process EGGNOG {
     rm -rf "\${tmp_dir}"
     printf 'exit_code=%s\n' "\$exit_code" >> eggnog.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      eggnog_mapper: "\$(emapper.py --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    eggnog_version="\$(python -c \"import importlib.metadata as m; print(m.version('eggnog-mapper'))\" 2>/dev/null || echo NA)"
+    printf '"%s":\n  eggnog_mapper: "%s"\n' \
+      "${task.process}" \
+      "\${eggnog_version}" \
+      > versions.yml
     """
 
     stub:

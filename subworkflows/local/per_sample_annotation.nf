@@ -12,6 +12,7 @@ workflow PER_SAMPLE_ANNOTATION {
     take:
     sample_genomes
     gcode_summaries
+    eggnog_db
     padloc_db
 
     main:
@@ -57,7 +58,7 @@ workflow PER_SAMPLE_ANNOTATION {
         }
     }
 
-    EGGNOG(eggnog_inputs)
+    EGGNOG(eggnog_inputs.combine(eggnog_db))
 
     versions = PROKKA.out.versions
         .mix(CCFINDER.out.versions)
