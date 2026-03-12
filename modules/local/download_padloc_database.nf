@@ -22,15 +22,15 @@ process DOWNLOAD_PADLOC_DATABASE {
     cp "\$(command -v padloc)" padloc_bin/padloc.real
     sed -i 's#mkdir -p "${SRC_DIR}/../data"#mkdir -p "${PADLOC_BOOTSTRAP_DATA}"#' padloc_bin/padloc.real
     chmod +x padloc_bin/padloc.real
-    export PADLOC_WRAPPER_REAL="$PWD/padloc_bin/padloc.real"
+    export PADLOC_WRAPPER_REAL="\$PWD/padloc_bin/padloc.real"
     cat <<'EOF' > padloc_bin/padloc
 #!/usr/bin/env bash
 set -euo pipefail
-exec bash "${PADLOC_WRAPPER_REAL}" "$@"
+exec bash "\${PADLOC_WRAPPER_REAL}" "\$@"
 EOF
     chmod +x padloc_bin/padloc
-    export PADLOC_BOOTSTRAP_DATA="$PWD/padloc_bootstrap_data"
-    export PATH="$PWD/padloc_bin:$PATH"
+    export PADLOC_BOOTSTRAP_DATA="\$PWD/padloc_bootstrap_data"
+    export PATH="\$PWD/padloc_bin:\$PATH"
 
     if [[ -e "\${destination_path}" && ! -d "\${destination_path}" ]]; then
         echo "PADLOC destination must be a directory: \${destination_path}" >&2
