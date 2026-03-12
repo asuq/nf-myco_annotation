@@ -30,20 +30,21 @@ class PadlocContainerContractTestCase(unittest.TestCase):
     """Lock the custom PADLOC image contract."""
 
     def test_dockerfile_patches_the_launcher_at_build_time(self) -> None:
-        """Require the PADLOC Dockerfile to patch the broken bundled data path."""
+        """Require the PADLOC Dockerfile to bundle one fixed launcher data directory."""
         dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
 
         self.assertIn("FROM quay.io/biocontainers/padloc:2.0.0--hdfd78af_1", dockerfile_text)
-        self.assertIn('mkdir -p "/tmp/padloc-launcher-data"', dockerfile_text)
-        self.assertIn('DATA=$(normpath "/tmp/padloc-launcher-data")', dockerfile_text)
-        self.assertNotIn("patch_padloc_launcher.py", dockerfile_text)
+        self.assertIn("ENV PADLOC_DATA_DIR=/opt/padloc-data", dockerfile_text)
+        self.assertIn('sed -i "s#mkdir -p \\"\\${SRC_DIR}/../data\\"#mkdir -p \\"${PADLOC_DATA_DIR}\\"#"', dockerfile_text)
+        self.assertIn('sed -i "s#DATA=\\$(normpath \\"\\${SRC_DIR}/../data\\")#DATA=\\$(normpath \\"${PADLOC_DATA_DIR}\\")#"', dockerfile_text)
+        self.assertIn('padloc --data "${PADLOC_DATA_DIR}" --db-update', dockerfile_text)
 
     @unittest.skipUnless(
         RUN_DOCKER_TESTS,
         "Set RUN_DOCKER_TESTS=1 to run the PADLOC container image contract test.",
     )
-    def test_custom_image_avoids_the_missing_bundled_data_dir(self) -> None:
-        """Require the custom image to avoid the broken bundled data path."""
+    def test_custom_image_bundles_the_fixed_padloc_database(self) -> None:
+        """Require the custom image to bundle one fixed PADLOC database."""
         build_result = run_command(
             [
                 "docker",
@@ -77,14 +78,10 @@ class PadlocContainerContractTestCase(unittest.TestCase):
                     (
                         "set -euo pipefail; "
                         "PADLOC_BIN=$(command -v padloc); "
-                        "grep -F 'mkdir -p \"/tmp/padloc-launcher-data\"' \"$PADLOC_BIN\" >/dev/null; "
-                        "grep -F 'DATA=$(normpath \"/tmp/padloc-launcher-data\")' \"$PADLOC_BIN\" >/dev/null; "
-                        "set +e; "
-                        "padloc --data /tmp/padloc_dest --db-update > /tmp/padloc.out 2>&1; "
-                        "status=$?; "
-                        "set -e; "
-                        "cat /tmp/padloc.out; "
-                        "exit \"$status\""
+                        "grep -F 'mkdir -p \"/opt/padloc-data\"' \"$PADLOC_BIN\" >/dev/null; "
+                        "grep -F 'DATA=$(normpath \"/opt/padloc-data\")' \"$PADLOC_BIN\" >/dev/null; "
+                        "test -f /opt/padloc-data/hmm/padlocdb.hmm; "
+                        "padloc --version"
                     ),
                 ],
                 timeout=30,
@@ -93,7 +90,7 @@ class PadlocContainerContractTestCase(unittest.TestCase):
         except subprocess.TimeoutExpired as exc:
             output = (exc.stdout or "") + (exc.stderr or "")
 
-        self.assertNotIn("padloc_bin/../data", output)
+        self.assertIn("v2.0.0", output)
         self.assertNotIn('DATA=$(normpath "${SRC_DIR}/../data")', output)
 
 

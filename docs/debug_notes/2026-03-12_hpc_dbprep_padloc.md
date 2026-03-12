@@ -14,9 +14,10 @@
 
 - Bumped helper image tag to `quay.io/asuq1617/nf-myco_db:0.2`.
 - Replaced PADLOC runtime patching with a fixed custom image:
-  - `quay.io/asuq1617/padloc:2.0.0-nfmyco1`
+  - `quay.io/asuq1617/padloc:2.0.0`
   - based on `quay.io/biocontainers/padloc:2.0.0--hdfd78af_1`
-  - launcher patched at image build time so it no longer initialises the missing bundled `../data` path.
+  - launcher patched at image build time so it no longer initialises the missing bundled `../data` path
+  - fixed PADLOC database bundled in the image
 - Exposed `--force-runtime-database-rebuild` through `dbprep-slurm` so partial DB trees can be rebuilt in place after failed HPC attempts.
 
 ### Expected recovery command
@@ -31,6 +32,5 @@ bin/run_pipeline_test.sh dbprep-slurm \
   --checkm2-db /path/to/db/checkm2/CheckM2_database \
   --busco-db /path/to/db/busco \
   --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
-  --padloc-db /path/to/db/padloc \
   --singularity-cache-dir /path/to/singularity_cache
 ```

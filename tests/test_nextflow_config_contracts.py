@@ -28,7 +28,6 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
         self.assertIn("ani_score_profile = 'default'", config_text)
         self.assertIn("busco_db = null", config_text)
-        self.assertIn("padloc_db = null", config_text)
         self.assertIn("download_missing_databases = false", config_text)
         self.assertIn("force_runtime_database_rebuild = false", config_text)
         self.assertIn("runtime_db_scratch_root = null", config_text)
@@ -38,6 +37,8 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("singularity_run_options = ''", config_text)
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
+        self.assertNotIn("padloc_db = null", config_text)
+        self.assertNotIn("padloc_db_label = null", config_text)
         self.assertNotIn("slurm_account", config_text)
         self.assertNotIn("use_biocontainers", config_text)
         self.assertNotIn("runtime_db_helper_container", config_text)
@@ -116,7 +117,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         """Use the fixed PADLOC image tag by default."""
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
 
-        self.assertIn("padloc_container = 'quay.io/asuq1617/padloc:2.0.0-nfmyco1'", config_text)
+        self.assertIn("padloc_container = 'quay.io/asuq1617/padloc:2.0.0'", config_text)
         self.assertNotIn("padloc_container = 'quay.io/biocontainers/padloc:2.0.0--hdfd78af_1'", config_text)
 
     def test_python_helper_processes_are_pinned_explicitly(self) -> None:

@@ -39,7 +39,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "taxdump": Path("/tmp/taxdump"),
             "checkm2_db": Path("/tmp/checkm2"),
             "eggnog_db": Path("/tmp/eggnog"),
-            "padloc_db": Path("/tmp/padloc"),
             "resume": False,
             "prepare_busco_datasets": False,
             "busco_db": Path("/tmp/busco"),
@@ -60,7 +59,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "checkm2_db": Path("/tmp/checkm2"),
             "busco_db": Path("/tmp/busco"),
             "eggnog_db": Path("/tmp/eggnog"),
-            "padloc_db": Path("/tmp/padloc"),
             "force_runtime_database_rebuild": False,
             "slurm_queue": None,
             "slurm_cluster_options": None,
@@ -475,8 +473,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         )
 
         self.assertNotIn("--ccfinder_container", command)
-        self.assertIn("--padloc_db", command)
-        self.assertIn(str(Path("/tmp/padloc").resolve()), command)
+        self.assertNotIn("--padloc_db", command)
         self.assertNotIn("--eggnog_only_accessions", command)
 
     def test_build_nextflow_command_forwards_singularity_runtime_arguments(self) -> None:
@@ -518,7 +515,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             checkm2_db=Path("/tmp/checkm2"),
             busco_db=Path("/tmp/busco"),
             eggnog_db=Path("/tmp/eggnog"),
-            padloc_db=Path("/tmp/padloc"),
             force_runtime_database_rebuild=True,
             singularity_cache_dir="/tmp/singularity-cache",
             singularity_run_options="bind=/db",
@@ -553,13 +549,11 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             checkm2_dir = tmpdir / "checkm2"
             busco_dir = tmpdir / "busco"
             eggnog_dir = tmpdir / "eggnog"
-            padloc_dir = tmpdir / "padloc"
             taxdump_dir.mkdir()
             checkm2_dir.mkdir()
             (busco_dir / "bacillota_odb12").mkdir(parents=True)
             (busco_dir / "mycoplasmatota_odb12").mkdir(parents=True)
             eggnog_dir.mkdir()
-            (padloc_dir / "hmm").mkdir(parents=True)
 
             for path in (
                 taxdump_dir / "names.dmp",
@@ -569,12 +563,10 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 busco_dir / "mycoplasmatota_odb12" / "dataset.cfg",
                 eggnog_dir / "eggnog.db",
                 eggnog_dir / "eggnog_proteins.dmnd",
-                padloc_dir / "hmm" / "padlocdb.hmm",
                 taxdump_dir / ".nf_myco_ready.json",
                 checkm2_dir / ".nf_myco_ready.json",
                 busco_dir / ".nf_myco_ready.json",
                 eggnog_dir / ".nf_myco_ready.json",
-                padloc_dir / ".nf_myco_ready.json",
             ):
                 path.write_text("stub\n", encoding="utf-8")
 
@@ -583,7 +575,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 checkm2_dir,
                 busco_dir,
                 eggnog_dir,
-                padloc_dir,
             )
 
     def test_assert_dbprep_report_contract_requires_all_components(self) -> None:
@@ -597,13 +588,12 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                     {"component": "taxdump", "status": "prepared", "source": "stub", "destination": "/db/taxdump", "details": "ok"},
                     {"component": "checkm2", "status": "prepared", "source": "stub", "destination": "/db/checkm2", "details": "ok"},
                     {"component": "busco_root", "status": "prepared", "source": "derived", "destination": "/db/busco", "details": "ok"},
-                    {"component": "eggnog", "status": "prepared", "source": "stub", "destination": "/db/eggnog", "details": "ok"},
                 ],
             )
 
             with self.assertRaisesRegex(
                 run_acceptance_tests.AcceptanceTestError,
-                "missing_dbprep_report_rows:padloc",
+                "missing_dbprep_report_rows:eggnog",
             ):
                 run_acceptance_tests.assert_dbprep_report_contract(report_path)
 
@@ -661,8 +651,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "/tmp/busco",
                 "--eggnog-db",
                 "/tmp/eggnog",
-                "--padloc-db",
-                "/tmp/padloc",
                 "--singularity-cache-dir",
                 "/tmp/singularity-cache",
             ]
@@ -686,8 +674,6 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "/tmp/busco",
                 "--eggnog-db",
                 "/tmp/eggnog",
-                "--padloc-db",
-                "/tmp/padloc",
                 "--force-runtime-database-rebuild",
             ]
         )

@@ -104,16 +104,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Optional eggNOG database label.",
     )
     parser.add_argument(
-        "--padloc-db",
-        default="NA",
-        help="PADLOC database path.",
-    )
-    parser.add_argument(
-        "--padloc-db-label",
-        default="NA",
-        help="Optional PADLOC database label.",
-    )
-    parser.add_argument(
         "--output",
         required=True,
         type=Path,
@@ -282,13 +272,6 @@ def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             args.eggnog_db_label,
             args.eggnog_db,
             "eggNOG database",
-        ),
-        build_row(
-            "padloc_db",
-            "database",
-            args.padloc_db_label,
-            args.padloc_db,
-            "PADLOC database",
         ),
     ]
     for lineage in args.busco_lineage:

@@ -647,8 +647,6 @@ def validate_real_run_args(args: argparse.Namespace) -> None:
         missing.append("--checkm2-db")
     if not args.eggnog_db:
         missing.append("--eggnog-db")
-    if not args.padloc_db:
-        missing.append("--padloc-db")
     if not args.prepare_busco_datasets and not args.busco_db:
         missing.append("--busco-db or --prepare-busco-datasets")
     if missing:
@@ -668,8 +666,6 @@ def validate_dbprep_run_args(args: argparse.Namespace) -> None:
         missing.append("--busco-db")
     if not args.eggnog_db:
         missing.append("--eggnog-db")
-    if not args.padloc_db:
-        missing.append("--padloc-db")
     if missing:
         raise AcceptanceTestError(
             "Missing required arguments for dbprep-slurm: " + ", ".join(missing)
@@ -703,8 +699,6 @@ def build_nextflow_command(
         str(Path(args.checkm2_db).resolve()),
         "--eggnog_db",
         str(Path(args.eggnog_db).resolve()),
-        "--padloc_db",
-        str(Path(args.padloc_db).resolve()),
         "--outdir",
         str(outdir),
     ]
@@ -745,8 +739,6 @@ def build_dbprep_command(
         str(Path(args.busco_db).resolve()),
         "--eggnog_db",
         str(Path(args.eggnog_db).resolve()),
-        "--padloc_db",
-        str(Path(args.padloc_db).resolve()),
         "--download_missing_databases",
         "true",
         "--outdir",
@@ -796,7 +788,6 @@ def assert_dbprep_database_tree(
     checkm2_dir: Path,
     busco_root: Path,
     eggnog_dir: Path,
-    padloc_dir: Path,
 ) -> None:
     """Assert that the prepared runtime database tree is complete."""
     required_files = (
@@ -804,12 +795,10 @@ def assert_dbprep_database_tree(
         taxdump_dir / "nodes.dmp",
         eggnog_dir / "eggnog.db",
         eggnog_dir / "eggnog_proteins.dmnd",
-        padloc_dir / "hmm" / "padlocdb.hmm",
         taxdump_dir / ".nf_myco_ready.json",
         checkm2_dir / ".nf_myco_ready.json",
         busco_root / ".nf_myco_ready.json",
         eggnog_dir / ".nf_myco_ready.json",
-        padloc_dir / ".nf_myco_ready.json",
     )
     missing = [str(path) for path in required_files if not path.is_file()]
     if missing:
@@ -835,7 +824,6 @@ def assert_dbprep_report_contract(report_path: Path) -> None:
         "checkm2",
         "busco_root",
         "eggnog",
-        "padloc",
     }
     missing = sorted(required_components - seen_components)
     if missing:
@@ -1160,7 +1148,6 @@ def run_dbprep_slurm(args: argparse.Namespace) -> None:
         Path(args.checkm2_db).resolve(),
         Path(args.busco_db).resolve(),
         Path(args.eggnog_db).resolve(),
-        Path(args.padloc_db).resolve(),
     )
     assert_dbprep_report_contract(outputs["runtime_database_report.tsv"])
 
@@ -1216,7 +1203,6 @@ def build_real_run_parser() -> argparse.ArgumentParser:
         help="Allow the pipeline to prepare BUSCO lineage datasets itself.",
     )
     parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
-    parser.add_argument("--padloc-db", type=Path, default=None, help="PADLOC database path.")
     parser.add_argument(
         "--local-profile",
         default=DEFAULT_LOCAL_PROFILE,
@@ -1258,7 +1244,6 @@ def build_dbprep_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkm2-db", type=Path, default=None, help="CheckM2 database path.")
     parser.add_argument("--busco-db", type=Path, default=None, help="BUSCO database root.")
     parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
-    parser.add_argument("--padloc-db", type=Path, default=None, help="PADLOC database path.")
     parser.add_argument(
         "--force-runtime-database-rebuild",
         action="store_true",

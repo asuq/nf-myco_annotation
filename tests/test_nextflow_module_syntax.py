@@ -69,7 +69,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("eggnogDb,", main_text)
         self.assertIn("take:\n    sample_genomes\n    checkm2_db\n    busco_datasets", per_sample_qc_text)
         self.assertIn(".combine(checkm2_db)", per_sample_qc_text)
-        self.assertIn("take:\n    sample_genomes\n    gcode_summaries\n    eggnog_db\n    padloc_db", per_sample_annotation_text)
+        self.assertIn("take:\n    sample_genomes\n    gcode_summaries\n    eggnog_db", per_sample_annotation_text)
         self.assertIn("EGGNOG(eggnog_inputs.combine(eggnog_db))", per_sample_annotation_text)
         self.assertIn("tuple val(meta), path(faa), path(eggnog_db)", eggnog_text)
         self.assertIn('--data_dir "${eggnog_db}"', eggnog_text)
@@ -379,8 +379,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         run_index = module_text.index('padloc --faa padloc_input.faa')
         self.assertLess(mkdir_index, run_index)
 
-    def test_padloc_requires_staged_database_directory(self) -> None:
-        """Require PADLOC to use a staged database directory rather than image defaults."""
+    def test_padloc_uses_the_bundled_database_image(self) -> None:
+        """Require PADLOC to rely on the bundled database in its fixed image."""
         module_text = (MODULES_DIR / "padloc.nf").read_text(encoding="utf-8")
         workflow_text = (
             ROOT / "subworkflows" / "local" / "per_sample_annotation.nf"
@@ -390,31 +390,13 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("tuple val(meta), path(gff), path(faa), path(padloc_db)", module_text)
-        self.assertIn('padloc_db_dir="\\$(cd "${padloc_db}" && pwd)"', module_text)
-        self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
-        self.assertIn('--data "\\${padloc_db_dir}"', module_text)
-        self.assertNotIn("patch_padloc_launcher.py", module_text)
-        self.assertNotIn("PADLOC_WRAPPER_REAL", module_text)
-        self.assertNotIn("padloc_bootstrap", module_text)
-        self.assertIn("PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))", workflow_text)
-        self.assertIn("padlocDb = params.padloc_db", main_text)
-        self.assertIn('--padloc-db "${params.padloc_db ?: \'NA\'}" \\', collect_versions_text)
-
-    def test_download_padloc_database_calls_padloc_directly(self) -> None:
-        """Require PADLOC DB prep to rely on the fixed image launcher directly."""
-        module_text = (MODULES_DIR / "download_padloc_database.nf").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertNotIn("patch_padloc_launcher.py", module_text)
-        self.assertNotIn("PADLOC_WRAPPER_REAL", module_text)
-        self.assertNotIn("padloc_bootstrap", module_text)
-        self.assertIn('padloc --data "\\${destination_path}" --db-update', module_text)
-        self.assertIn(
-            'printf \'  padloc: "%s"\\n\' "\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"',
-            module_text,
-        )
+        self.assertIn("tuple val(meta), path(gff), path(faa)", module_text)
+        self.assertNotIn("path(padloc_db)", module_text)
+        self.assertNotIn("padloc_db_dir=", module_text)
+        self.assertNotIn("--data", module_text)
+        self.assertIn("PADLOC(PROKKA.out.padloc_inputs)", workflow_text)
+        self.assertNotIn("padlocDb = params.padloc_db", main_text)
+        self.assertNotIn("--padloc-db", collect_versions_text)
 
     def test_merge_runtime_database_reports_uses_path_python_lookup(self) -> None:
         """Require merge helper execution to use PATH-resolved Python and helper binaries."""
@@ -461,7 +443,6 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             MODULES_DIR / "download_checkm2_database.nf",
             MODULES_DIR / "download_busco_databases.nf",
             MODULES_DIR / "download_eggnog_database.nf",
-            MODULES_DIR / "download_padloc_database.nf",
             MODULES_DIR / "finalise_runtime_database.nf",
             MODULES_DIR / "merge_runtime_database_reports.nf",
         ):
@@ -513,12 +494,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("checkm2   : normaliseDestination.call(params.checkm2_db)", workflow_text)
         self.assertIn("busco_root: normaliseDestination.call(params.busco_db)", workflow_text)
         self.assertIn("eggnog    : normaliseDestination.call(params.eggnog_db)", workflow_text)
-        self.assertIn("padloc    : normaliseDestination.call(params.padloc_db)", workflow_text)
         self.assertIn("taxdumpRequest = destinations.taxdump", workflow_text)
         self.assertIn("checkm2Request = destinations.checkm2", workflow_text)
         self.assertIn("buscoRequest = destinations.busco_root", workflow_text)
         self.assertIn("eggnogRequest = destinations.eggnog", workflow_text)
-        self.assertIn("padlocRequest = destinations.padloc", workflow_text)
+        self.assertNotIn("params.padloc_db", workflow_text)
         self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
         self.assertIn('python_path="\\$(command -v python3)"', merge_module_text)
         self.assertIn('"\\${python_path}" "\\${script_path}" \\', merge_module_text)

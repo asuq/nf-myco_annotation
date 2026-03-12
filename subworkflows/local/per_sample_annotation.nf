@@ -13,7 +13,6 @@ workflow PER_SAMPLE_ANNOTATION {
     sample_genomes
     gcode_summaries
     eggnog_db
-    padloc_db
 
     main:
     def eggnogOnlyAccessions = null
@@ -49,7 +48,7 @@ workflow PER_SAMPLE_ANNOTATION {
     PROKKA(annotation_candidates)
     CCFINDER(annotation_candidates)
     SUMMARISE_CCFINDER(CCFINDER.out.result_json)
-    PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))
+    PADLOC(PROKKA.out.padloc_inputs)
 
     eggnog_inputs = PROKKA.out.eggnog_inputs
     if (eggnogOnlyAccessions != null && !eggnogOnlyAccessions.isEmpty()) {

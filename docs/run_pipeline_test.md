@@ -80,14 +80,14 @@ Required by real-data modes:
 - `--checkm2-db`
 - `--busco-db` or `--prepare-busco-datasets`
 - `--eggnog-db`
-- `--padloc-db`
 
 CRISPRCasFinder still uses `params.ccfinder_container` from `nextflow.config`.
 The wrapper does not accept a separate container override.
 
 The wrapper does not prepare runtime databases such as taxdump, CheckM2,
-BUSCO, eggNOG, or PADLOC. Prepare those separately before real-data runs when
-they are not already available.
+BUSCO, or eggNOG. Prepare those separately before real-data runs when they are
+not already available. PADLOC uses the fixed database bundled in the default
+PADLOC image.
 
 Acceptance-backed `local`, `slurm`, and `all` runs now use the composable
 `debug` profile by default. That profile restricts eggNOG to the tracked smoke
@@ -118,8 +118,7 @@ bin/run_pipeline_test.sh --dry-run local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-db /path/to/busco \
-  --eggnog-db /path/to/eggnog-db \
-  --padloc-db /path/to/padloc-db
+  --eggnog-db /path/to/eggnog-db
 ```
 
 Run the local real-data acceptance cohort:
@@ -129,8 +128,7 @@ bin/run_pipeline_test.sh local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-db /path/to/busco \
-  --eggnog-db /path/to/eggnog-db \
-  --padloc-db /path/to/padloc-db
+  --eggnog-db /path/to/eggnog-db
 ```
 
 Run the SLURM real-data acceptance cohort:
@@ -141,7 +139,6 @@ bin/run_pipeline_test.sh slurm \
   --checkm2-db /path/to/checkm2-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
-  --padloc-db /path/to/padloc-db \
   --slurm-queue short
 ```
 
@@ -155,7 +152,6 @@ bin/run_pipeline_test.sh dbprep-slurm \
   --checkm2-db /path/to/db/checkm2/CheckM2_database \
   --busco-db /path/to/db/busco \
   --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
-  --padloc-db /path/to/db/padloc \
   --slurm-queue short \
   --singularity-cache-dir /path/to/singularity-cache
 ```
@@ -167,8 +163,7 @@ bin/run_pipeline_test.sh all \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-db /path/to/busco \
-  --eggnog-db /path/to/eggnog-db \
-  --padloc-db /path/to/padloc-db
+  --eggnog-db /path/to/eggnog-db
 ```
 
 ## Output locations

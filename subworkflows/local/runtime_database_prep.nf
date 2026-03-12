@@ -2,11 +2,9 @@ include { PREP_TAXDUMP_DATABASE } from '../../modules/local/prepare_runtime_data
 include { DOWNLOAD_CHECKM2_DATABASE } from '../../modules/local/download_checkm2_database'
 include { DOWNLOAD_BUSCO_DATABASES } from '../../modules/local/download_busco_databases'
 include { DOWNLOAD_EGGNOG_DATABASE } from '../../modules/local/download_eggnog_database'
-include { DOWNLOAD_PADLOC_DATABASE } from '../../modules/local/download_padloc_database'
 include { FINALISE_RUNTIME_DATABASE as FINALISE_CHECKM2_DATABASE } from '../../modules/local/finalise_runtime_database'
 include { FINALISE_RUNTIME_DATABASE as FINALISE_BUSCO_DATABASE } from '../../modules/local/finalise_runtime_database'
 include { FINALISE_RUNTIME_DATABASE as FINALISE_EGGNOG_DATABASE } from '../../modules/local/finalise_runtime_database'
-include { FINALISE_RUNTIME_DATABASE as FINALISE_PADLOC_DATABASE } from '../../modules/local/finalise_runtime_database'
 include { MERGE_RUNTIME_DATABASE_REPORTS } from '../../modules/local/merge_runtime_database_reports'
 
 /*
@@ -18,7 +16,6 @@ workflow RUNTIME_DATABASE_PREP {
     checkm2_request
     busco_request
     eggnog_request
-    padloc_request
 
     main:
     PREP_TAXDUMP_DATABASE(taxdump_request)
@@ -32,14 +29,10 @@ workflow RUNTIME_DATABASE_PREP {
     DOWNLOAD_EGGNOG_DATABASE(eggnog_request)
     FINALISE_EGGNOG_DATABASE(DOWNLOAD_EGGNOG_DATABASE.out.finalise_input)
 
-    DOWNLOAD_PADLOC_DATABASE(padloc_request)
-    FINALISE_PADLOC_DATABASE(DOWNLOAD_PADLOC_DATABASE.out.finalise_input)
-
     reports = PREP_TAXDUMP_DATABASE.out.report
         .mix(FINALISE_CHECKM2_DATABASE.out.report)
         .mix(FINALISE_BUSCO_DATABASE.out.report)
         .mix(FINALISE_EGGNOG_DATABASE.out.report)
-        .mix(FINALISE_PADLOC_DATABASE.out.report)
         .collect()
 
     MERGE_RUNTIME_DATABASE_REPORTS(reports)
@@ -51,10 +44,8 @@ workflow RUNTIME_DATABASE_PREP {
         .mix(DOWNLOAD_CHECKM2_DATABASE.out.versions)
         .mix(DOWNLOAD_BUSCO_DATABASES.out.versions)
         .mix(DOWNLOAD_EGGNOG_DATABASE.out.versions)
-        .mix(DOWNLOAD_PADLOC_DATABASE.out.versions)
         .mix(FINALISE_CHECKM2_DATABASE.out.versions)
         .mix(FINALISE_BUSCO_DATABASE.out.versions)
         .mix(FINALISE_EGGNOG_DATABASE.out.versions)
-        .mix(FINALISE_PADLOC_DATABASE.out.versions)
         .mix(MERGE_RUNTIME_DATABASE_REPORTS.out.versions)
 }

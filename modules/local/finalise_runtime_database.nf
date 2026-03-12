@@ -65,9 +65,6 @@ process FINALISE_RUNTIME_DATABASE {
         eggnog)
             details='required_paths=eggnog.db,eggnog_proteins.dmnd;files=2'
             ;;
-        padloc)
-            details='required_paths=hmm/padlocdb.hmm;hmm=hmm/padlocdb.hmm'
-            ;;
     esac
     status='prepared'
     if [[ "\${mode}" == 'reuse' ]]; then

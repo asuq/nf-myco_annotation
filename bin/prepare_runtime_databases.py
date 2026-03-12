@@ -1281,8 +1281,6 @@ def build_nextflow_arguments(records: Sequence[PreparationRecord]) -> list[tuple
             mapping["--busco_db"] = str(record.destination)
         elif record.component == "eggnog":
             mapping["--eggnog_db"] = str(record.destination)
-        elif record.component == "padloc":
-            mapping["--padloc_db"] = str(record.destination)
     return sorted(mapping.items())
 
 

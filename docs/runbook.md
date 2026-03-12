@@ -10,14 +10,12 @@ The pipeline requires:
 - `--checkm2_db`: CheckM2 database directory containing one top-level `.dmnd`
 - `--busco_db` or `--prepare_busco_datasets true`
 - `--eggnog_db` for real eggNOG runs
-- `--padloc_db` for real PADLOC runs
 
 Optional labels used only in `tool_and_db_versions.tsv`:
 
 - `--taxdump_label`
 - `--checkm2_db_label`
 - `--eggnog_db_label`
-- `--padloc_db_label`
 
 Shared helper image requirement:
 
@@ -48,8 +46,8 @@ missing on the target machine.
 - An existing valid database directory is reused in place.
 - A missing database directory is populated there when
   `--download_missing_databases true` is set.
-- Taxdump uses the shared helper downloader. CheckM2, BUSCO, eggNOG, and PADLOC
-  use their own tool-native download or update commands.
+- Taxdump uses the shared helper downloader. CheckM2, BUSCO, and eggNOG use
+  their own tool-native download or update commands.
 - Scratch work uses `--runtime_db_scratch_root` when set and otherwise stays
   beside the destination rather than in system tmp.
 - A prepared destination is reusable only when it validates and contains
@@ -66,7 +64,6 @@ Supported runtime databases:
 - CheckM2
 - BUSCO lineage directories
 - eggNOG
-- PADLOC
 
 Example:
 
@@ -76,7 +73,6 @@ nextflow run prepare_databases.nf -profile oist \
   --checkm2_db /shared/db/checkm2/CheckM2_database \
   --busco_db /shared/db/busco \
   --eggnog_db /shared/db/Eggnog_db/Eggnog_Diamond_db \
-  --padloc_db /shared/db/padloc \
   --download_missing_databases true \
   --runtime_db_scratch_root /shared/db/.scratch \
   --outdir /shared/db/runtime-prep
@@ -134,11 +130,14 @@ Real-data `local`, `slurm`, and `all` runs require:
 - `--checkm2-db`
 - `--busco-db` or `--prepare-busco-datasets`
 - `--eggnog-db`
-- `--padloc-db`
 
 These acceptance runs also assume the CRISPRCasFinder image is already set via
 `params.ccfinder_container` in pipeline config. The harness does not accept a
 separate CCFINDER container argument.
+
+PADLOC uses the fixed database bundled in the default PADLOC image, so neither
+the pipeline nor the acceptance harness accepts an external PADLOC database
+path anymore.
 
 Acceptance runs use the `debug` profile by default, which sets
 `params.eggnog_only_accessions = 'GCA_000027325.1'`. Normal raw pipeline runs
@@ -158,8 +157,7 @@ python3 bin/run_acceptance_tests.py local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
   --busco-db /path/to/busco \
-  --eggnog-db /path/to/eggnog-db \
-  --padloc-db /path/to/padloc-db
+  --eggnog-db /path/to/eggnog-db
 ```
 
 Example SLURM acceptance run:
@@ -170,7 +168,6 @@ python3 bin/run_acceptance_tests.py slurm \
   --checkm2-db /path/to/checkm2-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
-  --padloc-db /path/to/padloc-db \
   --slurm-queue short
 ```
 
@@ -184,7 +181,6 @@ python3 bin/run_acceptance_tests.py dbprep-slurm \
   --checkm2-db /path/to/db/checkm2/CheckM2_database \
   --busco-db /path/to/db/busco \
   --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
-  --padloc-db /path/to/db/padloc \
   --slurm-queue short \
   --singularity-cache-dir /path/to/singularity-cache
 ```
@@ -201,7 +197,6 @@ nextflow run . \
   --checkm2_db /path/to/checkm2-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
-  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 
@@ -215,7 +210,6 @@ nextflow run . -profile debug,local,docker \
   --checkm2_db /path/to/checkm2-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
-  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 
@@ -229,7 +223,6 @@ nextflow run . -profile debug,local,docker \
   --checkm2_db /path/to/checkm2-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
-  --padloc_db /path/to/padloc-db \
   --eggnog_only_accessions SOME_OTHER_ACCESSION \
   --outdir results
 ```
@@ -244,7 +237,6 @@ nextflow run . -profile slurm \
   --checkm2_db /path/to/checkm2-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
-  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 
@@ -258,7 +250,6 @@ nextflow run . -profile singularity \
   --checkm2_db /path/to/checkm2-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
-  --padloc_db /path/to/padloc-db \
   --outdir results
 ```
 
@@ -272,7 +263,6 @@ nextflow run . -profile oist \
   --checkm2_db /path/to/checkm2-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
-  --padloc_db /path/to/padloc-db \
   --singularity_cache_dir /path/to/singularity-cache \
   --outdir results
 ```
@@ -355,7 +345,6 @@ export TAXDUMP_DIR=$DB_ROOT/ncbi_taxdump_20240914
 export CHECKM2_DIR=$DB_ROOT/checkm2/CheckM2_database
 export BUSCO_DIR=$DB_ROOT/busco
 export EGGNOG_DIR=$DB_ROOT/Eggnog_db/Eggnog_Diamond_db
-export PADLOC_DIR=$DB_ROOT/padloc
 ```
 
 ```bash
@@ -366,7 +355,6 @@ bin/run_pipeline_test.sh dbprep-slurm \
   --checkm2-db "$CHECKM2_DIR" \
   --busco-db "$BUSCO_DIR" \
   --eggnog-db "$EGGNOG_DIR" \
-  --padloc-db "$PADLOC_DIR" \
   --singularity-cache-dir "$SINGULARITY_CACHE"
 ```
 
@@ -392,8 +380,6 @@ Validate the prepared DB directories:
 - eggNOG:
   - `$EGGNOG_DIR/eggnog.db`
   - `$EGGNOG_DIR/eggnog_proteins.dmnd`
-- PADLOC:
-  - `$PADLOC_DIR/hmm/padlocdb.hmm`
 - ready markers:
   - `.nf_myco_ready.json` in each prepared DB root
 
@@ -421,7 +407,6 @@ nextflow run . -profile oist \
   --checkm2_db "$CHECKM2_DIR" \
   --busco_db "$BUSCO_DIR" \
   --eggnog_db "$EGGNOG_DIR" \
-  --padloc_db "$PADLOC_DIR" \
   --singularity_cache_dir "$SINGULARITY_CACHE" \
   --outdir "$RESULT_ROOT/p1/out" \
   --max_cpus 64 \

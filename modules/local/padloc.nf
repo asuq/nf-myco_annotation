@@ -12,7 +12,7 @@ process PADLOC {
     )
 
     input:
-    tuple val(meta), path(gff), path(faa), path(padloc_db)
+    tuple val(meta), path(gff), path(faa)
 
     output:
     tuple val(meta), path('padloc'), path('padloc.log'), emit: results
@@ -21,12 +21,6 @@ process PADLOC {
     script:
     def extraArgs = (params.padloc_extra_args ?: '').toString()
     """
-    padloc_db_dir="\$(cd "${padloc_db}" && pwd)"
-    if [[ ! -f "\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then
-        echo "params.padloc_db must point to a PADLOC data directory containing hmm/padlocdb.hmm." >&2
-        exit 1
-    fi
-
     awk '
         BEGIN { in_fasta = 0 }
         /^##FASTA/ { in_fasta = 1 }
@@ -41,7 +35,7 @@ process PADLOC {
     mkdir -p padloc
 
     set +e
-    padloc --faa padloc_input.faa --gff padloc_input.gff --cpu ${task.cpus} --data "\${padloc_db_dir}" --outdir "\$PWD/padloc" ${extraArgs} \
+    padloc --faa padloc_input.faa --gff padloc_input.gff --cpu ${task.cpus} --outdir "\$PWD/padloc" ${extraArgs} \
         > padloc.log 2>&1
     exit_code=\$?
     set -e

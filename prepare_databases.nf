@@ -40,7 +40,6 @@ workflow {
         checkm2   : normaliseDestination.call(params.checkm2_db),
         busco_root: normaliseDestination.call(params.busco_db),
         eggnog    : normaliseDestination.call(params.eggnog_db),
-        padloc    : normaliseDestination.call(params.padloc_db),
     ]
     if (!destinations.values().any { it != null }) {
         error "At least one database destination must be set for prepare_databases.nf."
@@ -79,15 +78,10 @@ workflow {
     eggnogRequest = destinations.eggnog
         ? Channel.of(tuple(destinations.eggnog, downloadEnabled, forceRebuild))
         : Channel.empty()
-    padlocRequest = destinations.padloc
-        ? Channel.of(tuple(destinations.padloc, downloadEnabled, forceRebuild))
-        : Channel.empty()
-
     RUNTIME_DATABASE_PREP(
         taxdumpRequest,
         checkm2Request,
         buscoRequest,
         eggnogRequest,
-        padlocRequest,
     )
 }

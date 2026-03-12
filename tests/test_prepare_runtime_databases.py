@@ -308,7 +308,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertIn("--checkm2_db", stdout)
             self.assertIn("--busco_db", stdout)
             self.assertIn("--eggnog_db", stdout)
-            self.assertIn("--padloc_db", stdout)
+            self.assertNotIn("--padloc_db", stdout)
 
             rows = read_tsv(report_path)
             self.assertEqual(len(rows), 7)

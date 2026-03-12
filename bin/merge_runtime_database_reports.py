@@ -58,7 +58,6 @@ def component_sort_key(row: dict[str, str]) -> tuple[int, str]:
         "checkm2": 1,
         "busco_root": 2,
         "eggnog": 3,
-        "padloc": 4,
     }
     return (ordering.get(row["component"], 99), row["component"])
 
@@ -88,7 +87,6 @@ def build_nextflow_args(rows: Sequence[dict[str, str]]) -> str:
         "checkm2": "--checkm2_db",
         "busco_root": "--busco_db",
         "eggnog": "--eggnog_db",
-        "padloc": "--padloc_db",
     }
     arguments = [
         (flag_map[row["component"]], row["destination"])

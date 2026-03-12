@@ -59,8 +59,6 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/busco",
             "--eggnog-db",
             "/tmp/eggnog",
-            "--padloc-db",
-            "/tmp/padloc",
         )
 
         self.assertEqual(result.returncode, 0)
@@ -68,7 +66,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py local --taxdump /tmp/taxdump "
             "--checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
-            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc",
+            "--eggnog-db /tmp/eggnog",
         )
         self.assertEqual(result.stderr, "")
 
@@ -110,8 +108,6 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/busco",
             "--eggnog-db",
             "/tmp/eggnog",
-            "--padloc-db",
-            "/tmp/padloc",
             "--singularity-cache-dir",
             "/tmp/singularity-cache",
             "--singularity-run-options",
@@ -123,7 +119,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py slurm --taxdump /tmp/taxdump "
             "--checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
-            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc "
+            "--eggnog-db /tmp/eggnog "
             "--singularity-cache-dir /tmp/singularity-cache "
             "--singularity-run-options bind=/db",
         )
@@ -154,8 +150,6 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/busco",
             "--eggnog-db",
             "/tmp/eggnog",
-            "--padloc-db",
-            "/tmp/padloc",
             "--force-runtime-database-rebuild",
             "--slurm-queue",
             "short",
@@ -168,7 +162,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py dbprep-slurm --dbprep-profile oist "
             "--taxdump /tmp/taxdump --checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
-            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc "
+            "--eggnog-db /tmp/eggnog "
             "--force-runtime-database-rebuild --slurm-queue short "
             "--singularity-cache-dir /tmp/singularity-cache",
         )
