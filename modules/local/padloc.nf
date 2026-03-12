@@ -24,9 +24,8 @@ process PADLOC {
     """
     mkdir -p padloc_bin padloc_bootstrap_data
     cp "\$(command -v padloc)" padloc_bin/padloc.real
-    search_pattern='mkdir -p "'"\$"'{SRC_DIR}/../data"'
-    replacement_pattern='mkdir -p "'"\$"'{PADLOC_BOOTSTRAP_DATA}"'
-    sed -i "s#\$search_pattern#\$replacement_pattern#" padloc_bin/padloc.real
+    patch_script="\$(command -v patch_padloc_launcher.py)"
+    python3 "\${patch_script}" padloc_bin/padloc.real
     chmod +x padloc_bin/padloc.real
     export PADLOC_WRAPPER_REAL="\$PWD/padloc_bin/padloc.real"
     cat <<'EOF' > padloc_bin/padloc

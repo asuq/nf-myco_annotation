@@ -395,9 +395,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
         self.assertIn('--data "\\${padloc_db_dir}"', module_text)
         self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('search_pattern=\'mkdir -p "\'"\\$"\'{SRC_DIR}/../data"\'', module_text)
-        self.assertIn('replacement_pattern=\'mkdir -p "\'"\\$"\'{PADLOC_BOOTSTRAP_DATA}"\'', module_text)
-        self.assertIn('sed -i "s#\\$search_pattern#\\$replacement_pattern#" padloc_bin/padloc.real', module_text)
+        self.assertIn('patch_script="\\$(command -v patch_padloc_launcher.py)"', module_text)
+        self.assertIn('python3 "\\${patch_script}" padloc_bin/padloc.real', module_text)
         self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
         self.assertIn('exec bash "\\$PADLOC_WRAPPER_REAL" "\\$@"', module_text)
         self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
@@ -412,9 +411,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         )
 
         self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('search_pattern=\'mkdir -p "\'"\\$"\'{SRC_DIR}/../data"\'', module_text)
-        self.assertIn('replacement_pattern=\'mkdir -p "\'"\\$"\'{PADLOC_BOOTSTRAP_DATA}"\'', module_text)
-        self.assertIn('sed -i "s#\\$search_pattern#\\$replacement_pattern#" padloc_bin/padloc.real', module_text)
+        self.assertIn('patch_script="\\$(command -v patch_padloc_launcher.py)"', module_text)
+        self.assertIn('python3 "\\${patch_script}" padloc_bin/padloc.real', module_text)
         self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
         self.assertIn('exec bash "\\$PADLOC_WRAPPER_REAL" "\\$@"', module_text)
         self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
@@ -422,6 +420,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn(
             'printf \'  padloc: "%s"\\n\' "\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"',
             module_text,
+        )
+
+    def test_padloc_launcher_helper_rewrites_both_bootstrap_lines(self) -> None:
+        """Require the PADLOC launcher helper to patch both data bootstrap lines."""
+        helper_text = (ROOT / "bin" / "patch_padloc_launcher.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            'BOOTSTRAP_DATA_MKDIR = \'mkdir -p "${SRC_DIR}/../data"\'',
+            helper_text,
+        )
+        self.assertIn(
+            'BOOTSTRAP_DATA_MKDIR_REPLACEMENT = \'mkdir -p "${PADLOC_BOOTSTRAP_DATA}"\'',
+            helper_text,
+        )
+        self.assertIn(
+            'DATA_INITIALISER = \'DATA=$(normpath "${SRC_DIR}/../data")\'',
+            helper_text,
+        )
+        self.assertIn(
+            'DATA_INITIALISER_REPLACEMENT = \'DATA=$(normpath "${PADLOC_BOOTSTRAP_DATA}")\'',
+            helper_text,
         )
 
     def test_merge_runtime_database_reports_uses_path_python_lookup(self) -> None:
