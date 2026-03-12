@@ -55,29 +55,7 @@ process DOWNLOAD_EGGNOG_DATABASE {
             mkdir -p "\${destination_path}"
 
             script_path="\$(command -v download_eggnog_data.py)"
-            patched_script="\$PWD/download_eggnog_data.py.patched"
-
-            python - "\${script_path}" "\${patched_script}" <<'PY'
-from pathlib import Path
-import sys
-
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-source = source.replace(
-    "http://eggnogdb.embl.de/download/emapperdb-",
-    "http://eggnog5.embl.de/download/emapperdb-",
-)
-source = source.replace(
-    "http://eggnog5.embl.de/download/eggnog_5.0/per_tax_level",
-    "http://eggnog5.embl.de/download/eggnog_5.0/per_tax_level",
-)
-source = source.replace(
-    "http://eggnogdb.embl.de/download/novel_fams-",
-    "http://eggnog5.embl.de/download/novel_fams-",
-)
-Path(sys.argv[2]).write_text(source, encoding="utf-8")
-PY
-            chmod +x "\${patched_script}"
-            python "\${patched_script}" --data_dir "\${destination_path}" -y ${force ? '-f' : ''}
+            python "\${script_path}" --data_dir "\${destination_path}" -y ${force ? '-f' : ''}
 
             if ! has_expected_files "\${destination_path}"; then
                 echo "eggNOG download did not populate the required files: \${destination_path}" >&2
@@ -92,7 +70,7 @@ PY
 
     {
         printf '"%s":\n' "${task.process}"
-        printf '  eggnog_mapper: "%s"\n' "\$(emapper.py --version 2>&1 | head -n 1 || echo NA)"
+        printf '  eggnog_mapper: "%s"\n' "\$(python -c \"import importlib.metadata as m; print(m.version('eggnog-mapper'))\" 2>/dev/null || echo NA)"
     } > versions.yml
     """
 
