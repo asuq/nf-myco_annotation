@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,9 @@ if str(BIN_DIR) not in sys.path:
 
 import master_table_contract  # noqa: E402
 import run_acceptance_tests  # noqa: E402
+
+MEDIUM_SOURCE_CATALOG = ROOT / "assets" / "testdata" / "medium" / "source_catalog.tsv"
+MEDIUM_COHORT_PLAN = ROOT / "assets" / "testdata" / "medium" / "cohort_plan.tsv"
 
 
 def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -324,6 +328,154 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             checksum_header, checksum_rows = read_tsv_rows(prepared.checksums_tsv)
             self.assertEqual(tuple(checksum_header), run_acceptance_tests.DOWNLOAD_COLUMNS)
             self.assertEqual(len(checksum_rows), 4)
+
+    def test_medium_assets_define_fixed_reproducible_cohort(self) -> None:
+        """Load the fixed medium source catalog and cohort plan."""
+        source_header, source_rows = read_tsv_rows(MEDIUM_SOURCE_CATALOG)
+        self.assertIn("phylum", source_header)
+        self.assertEqual(
+            {row["phylum"] for row in source_rows},
+            {"Mycoplasmatota", "Bacillota"},
+        )
+
+        catalog = run_acceptance_tests.load_source_catalog(MEDIUM_SOURCE_CATALOG)
+        plan = run_acceptance_tests.load_cohort_plan(MEDIUM_COHORT_PLAN, catalog)
+
+        self.assertEqual(len(plan), 20)
+        self.assertEqual(
+            sum("eggnog_smoke_candidate" in record.role_tags for record in plan),
+            1,
+        )
+        self.assertGreaterEqual(
+            sum(record.source_accession.startswith("GCA_") for record in plan),
+            10,
+        )
+        self.assertGreaterEqual(
+            sum(record.source_accession.startswith("GCF_") for record in plan),
+            10,
+        )
+
+    def test_prepare_medium_cohort_builds_generated_inputs_and_reuses_downloads(self) -> None:
+        """Prepare the fixed medium cohort from local sources and reuse cached FASTA files."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_catalog = self.write_tsv_rows(
+                tmpdir / "medium_source_catalog.tsv",
+                [
+                    "source_accession",
+                    "organism_name",
+                    "tax_id",
+                    "assembly_level",
+                    "source_url",
+                    "phylum",
+                ],
+                [
+                    {
+                        "source_accession": "GCA_000027325.1",
+                        "organism_name": "Mycoplasmoides genitalium G37",
+                        "tax_id": "243273",
+                        "assembly_level": "Complete Genome",
+                        "source_url": self.write_gzip_file(
+                            tmpdir / "downloads" / "myco_a.fna.gz",
+                            ">a\nAAAA\n>b\nAAA\n",
+                        ).resolve().as_uri(),
+                        "phylum": "Mycoplasmatota",
+                    },
+                    {
+                        "source_accession": "GCA_000027345.1",
+                        "organism_name": "Mycoplasmoides pneumoniae M129",
+                        "tax_id": "272634",
+                        "assembly_level": "Complete Genome",
+                        "source_url": self.write_gzip_file(
+                            tmpdir / "downloads" / "myco_b.fna.gz",
+                            ">a\nAAAAAA\n",
+                        ).resolve().as_uri(),
+                        "phylum": "Mycoplasmatota",
+                    },
+                    {
+                        "source_accession": "GCA_965226525.1",
+                        "organism_name": "Spiroplasma sp.",
+                        "tax_id": "2135",
+                        "assembly_level": "Complete Genome",
+                        "source_url": self.write_gzip_file(
+                            tmpdir / "downloads" / "spiro.fna.gz",
+                            ">a\nAAAAA\n>b\nAAAA\n",
+                        ).resolve().as_uri(),
+                        "phylum": "Mycoplasmatota",
+                    },
+                    {
+                        "source_accession": "GCF_000009045.1",
+                        "organism_name": "Bacillus subtilis 168",
+                        "tax_id": "224308",
+                        "assembly_level": "Complete Genome",
+                        "source_url": self.write_gzip_file(
+                            tmpdir / "downloads" / "baci.fna.gz",
+                            ">a\nAAAAAAA\n",
+                        ).resolve().as_uri(),
+                        "phylum": "Bacillota",
+                    },
+                    {
+                        "source_accession": "GCF_000006885.1",
+                        "organism_name": "Streptococcus pneumoniae TIGR4",
+                        "tax_id": "170187",
+                        "assembly_level": "Complete Genome",
+                        "source_url": self.write_gzip_file(
+                            tmpdir / "downloads" / "strep.fna.gz",
+                            ">a\nAAAAAAAA\n",
+                        ).resolve().as_uri(),
+                        "phylum": "Bacillota",
+                    },
+                ],
+            )
+            work_root = tmpdir / "medium_work"
+            with mock.patch.object(
+                run_acceptance_tests,
+                "DEFAULT_MEDIUM_SOURCE_CATALOG",
+                source_catalog,
+            ), mock.patch.object(
+                run_acceptance_tests,
+                "DEFAULT_MEDIUM_COHORT_PLAN",
+                MEDIUM_COHORT_PLAN,
+            ):
+                prepared = run_acceptance_tests.prepare_medium_cohort(
+                    work_root=work_root,
+                    offline=False,
+                )
+                initial_mtimes = {
+                    path.name: path.stat().st_mtime_ns
+                    for path in (work_root / "downloads").glob("*.fna")
+                }
+                prepared_reused = run_acceptance_tests.prepare_medium_cohort(
+                    work_root=work_root,
+                    offline=False,
+                )
+
+            sample_header, sample_rows = run_acceptance_tests.read_csv(prepared.sample_csv)
+            self.assertEqual(tuple(sample_header), run_acceptance_tests.SAMPLE_COLUMNS)
+            self.assertEqual(len(sample_rows), 20)
+            self.assertEqual(
+                [row["accession"] for row in sample_rows],
+                [record.accession for record in prepared.cohort_plan],
+            )
+
+            metadata_header, metadata_rows = read_tsv_rows(prepared.metadata_tsv)
+            self.assertEqual(tuple(metadata_header), run_acceptance_tests.METADATA_COLUMNS)
+            metadata_accessions = {row["Accession"] for row in metadata_rows}
+            self.assertNotIn("MYCO_NEW_1", metadata_accessions)
+            self.assertIn("BACI-PAIR", metadata_accessions)
+            self.assertIn("BACI PAIR", metadata_accessions)
+
+            checksum_header, checksum_rows = read_tsv_rows(prepared.checksums_tsv)
+            self.assertEqual(tuple(checksum_header), run_acceptance_tests.DOWNLOAD_COLUMNS)
+            self.assertEqual(len(checksum_rows), 5)
+
+            self.assertEqual(prepared.sample_csv.read_text(), prepared_reused.sample_csv.read_text())
+            self.assertEqual(prepared.metadata_tsv.read_text(), prepared_reused.metadata_tsv.read_text())
+            reused_mtimes = {
+                path.name: path.stat().st_mtime_ns
+                for path in (work_root / "downloads").glob("*.fna")
+            }
+            self.assertEqual(initial_mtimes, reused_mtimes)
 
     def test_compare_versions_logically_ignores_runtime_only_drift(self) -> None:
         """Ignore runtime rows but detect stable provenance drift."""

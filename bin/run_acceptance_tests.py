@@ -25,6 +25,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_WORK_ROOT = ROOT_DIR / "assets" / "testdata" / "local" / "acceptance"
 DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "source_catalog.tsv"
 DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
+DEFAULT_MEDIUM_SOURCE_CATALOG = (
+    ROOT_DIR / "assets" / "testdata" / "medium" / "source_catalog.tsv"
+)
+DEFAULT_MEDIUM_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "medium" / "cohort_plan.tsv"
 DEFAULT_LOCAL_PROFILE = "debug,local,docker"
 DEFAULT_SLURM_PROFILE = "debug,slurm,singularity"
 DEFAULT_DBPREP_PROFILE = "slurm,singularity"
@@ -574,6 +578,20 @@ def prepare_cohort(
         checksums_tsv=checksums_tsv,
         cohort_plan=tuple(plan),
         source_stats=source_stats,
+    )
+
+
+def prepare_medium_cohort(
+    *,
+    work_root: Path,
+    offline: bool,
+) -> PreparedCohort:
+    """Prepare the fixed medium Mycoplasmatota/Bacillota cohort."""
+    return prepare_cohort(
+        work_root=work_root,
+        offline=offline,
+        source_catalog_path=DEFAULT_MEDIUM_SOURCE_CATALOG,
+        cohort_plan_path=DEFAULT_MEDIUM_COHORT_PLAN,
     )
 
 
