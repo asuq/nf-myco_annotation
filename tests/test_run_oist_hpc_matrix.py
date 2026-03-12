@@ -29,9 +29,13 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         result = self.run_wrapper("--help")
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("<prepare|db-full|db-reuse|db-matrix|p1|p2|all>", result.stdout)
+        self.assertIn(
+            "<prepare|medium-prepare|db-full|db-reuse|db-matrix|p1|p2|all>",
+            result.stdout,
+        )
         self.assertIn("Run the OIST HPC validation campaign", result.stdout)
         self.assertIn("--hpc-root PATH", result.stdout)
+        self.assertNotIn("--medium-candidates-tsv", result.stdout)
 
     def test_prepare_dry_run_prints_cohort_command(self) -> None:
         """Print the tracked-cohort preparation command."""
@@ -45,6 +49,29 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn(
             "bin/run_pipeline_test.sh prepare --work-root /tmp/hpc/acceptance",
+            result.stdout,
+        )
+
+    def test_medium_prepare_dry_run_prints_medium_prepare_command(self) -> None:
+        """Print the fixed medium-cohort preparation command."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            "/tmp/hpc",
+            "medium-prepare",
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn(
+            "python3 bin/run_acceptance_tests.py prepare --work-root /tmp/hpc/medium",
+            result.stdout,
+        )
+        self.assertIn(
+            "--source-catalog /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/testdata/medium/source_catalog.tsv",
+            result.stdout,
+        )
+        self.assertIn(
+            "--cohort-plan /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/testdata/medium/cohort_plan.tsv",
             result.stdout,
         )
 
@@ -81,8 +108,8 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         self.assertNotIn("--max_time", result.stdout)
         self.assertNotIn("--padloc_db", result.stdout)
 
-    def test_p2_requires_medium_inputs(self) -> None:
-        """Fail when the medium cohort inputs are missing."""
+    def test_p2_auto_prepares_medium_inputs(self) -> None:
+        """Generate the fixed medium cohort automatically when inputs are missing."""
         result = self.run_wrapper(
             "--dry-run",
             "--hpc-root",
@@ -90,14 +117,22 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             "p2",
         )
 
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn(
-            "--medium-candidates-tsv or both --medium-sample-csv and --medium-metadata are required",
-            result.stderr,
+            "python3 bin/run_acceptance_tests.py prepare --work-root /tmp/hpc/medium",
+            result.stdout,
+        )
+        self.assertIn(
+            "--sample_csv /tmp/hpc/medium/generated/sample_sheet.csv",
+            result.stdout,
+        )
+        self.assertIn(
+            "--metadata /tmp/hpc/medium/generated/metadata.tsv",
+            result.stdout,
         )
 
-    def test_all_requires_medium_inputs(self) -> None:
-        """Fail when the full campaign lacks the medium cohort inputs."""
+    def test_all_auto_prepares_medium_inputs(self) -> None:
+        """Run the medium prepare step automatically during the full campaign."""
         result = self.run_wrapper(
             "--dry-run",
             "--hpc-root",
@@ -105,10 +140,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             "all",
         )
 
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn(
-            "--medium-candidates-tsv or both --medium-sample-csv and --medium-metadata are required",
-            result.stderr,
+            "python3 bin/run_acceptance_tests.py prepare --work-root /tmp/hpc/medium",
+            result.stdout,
         )
 
     def test_all_accepts_medium_inputs_after_mode(self) -> None:
@@ -131,52 +166,6 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
         self.assertIn(
             "--metadata /tmp/medium_metadata.tsv",
-            result.stdout,
-        )
-
-    def test_p2_generates_medium_inputs_from_candidate_manifest(self) -> None:
-        """Generate medium inputs automatically when a candidates TSV is supplied."""
-        result = self.run_wrapper(
-            "--dry-run",
-            "--hpc-root",
-            "/tmp/hpc",
-            "p2",
-            "--medium-candidates-tsv",
-            "/tmp/candidates.tsv",
-        )
-
-        self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("python3 bin/build_real_run_inputs.py", result.stdout)
-        self.assertIn("--candidate-tsv /tmp/candidates.tsv", result.stdout)
-        self.assertIn("--outdir /tmp/hpc/medium_inputs/generated", result.stdout)
-        self.assertIn(
-            "--sample_csv /tmp/hpc/medium_inputs/generated/sample_sheet.csv",
-            result.stdout,
-        )
-        self.assertIn(
-            "--metadata /tmp/hpc/medium_inputs/generated/metadata.tsv",
-            result.stdout,
-        )
-
-    def test_all_accepts_medium_candidates_tsv_after_mode(self) -> None:
-        """Allow the full campaign to generate medium inputs from one candidates TSV."""
-        result = self.run_wrapper(
-            "--dry-run",
-            "--hpc-root",
-            "/tmp/hpc",
-            "all",
-            "--medium-candidates-tsv",
-            "/tmp/candidates.tsv",
-        )
-
-        self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("python3 bin/build_real_run_inputs.py", result.stdout)
-        self.assertIn(
-            "--sample_csv /tmp/hpc/medium_inputs/generated/sample_sheet.csv",
-            result.stdout,
-        )
-        self.assertIn(
-            "--metadata /tmp/hpc/medium_inputs/generated/metadata.tsv",
             result.stdout,
         )
 

@@ -5,13 +5,16 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly PIPELINE_WRAPPER="bin/run_pipeline_test.sh"
 readonly VALIDATOR="bin/validate_hpc_matrix.py"
-readonly MEDIUM_INPUT_BUILDER="bin/build_real_run_inputs.py"
-readonly VALID_MODES="prepare db-full db-reuse db-matrix p1 p2 all"
+readonly ACCEPTANCE_HARNESS="bin/run_acceptance_tests.py"
+readonly MEDIUM_SOURCE_CATALOG="${REPO_ROOT}/assets/testdata/medium/source_catalog.tsv"
+readonly MEDIUM_COHORT_PLAN="${REPO_ROOT}/assets/testdata/medium/cohort_plan.tsv"
+readonly MEDIUM_SAMPLE_COUNT="20"
+readonly VALID_MODES="prepare medium-prepare db-full db-reuse db-matrix p1 p2 all"
 
 show_usage() {
     cat <<'EOF'
 Usage:
-  bin/run_oist_hpc_matrix.sh [--dry-run] [--resume] --hpc-root PATH <prepare|db-full|db-reuse|db-matrix|p1|p2|all> [options]
+  bin/run_oist_hpc_matrix.sh [--dry-run] [--resume] --hpc-root PATH <prepare|medium-prepare|db-full|db-reuse|db-matrix|p1|p2|all> [options]
 
 Run the OIST HPC validation campaign through the medium real-data case.
 
@@ -21,16 +24,15 @@ Required:
 Options:
   --dry-run                   Print commands and filesystem actions without executing them.
   --resume                    Pass -resume to Nextflow and wrapper runs where supported.
-  --medium-candidates-tsv PATH
-                              Candidate TSV for generating medium-cohort inputs.
-  --medium-sample-csv PATH    Medium-cohort sample sheet. Used when candidates TSV is omitted.
-  --medium-metadata PATH      Medium-cohort metadata TSV. Used when candidates TSV is omitted.
-  --sample-count N            Expected medium-cohort size. Default: 20.
+  --medium-sample-csv PATH    Medium-cohort sample sheet override.
+  --medium-metadata PATH      Medium-cohort metadata TSV override.
   --singularity-cache PATH    Override the Singularity cache root.
   -h, --help                  Show this help message.
 
 Modes:
   prepare     Prepare the tracked 9-sample cohort on the login node.
+  medium-prepare
+              Prepare the fixed medium Mycoplasmatota/Bacillota cohort.
   db-full     Run the full runtime-database prep gate on SLURM.
   db-reuse    Re-run the full runtime-database prep gate and expect reuse.
   db-matrix   Run disposable database existence-state cases.
@@ -62,7 +64,7 @@ fail() {
 
 is_valid_mode() {
     case "$1" in
-        prepare | db-full | db-reuse | db-matrix | p1 | p2 | all)
+        prepare | medium-prepare | db-full | db-reuse | db-matrix | p1 | p2 | all)
             return 0
             ;;
         *)
@@ -99,26 +101,26 @@ run_expect_failure() {
 }
 
 ensure_medium_inputs() {
-    if [[ -n "${MEDIUM_CANDIDATES_TSV}" ]]; then
-        generate_medium_inputs
+    if [[ -n "${MEDIUM_SAMPLE_CSV}" || -n "${MEDIUM_METADATA}" ]]; then
+        if [[ -z "${MEDIUM_SAMPLE_CSV}" || -z "${MEDIUM_METADATA}" ]]; then
+            fail "Both --medium-sample-csv and --medium-metadata are required together"
+        fi
         return 0
     fi
-    if [[ -z "${MEDIUM_SAMPLE_CSV}" || -z "${MEDIUM_METADATA}" ]]; then
-        fail "--medium-candidates-tsv or both --medium-sample-csv and --medium-metadata are required for ${MODE}"
+
+    MEDIUM_SAMPLE_CSV="${MEDIUM_ROOT}/generated/sample_sheet.csv"
+    MEDIUM_METADATA="${MEDIUM_ROOT}/generated/metadata.tsv"
+    if [[ "${DRY_RUN}" == "true" || ! -f "${MEDIUM_SAMPLE_CSV}" || ! -f "${MEDIUM_METADATA}" ]]; then
+        run_medium_prepare
     fi
 }
 
-generate_medium_inputs() {
-    local generated_dir="${HPC_ROOT}/medium_inputs/generated"
-
+run_medium_prepare() {
     run_or_print \
-        python3 "${MEDIUM_INPUT_BUILDER}" \
-        --candidate-tsv "${MEDIUM_CANDIDATES_TSV}" \
-        --outdir "${generated_dir}" \
-        --sample-count "${SAMPLE_COUNT}"
-
-    MEDIUM_SAMPLE_CSV="${generated_dir}/sample_sheet.csv"
-    MEDIUM_METADATA="${generated_dir}/metadata.tsv"
+        python3 "${ACCEPTANCE_HARNESS}" prepare \
+        --work-root "${MEDIUM_ROOT}" \
+        --source-catalog "${MEDIUM_SOURCE_CATALOG}" \
+        --cohort-plan "${MEDIUM_COHORT_PLAN}"
 }
 
 require_path() {
@@ -565,7 +567,7 @@ run_p2() {
         python3 "${VALIDATOR}" medium-run \
         --outdir "${RESULT_ROOT}/p2/out" \
         --db-root "${DB_ROOT}" \
-        --sample-count "${SAMPLE_COUNT}" \
+        --sample-count "${MEDIUM_SAMPLE_COUNT}" \
         --allowed-phylum Mycoplasmatota \
         --allowed-phylum Bacillota
 }
@@ -578,8 +580,6 @@ main() {
     HPC_ROOT=""
     MEDIUM_SAMPLE_CSV=""
     MEDIUM_METADATA=""
-    MEDIUM_CANDIDATES_TSV=""
-    SAMPLE_COUNT=20
     SINGULARITY_CACHE=""
 
     while [[ $# -gt 0 ]]; do
@@ -600,16 +600,8 @@ main() {
                 MEDIUM_SAMPLE_CSV="$2"
                 shift 2
                 ;;
-            --medium-candidates-tsv)
-                MEDIUM_CANDIDATES_TSV="$2"
-                shift 2
-                ;;
             --medium-metadata)
                 MEDIUM_METADATA="$2"
-                shift 2
-                ;;
-            --sample-count)
-                SAMPLE_COUNT="$2"
                 shift 2
                 ;;
             --singularity-cache)
@@ -650,6 +642,7 @@ main() {
 
     MODE="${mode}"
     ACCEPT_ROOT="${HPC_ROOT}/acceptance"
+    MEDIUM_ROOT="${HPC_ROOT}/medium"
     DB_ROOT="${HPC_ROOT}/db"
     RESULT_ROOT="${HPC_ROOT}/results"
     CASE_ROOT="${HPC_ROOT}/db_cases"
@@ -662,12 +655,15 @@ main() {
     EGGNOG_DIR="${DB_ROOT}/Eggnog_db/Eggnog_Diamond_db"
 
     if [[ "${DRY_RUN}" != "true" ]]; then
-        mkdir -p "${ACCEPT_ROOT}" "${DB_ROOT}" "${RESULT_ROOT}" "${CASE_ROOT}" "${SINGULARITY_CACHE}"
+        mkdir -p "${ACCEPT_ROOT}" "${MEDIUM_ROOT}" "${DB_ROOT}" "${RESULT_ROOT}" "${CASE_ROOT}" "${SINGULARITY_CACHE}"
     fi
 
     case "${MODE}" in
         prepare)
             run_prepare
+            ;;
+        medium-prepare)
+            run_medium_prepare
             ;;
         db-full)
             run_dbprep_wrapper prepared
@@ -686,6 +682,7 @@ main() {
             ;;
         all)
             run_prepare
+            run_medium_prepare
             run_dbprep_wrapper prepared
             run_dbprep_wrapper present
             run_db_matrix
