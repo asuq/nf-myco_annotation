@@ -33,11 +33,14 @@ process STAGE_INPUTS {
         samtools faidx "${internalId}.fasta"
     fi
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      seqtk: "\$(command -v seqtk >/dev/null 2>&1 && seqtk 2>&1 | head -n 1 || echo NA)"
-      samtools: "\$(command -v samtools >/dev/null 2>&1 && samtools --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    seqtk_version="\$(command -v seqtk >/dev/null 2>&1 && seqtk 2>&1 | awk '/^Version:/ { print \$2; exit }' || true)"
+    seqtk_version="\${seqtk_version:-NA}"
+    samtools_version="\$(command -v samtools >/dev/null 2>&1 && samtools --version 2>&1 | head -n 1 || echo NA)"
+    printf '"%s":\n  seqtk: "%s"\n  samtools: "%s"\n' \
+      "${task.process}" \
+      "\${seqtk_version}" \
+      "\${samtools_version}" \
+      > versions.yml
     """
 
     stub:

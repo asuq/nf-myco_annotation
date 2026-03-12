@@ -39,10 +39,12 @@ process BARRNAP {
 
     printf 'exit_code=%s\n' "\$exit_code" >> barrnap.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      barrnap: "\$(command -v barrnap >/dev/null 2>&1 && barrnap --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    barrnap_version="\$(command -v barrnap >/dev/null 2>&1 && barrnap --version 2>&1 | awk 'NF { value=\$0 } END { if (value) print value }' || true)"
+    barrnap_version="\${barrnap_version:-NA}"
+    printf '"%s":\n  barrnap: "%s"\n' \
+      "${task.process}" \
+      "\${barrnap_version}" \
+      > versions.yml
     """
 
     stub:

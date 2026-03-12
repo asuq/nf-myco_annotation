@@ -54,10 +54,12 @@ process BUSCO {
 
     printf 'exit_code=%s\n' "\$exit_code" >> busco.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      busco: "\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    busco_version="\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | awk 'NF { value=\$0 } END { if (value) print value }' || true)"
+    busco_version="\${busco_version:-NA}"
+    printf '"%s":\n  busco: "%s"\n' \
+      "${task.process}" \
+      "\${busco_version}" \
+      > versions.yml
     """
 
     stub:

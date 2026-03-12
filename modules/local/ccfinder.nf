@@ -102,10 +102,12 @@ process CCFINDER {
     fi
     printf 'exit_code=%s\n' "\$exit_code" >> ccfinder.log
 
-    {
-        printf '"%s":\n' "${task.process}"
-        printf '  crisprcasfinder: "%s"\n' "\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | head -n 1 || echo NA)"
-    } > versions.yml
+    ccfinder_version="\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | sed -n 's/.*version \\([^,[:space:]]*\\).*/\\1/p' | head -n 1 || true)"
+    ccfinder_version="\${ccfinder_version:-NA}"
+    printf '"%s":\n  crisprcasfinder: "%s"\n' \
+      "${task.process}" \
+      "\${ccfinder_version}" \
+      > versions.yml
     """
 
     stub:

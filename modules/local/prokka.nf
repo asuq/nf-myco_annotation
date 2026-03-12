@@ -60,10 +60,12 @@ process PROKKA {
 
     printf 'exit_code=%s\n' "\$exit_code" >> prokka.log
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      prokka: "\$(command -v prokka >/dev/null 2>&1 && prokka --version 2>&1 | head -n 1 || echo NA)"
-    EOF
+    prokka_version="\$(command -v prokka >/dev/null 2>&1 && prokka --version 2>&1 | awk 'NF { value=\$0 } END { if (value) print value }' || true)"
+    prokka_version="\${prokka_version:-NA}"
+    printf '"%s":\n  prokka: "%s"\n' \
+      "${task.process}" \
+      "\${prokka_version}" \
+      > versions.yml
     """
 
     stub:

@@ -167,6 +167,40 @@ def parse_name_value(token: str, argument_name: str) -> tuple[str, str]:
     return name, normalise_value(value)
 
 
+def parse_versions_header(line: str, path: Path) -> str:
+    """Parse one non-indented versions.yml header line."""
+    stripped = line.strip()
+    if not stripped.endswith(":"):
+        raise CollectVersionsError(
+            f"Malformed versions.yml header line in {path}: {stripped!r}"
+        )
+    return stripped[:-1].strip().strip("'\"")
+
+
+def parse_versions_entry(line: str, path: Path) -> tuple[str, str]:
+    """Parse one indented versions.yml entry line."""
+    if not line.startswith("  ") or line.startswith("   ") or "\t" in line[:2]:
+        raise CollectVersionsError(
+            f"Malformed versions.yml indentation in {path}: {line.rstrip()!r}"
+        )
+    stripped = line.strip()
+    if ":" not in stripped:
+        raise CollectVersionsError(
+            f"Malformed versions.yml entry in {path}: {stripped!r}"
+        )
+    name, value = stripped.split(":", 1)
+    raw_value = value.strip()
+    if not raw_value:
+        raise CollectVersionsError(
+            f"Missing versions.yml value in {path}: {stripped!r}"
+        )
+    if raw_value[:1] in {'"', "'"} and not raw_value.endswith(raw_value[:1]):
+        raise CollectVersionsError(
+            f"Multiline quoted values are not supported in {path}: {stripped!r}"
+        )
+    return name.strip(), raw_value.strip().strip("'\"")
+
+
 def parse_versions_file(path: Path) -> list[dict[str, str]]:
     """Parse one simple Nextflow versions.yml file into row dictionaries."""
     if not path.is_file():
@@ -183,37 +217,9 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
             if stripped == "EOF":
                 continue
             if not line.startswith((" ", "\t")):
-                if not stripped.endswith(":"):
-                    raise CollectVersionsError(
-                        f"Malformed versions.yml header line in {path}: {stripped!r}"
-                    )
-                current_source = stripped[:-1].strip().strip("'\"")
+                current_source = parse_versions_header(line, path)
                 continue
-            if ":" not in stripped:
-                raise CollectVersionsError(
-                    f"Malformed versions.yml entry in {path}: {stripped!r}"
-                )
-            name, value = stripped.split(":", 1)
-            clean_name = name.strip()
-            raw_value = value.strip()
-            quote_count = raw_value.count('"') + raw_value.count("'")
-            if raw_value in {'"', "'"} or (
-                raw_value[:1] in {'"', "'"} and quote_count == 1 and not raw_value.endswith(raw_value[:1])
-            ):
-                quote_character = raw_value[:1]
-                continued_values = [raw_value]
-                for continuation_raw_line in handle:
-                    continuation_line = continuation_raw_line.rstrip("\n")
-                    continuation_stripped = continuation_line.strip()
-                    if not continuation_stripped:
-                        continue
-                    if continuation_stripped == "EOF":
-                        continue
-                    continued_values.append(continuation_stripped)
-                    if continuation_stripped.endswith(quote_character):
-                        break
-                raw_value = " ".join(continued_values)
-            clean_value = raw_value.strip().strip("'\"")
+            clean_name, clean_value = parse_versions_entry(line, path)
             kind = VERSION_KIND_KEYS.get(clean_name, "tool")
             if clean_name == "script":
                 rows.append(
