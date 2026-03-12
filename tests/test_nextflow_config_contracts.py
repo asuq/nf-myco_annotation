@@ -112,6 +112,13 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("ccfinder_container = 'quay.io/asuq1617/ccfinder:4.2.30'", config_text)
         self.assertNotIn("ccfinder_container = 'quay.io/asuq1617/ccfinder:4.3.2'", config_text)
 
+    def test_padloc_container_points_at_the_fixed_runtime_tag(self) -> None:
+        """Use the fixed PADLOC image tag by default."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("padloc_container = 'quay.io/asuq1617/padloc:2.0.0-nfmyco1'", config_text)
+        self.assertNotIn("padloc_container = 'quay.io/biocontainers/padloc:2.0.0--hdfd78af_1'", config_text)
+
     def test_python_helper_processes_are_pinned_explicitly(self) -> None:
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")

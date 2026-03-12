@@ -394,55 +394,26 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('padloc_db_dir="\\$(cd "${padloc_db}" && pwd)"', module_text)
         self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
         self.assertIn('--data "\\${padloc_db_dir}"', module_text)
-        self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('patch_script="\\$(command -v patch_padloc_launcher.py)"', module_text)
-        self.assertIn('python3 "\\${patch_script}" padloc_bin/padloc.real', module_text)
-        self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
-        self.assertIn('exec bash "\\$PADLOC_WRAPPER_REAL" "\\$@"', module_text)
-        self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
+        self.assertNotIn("patch_padloc_launcher.py", module_text)
+        self.assertNotIn("PADLOC_WRAPPER_REAL", module_text)
+        self.assertNotIn("padloc_bootstrap", module_text)
         self.assertIn("PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))", workflow_text)
         self.assertIn("padlocDb = params.padloc_db", main_text)
         self.assertIn('--padloc-db "${params.padloc_db ?: \'NA\'}" \\', collect_versions_text)
 
-    def test_download_padloc_database_patches_bootstrap_data_dir(self) -> None:
-        """Require PADLOC DB prep to avoid writing to the image install tree."""
+    def test_download_padloc_database_calls_padloc_directly(self) -> None:
+        """Require PADLOC DB prep to rely on the fixed image launcher directly."""
         module_text = (MODULES_DIR / "download_padloc_database.nf").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('patch_script="\\$(command -v patch_padloc_launcher.py)"', module_text)
-        self.assertIn('python3 "\\${patch_script}" padloc_bin/padloc.real', module_text)
-        self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
-        self.assertIn('exec bash "\\$PADLOC_WRAPPER_REAL" "\\$@"', module_text)
-        self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
+        self.assertNotIn("patch_padloc_launcher.py", module_text)
+        self.assertNotIn("PADLOC_WRAPPER_REAL", module_text)
+        self.assertNotIn("padloc_bootstrap", module_text)
         self.assertIn('padloc --data "\\${destination_path}" --db-update', module_text)
         self.assertIn(
             'printf \'  padloc: "%s"\\n\' "\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"',
             module_text,
-        )
-
-    def test_padloc_launcher_helper_rewrites_both_bootstrap_lines(self) -> None:
-        """Require the PADLOC launcher helper to patch both data bootstrap lines."""
-        helper_text = (ROOT / "bin" / "patch_padloc_launcher.py").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn(
-            'BOOTSTRAP_DATA_MKDIR = \'mkdir -p "${SRC_DIR}/../data"\'',
-            helper_text,
-        )
-        self.assertIn(
-            'BOOTSTRAP_DATA_MKDIR_REPLACEMENT = \'mkdir -p "${PADLOC_BOOTSTRAP_DATA}"\'',
-            helper_text,
-        )
-        self.assertIn(
-            'DATA_INITIALISER = \'DATA=$(normpath "${SRC_DIR}/../data")\'',
-            helper_text,
-        )
-        self.assertIn(
-            'DATA_INITIALISER_REPLACEMENT = \'DATA=$(normpath "${PADLOC_BOOTSTRAP_DATA}")\'',
-            helper_text,
         )
 
     def test_merge_runtime_database_reports_uses_path_python_lookup(self) -> None:

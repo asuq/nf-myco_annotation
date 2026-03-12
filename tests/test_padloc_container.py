@@ -1,4 +1,4 @@
-"""Container contract tests for the PADLOC launcher patch."""
+"""Container contract tests for the custom PADLOC runtime image."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IMAGE = "quay.io/biocontainers/padloc:2.0.0--hdfd78af_1"
+DOCKERFILE = ROOT / "docker" / "padloc" / "Dockerfile"
+IMAGE = "codex-padloc:test"
 RUN_DOCKER_TESTS = os.environ.get("RUN_DOCKER_TESTS") == "1"
 
 
@@ -26,36 +27,41 @@ def run_command(args: list[str], *, timeout: int | None = None) -> subprocess.Co
 
 
 class PadlocContainerContractTestCase(unittest.TestCase):
-    """Lock the task-local PADLOC launcher bootstrap patch."""
+    """Lock the custom PADLOC image contract."""
+
+    def test_dockerfile_patches_the_launcher_at_build_time(self) -> None:
+        """Require the PADLOC Dockerfile to patch the broken bundled data path."""
+        dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn("FROM quay.io/biocontainers/padloc:2.0.0--hdfd78af_1", dockerfile_text)
+        self.assertIn('mkdir -p "/tmp/padloc-launcher-data"', dockerfile_text)
+        self.assertIn('DATA=$(normpath "/tmp/padloc-launcher-data")', dockerfile_text)
+        self.assertNotIn("patch_padloc_launcher.py", dockerfile_text)
 
     @unittest.skipUnless(
         RUN_DOCKER_TESTS,
-        "Set RUN_DOCKER_TESTS=1 to run the PADLOC container launcher contract test.",
+        "Set RUN_DOCKER_TESTS=1 to run the PADLOC container image contract test.",
     )
-    def test_patched_launcher_does_not_use_missing_bundled_data_dir(self) -> None:
-        """Require the patched launcher to bypass the missing bundled data directory."""
-        shell_script = r"""
-set -euo pipefail
-mkdir -p /tmp/padloc_bin /tmp/padloc_bootstrap_data /tmp/padloc_dest
-cp "$(command -v padloc)" /tmp/padloc_bin/padloc.real
-cp /workspace/bin/patch_padloc_launcher.py /tmp/patch_padloc_launcher.py
-python3 /tmp/patch_padloc_launcher.py /tmp/padloc_bin/padloc.real
-cat <<'EOF' > /tmp/padloc_bin/padloc
-#!/usr/bin/env bash
-set -euo pipefail
-exec bash "$PADLOC_WRAPPER_REAL" "$@"
-EOF
-chmod +x /tmp/padloc_bin/padloc.real /tmp/padloc_bin/padloc
-export PADLOC_WRAPPER_REAL=/tmp/padloc_bin/padloc.real
-export PADLOC_BOOTSTRAP_DATA=/tmp/padloc_bootstrap_data
-export PATH=/tmp/padloc_bin:$PATH
-set +e
-padloc --data /tmp/padloc_dest --db-update > /tmp/padloc.out 2>&1
-status=$?
-set -e
-cat /tmp/padloc.out
-exit "$status"
-"""
+    def test_custom_image_avoids_the_missing_bundled_data_dir(self) -> None:
+        """Require the custom image to avoid the broken bundled data path."""
+        build_result = run_command(
+            [
+                "docker",
+                "build",
+                "--platform",
+                "linux/amd64",
+                "-f",
+                str(DOCKERFILE),
+                "-t",
+                IMAGE,
+                ".",
+            ]
+        )
+        self.assertEqual(
+            build_result.returncode,
+            0,
+            msg=f"Docker build failed.\nSTDOUT:\n{build_result.stdout}\nSTDERR:\n{build_result.stderr}",
+        )
 
         try:
             result = run_command(
@@ -65,12 +71,21 @@ exit "$status"
                     "--rm",
                     "--platform",
                     "linux/amd64",
-                    "-v",
-                    f"{ROOT}:/workspace:ro",
                     IMAGE,
                     "bash",
                     "-lc",
-                    shell_script,
+                    (
+                        "set -euo pipefail; "
+                        "PADLOC_BIN=$(command -v padloc); "
+                        "grep -F 'mkdir -p \"/tmp/padloc-launcher-data\"' \"$PADLOC_BIN\" >/dev/null; "
+                        "grep -F 'DATA=$(normpath \"/tmp/padloc-launcher-data\")' \"$PADLOC_BIN\" >/dev/null; "
+                        "set +e; "
+                        "padloc --data /tmp/padloc_dest --db-update > /tmp/padloc.out 2>&1; "
+                        "status=$?; "
+                        "set -e; "
+                        "cat /tmp/padloc.out; "
+                        "exit \"$status\""
+                    ),
                 ],
                 timeout=30,
             )
