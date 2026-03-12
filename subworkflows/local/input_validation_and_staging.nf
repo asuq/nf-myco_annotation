@@ -9,9 +9,10 @@ workflow INPUT_VALIDATION_AND_STAGING {
     take:
     sample_csv
     metadata
+    sample_status_columns
 
     main:
-    VALIDATE_INPUTS(sample_csv, metadata)
+    VALIDATE_INPUTS(sample_csv, metadata, sample_status_columns)
 
     sample_genomes = VALIDATE_INPUTS.out.validated_samples
         .splitCsv(header: true, sep: '\t')

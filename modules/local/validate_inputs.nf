@@ -18,6 +18,7 @@ process VALIDATE_INPUTS {
     input:
     path sample_csv
     path metadata
+    path sample_status_columns
 
     output:
     path 'validated_samples.tsv', emit: validated_samples
@@ -31,6 +32,8 @@ process VALIDATE_INPUTS {
     validate_inputs.py \
         --sample-csv "${sample_csv}" \
         --metadata "${metadata}" \
+        --sample-status-columns "${sample_status_columns}" \
+        --defer-genome-fasta-check \
         --outdir .
 
     cat <<EOF > versions.yml

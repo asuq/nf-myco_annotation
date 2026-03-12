@@ -139,6 +139,75 @@ class ValidateInputsTestCase(unittest.TestCase):
                 "na",
             )
 
+    def test_main_uses_staged_sample_status_columns_asset(self) -> None:
+        """Allow the sample-status column asset to be provided explicitly."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genomes" / "a.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,false,,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "\n".join(
+                    [
+                        "accession,Tax_ID,Organism_Name",
+                        "ACC1,123,Known one",
+                    ]
+                )
+                + "\n",
+            )
+            sample_status_columns = self.write_text_file(
+                tmpdir / "sample_status_columns.txt",
+                "\n".join(
+                    [
+                        "accession",
+                        "internal_id",
+                        "is_new",
+                        "validation_status",
+                        "warnings",
+                        "notes",
+                    ]
+                )
+                + "\n",
+            )
+            outdir = tmpdir / "validated"
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--sample-status-columns",
+                    str(sample_status_columns),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            sample_status_rows = read_tsv(outdir / "sample_status.tsv")
+            self.assertEqual(
+                list(sample_status_rows[0].keys()),
+                [
+                    "accession",
+                    "internal_id",
+                    "is_new",
+                    "validation_status",
+                    "warnings",
+                    "notes",
+                ],
+            )
+            self.assertEqual(sample_status_rows[0]["validation_status"], "done")
+
     def test_main_rejects_missing_required_sample_headers(self) -> None:
         """Fail when the sample manifest omits a required locked header."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -444,6 +513,43 @@ class ValidateInputsTestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 1)
+
+    def test_main_can_defer_missing_genome_fasta_checks(self) -> None:
+        """Allow workflow-level staging to own host-path existence checks."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            missing_fasta_path = tmpdir / "missing.fna"
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,false,,{missing_fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID\nACC1,1\n",
+            )
+            outdir = tmpdir / "validated"
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--defer-genome-fasta-check",
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            validated_rows = read_tsv(outdir / "validated_samples.tsv")
+            self.assertEqual(validated_rows[0]["genome_fasta"], str(missing_fasta_path.resolve()))
 
     def test_main_rejects_accessions_that_sanitise_to_empty_ids(self) -> None:
         """Fail when sanitisation removes every character from the accession."""

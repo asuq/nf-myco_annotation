@@ -84,6 +84,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Directory for validated output tables.",
     )
+    parser.add_argument(
+        "--sample-status-columns",
+        default=DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET,
+        type=Path,
+        help="Path to the ordered sample-status column asset.",
+    )
+    parser.add_argument(
+        "--defer-genome-fasta-check",
+        action="store_true",
+        help=(
+            "Skip immediate genome_fasta existence checks and defer them to "
+            "the downstream workflow staging step."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -281,6 +295,8 @@ def validate_samples(
     sample_header: Sequence[str],
     sample_rows: Sequence[dict[str, str]],
     metadata_index: dict[str, dict[str, str]],
+    *,
+    defer_genome_fasta_check: bool = False,
 ) -> tuple[list[SampleRecord], list[ValidationWarning]]:
     """Validate sample rows against manifest and metadata rules."""
     seen_accessions: set[str] = set()
@@ -332,7 +348,7 @@ def validate_samples(
                 f"Sample {accession!r} is missing a genome_fasta path."
             )
         genome_path = Path(genome_value).expanduser()
-        if not genome_path.exists():
+        if not defer_genome_fasta_check and not genome_path.exists():
             raise ValidationError(
                 f"Genome FASTA for sample {accession!r} does not exist: {genome_value}"
             )
@@ -490,7 +506,14 @@ def build_initial_sample_status_rows(
     ]
 
 
-def run_validation(sample_csv: Path, metadata: Path, outdir: Path) -> None:
+def run_validation(
+    sample_csv: Path,
+    metadata: Path,
+    outdir: Path,
+    sample_status_columns_path: Path,
+    *,
+    defer_genome_fasta_check: bool = False,
+) -> None:
     """Validate inputs and write the expected downstream TSV outputs."""
     sample_header, sample_rows = read_delimited_table(sample_csv, delimiter=",")
     validate_sample_header(sample_header)
@@ -503,8 +526,9 @@ def run_validation(sample_csv: Path, metadata: Path, outdir: Path) -> None:
         sample_header=sample_header,
         sample_rows=sample_rows,
         metadata_index=metadata_index,
+        defer_genome_fasta_check=defer_genome_fasta_check,
     )
-    sample_status_columns = load_sample_status_columns()
+    sample_status_columns = load_sample_status_columns(sample_status_columns_path)
 
     write_tsv(
         outdir / "validated_samples.tsv",
@@ -537,7 +561,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     configure_logging()
     try:
-        run_validation(args.sample_csv, args.metadata, args.outdir)
+        run_validation(
+            args.sample_csv,
+            args.metadata,
+            args.outdir,
+            args.sample_status_columns,
+            defer_genome_fasta_check=args.defer_genome_fasta_check,
+        )
     except ValidationError as error:
         LOGGER.error(str(error))
         return 1
