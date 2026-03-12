@@ -24,13 +24,15 @@ process PADLOC {
     """
     mkdir -p padloc_bin padloc_bootstrap_data
     cp "\$(command -v padloc)" padloc_bin/padloc.real
-    sed -i 's#mkdir -p "\\${SRC_DIR}/../data"#mkdir -p "\\${PADLOC_BOOTSTRAP_DATA}"#' padloc_bin/padloc.real
+    search_pattern='mkdir -p "'"\$"'{SRC_DIR}/../data"'
+    replacement_pattern='mkdir -p "'"\$"'{PADLOC_BOOTSTRAP_DATA}"'
+    sed -i "s#\$search_pattern#\$replacement_pattern#" padloc_bin/padloc.real
     chmod +x padloc_bin/padloc.real
     export PADLOC_WRAPPER_REAL="\$PWD/padloc_bin/padloc.real"
     cat <<'EOF' > padloc_bin/padloc
 #!/usr/bin/env bash
 set -euo pipefail
-exec bash "\${PADLOC_WRAPPER_REAL}" "\$@"
+exec bash "\$PADLOC_WRAPPER_REAL" "\$@"
 EOF
     chmod +x padloc_bin/padloc
     export PADLOC_BOOTSTRAP_DATA="\$PWD/padloc_bootstrap_data"

@@ -22,31 +22,33 @@ process MERGE_RUNTIME_DATABASE_REPORTS {
 
     script:
     """
-    script_path="/usr/local/bin/merge_runtime_database_reports.py"
+    script_path="\$(command -v merge_runtime_database_reports.py)"
+    python_path="\$(command -v python3)"
     report_args=()
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
     done
-    /usr/local/bin/python3 "\${script_path}" \
+    "\${python_path}" "\${script_path}" \
         --output-report runtime_database_report.tsv \
         --output-args nextflow_args.txt \
         "\${report_args[@]}"
 
     {
         printf '"%s":\n' "${task.process}"
-        printf '  python: "%s"\n' "\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
+        printf '  python: "%s"\n' "\$(\"\${python_path}\" --version 2>&1 | sed 's/^Python //')"
         printf '  helper: "%s"\n' 'bin/merge_runtime_database_reports.py'
     } > versions.yml
     """
 
     stub:
     """
-    script_path="/usr/local/bin/merge_runtime_database_reports.py"
+    script_path="\$(command -v merge_runtime_database_reports.py)"
+    python_path="\$(command -v python3)"
     report_args=()
     for report_file in reports/report*.tsv; do
         report_args+=(--report "\${report_file}")
     done
-    /usr/local/bin/python3 "\${script_path}" \
+    "\${python_path}" "\${script_path}" \
         --output-report runtime_database_report.tsv \
         --output-args nextflow_args.txt \
         "\${report_args[@]}"

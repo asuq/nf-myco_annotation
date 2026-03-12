@@ -395,9 +395,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
         self.assertIn('--data "\\${padloc_db_dir}"', module_text)
         self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('sed -i \'s#mkdir -p "\\\\${SRC_DIR}/../data"#mkdir -p "\\\\${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
+        self.assertIn('search_pattern=\'mkdir -p "\'"\\$"\'{SRC_DIR}/../data"\'', module_text)
+        self.assertIn('replacement_pattern=\'mkdir -p "\'"\\$"\'{PADLOC_BOOTSTRAP_DATA}"\'', module_text)
+        self.assertIn('sed -i "s#\\$search_pattern#\\$replacement_pattern#" padloc_bin/padloc.real', module_text)
         self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
-        self.assertIn('exec bash "\\${PADLOC_WRAPPER_REAL}" "\\$@"', module_text)
+        self.assertIn('exec bash "\\$PADLOC_WRAPPER_REAL" "\\$@"', module_text)
         self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
         self.assertIn("PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))", workflow_text)
         self.assertIn("padlocDb = params.padloc_db", main_text)
@@ -410,15 +412,28 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         )
 
         self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('sed -i \'s#mkdir -p "\\\\${SRC_DIR}/../data"#mkdir -p "\\\\${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
+        self.assertIn('search_pattern=\'mkdir -p "\'"\\$"\'{SRC_DIR}/../data"\'', module_text)
+        self.assertIn('replacement_pattern=\'mkdir -p "\'"\\$"\'{PADLOC_BOOTSTRAP_DATA}"\'', module_text)
+        self.assertIn('sed -i "s#\\$search_pattern#\\$replacement_pattern#" padloc_bin/padloc.real', module_text)
         self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
-        self.assertIn('exec bash "\\${PADLOC_WRAPPER_REAL}" "\\$@"', module_text)
+        self.assertIn('exec bash "\\$PADLOC_WRAPPER_REAL" "\\$@"', module_text)
         self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
         self.assertIn('padloc --data "\\${destination_path}" --db-update', module_text)
         self.assertIn(
             'printf \'  padloc: "%s"\\n\' "\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"',
             module_text,
         )
+
+    def test_merge_runtime_database_reports_uses_path_python_lookup(self) -> None:
+        """Require merge helper execution to use PATH-resolved Python and helper binaries."""
+        module_text = (MODULES_DIR / "merge_runtime_database_reports.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', module_text)
+        self.assertNotIn('script_path="/usr/local/bin/merge_runtime_database_reports.py"', module_text)
+        self.assertNotIn('/usr/local/bin/python3', module_text)
 
     def test_eggnog_short_circuit_filters_only_eggnog_inputs(self) -> None:
         """Require acceptance eggNOG short-circuiting to filter only eggNOG jobs."""
@@ -512,7 +527,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("buscoRequest = destinations.busco_root", workflow_text)
         self.assertIn("eggnogRequest = destinations.eggnog", workflow_text)
         self.assertIn("padlocRequest = destinations.padloc", workflow_text)
-        self.assertIn('/usr/local/bin/python3 "\\${script_path}" \\', merge_module_text)
+        self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', merge_module_text)
+        self.assertIn('"\\${python_path}" "\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_modules_delegate_to_python_helpers(self) -> None:
         """Require the prep workflow to keep validation logic out of Groovy."""
@@ -545,8 +562,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('http://eggnog5.embl.de/download/emapperdb-', eggnog_module_text)
         self.assertIn('script_path="/usr/local/bin/finalise_runtime_database.py"', finalise_module_text)
         self.assertIn('/usr/local/bin/python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
-        self.assertIn('script_path="/usr/local/bin/merge_runtime_database_reports.py"', merge_module_text)
-        self.assertIn('/usr/local/bin/python3 "\\${script_path}" \\', merge_module_text)
+        self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', merge_module_text)
+        self.assertIn('"\\${python_path}" "\\${script_path}" \\', merge_module_text)
 
     def test_runtime_database_prep_respects_configured_busco_lineages(self) -> None:
         """Require the prep workflow to forward params.busco_lineages to BUSCO prep."""
