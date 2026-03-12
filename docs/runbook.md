@@ -289,42 +289,23 @@ For the scripted campaign through the medium Mycoplasmatota/Bacillota run, use
 the dedicated wrapper:
 
 ```bash
-bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all \
-  --medium-candidates-tsv /path/to/medium_candidates.tsv
+bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all
 ```
 
 That wrapper:
 
 - prepares the tracked 9-sample cohort on HPC-native storage
+- prepares the fixed medium Mycoplasmatota/Bacillota cohort from the
+  repo-tracked source catalog and cohort plan under `assets/testdata/medium/`
 - runs the full runtime DB gate and the disposable DB existence-state cases
 - runs the tracked 9-sample real pipeline gate
 - runs the medium Mycoplasmatota/Bacillota real-data gate
-- generates the medium run `sample_sheet.csv`, `metadata.tsv`,
-  `selection_report.tsv`, and `coverage_report.tsv` under
-  `"$HPC_ROOT/medium_inputs/generated"`
+- writes the medium run `sample_sheet.csv`, `metadata.tsv`, and
+  `source_stats.tsv` under `"$HPC_ROOT/medium/generated"`
 
 It intentionally uses the resource defaults already coded in the OIST profile
 and process configuration. It does not pass explicit `--max_cpus`,
 `--max_memory`, or `--max_time` overrides.
-
-The medium candidate TSV must include:
-
-- `accession`
-- `genome_fasta`
-- `is_new`
-- `assembly_level`
-- `include_metadata`
-- `tax_id`
-- `organism_name`
-- `n50`
-- `scaffolds`
-- `genome_size`
-- `atypical_warnings`
-- `phylum`
-- `role_tags`
-
-`role_tags` is a semicolon-delimited field used to drive medium-run edge-case
-selection within the Mycoplasmatota/Bacillota cohort.
 
 Step-by-step procedure:
 
@@ -481,35 +462,29 @@ Acceptance checks:
 - for full eggNOG runs, `eggnog_status` is `done` for eligible samples and
   `skipped` only when `gcode = NA`
 
-8. Prepare and run a medium real-data cohort of about 20 to 30 samples.
+8. Prepare and run the fixed medium Mycoplasmatota/Bacillota cohort.
 
-Use your own `sample_csv` and `metadata.tsv`, but make sure the cohort includes:
+The wrapper prepares this cohort automatically from the repo-tracked medium
+catalogue and plan before `p2` and `all`, or you can run that step directly:
 
-- gcode4 candidates
-- gcode11 candidates
-- at least one CRISPR-positive sample
-- at least one CRISPR-negative sample
-- at least one atypical-excluded sample
-- at least one atypical-exception sample
-- at least one ANI-near pair
-- at least two `is_new=true` rows
+```bash
+bin/run_oist_hpc_matrix.sh --hpc-root "$HPC_ROOT" medium-prepare
+```
 
-Run it with the same command pattern, but use:
+The generated medium inputs are written under:
 
-- `-work-dir "$RESULT_ROOT/p2/work"`
-- `--outdir "$RESULT_ROOT/p2/out"`
+- `"$HPC_ROOT/medium/generated/sample_sheet.csv"`
+- `"$HPC_ROOT/medium/generated/metadata.tsv"`
+- `"$HPC_ROOT/medium/generated/source_stats.tsv"`
+- `"$HPC_ROOT/medium/download_checksums.tsv"`
 
-9. Run the large or full real-data cohort.
+Then run the medium case with:
 
-Use the same command pattern again with:
+```bash
+bin/run_oist_hpc_matrix.sh --hpc-root "$HPC_ROOT" p2
+```
 
-- `-work-dir "$RESULT_ROOT/p3/work"`
-- `--outdir "$RESULT_ROOT/p3/out"`
-
-Only increase `--max_cpus`, `--max_memory`, or `--max_time` if the first two
-HPC runs show that the defaults are too tight.
-
-10. If a run fails, download the useful artefacts back to local.
+9. If a run fails, download the useful artefacts back to local.
 
 For database-prep failures, bring back:
 
