@@ -61,6 +61,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "busco_db": Path("/tmp/busco"),
             "eggnog_db": Path("/tmp/eggnog"),
             "padloc_db": Path("/tmp/padloc"),
+            "force_runtime_database_rebuild": False,
             "slurm_queue": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
@@ -518,6 +519,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             busco_db=Path("/tmp/busco"),
             eggnog_db=Path("/tmp/eggnog"),
             padloc_db=Path("/tmp/padloc"),
+            force_runtime_database_rebuild=True,
             singularity_cache_dir="/tmp/singularity-cache",
             singularity_run_options="bind=/db",
         )
@@ -537,6 +539,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertIn(str(Path("/tmp/busco").resolve()), command)
         self.assertIn("--download_missing_databases", command)
         self.assertIn("true", command)
+        self.assertIn("--force_runtime_database_rebuild", command)
         self.assertIn("--singularity_cache_dir", command)
         self.assertIn("/tmp/singularity-cache", command)
         self.assertIn("--singularity_run_options", command)
@@ -669,6 +672,27 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertEqual(args.dbprep_profile, "oist")
         self.assertEqual(args.busco_db, Path("/tmp/busco"))
         self.assertEqual(args.singularity_cache_dir, "/tmp/singularity-cache")
+
+    def test_parse_args_accepts_dbprep_force_rebuild_flag(self) -> None:
+        """Accept the dedicated rebuild flag for dbprep SLURM reruns."""
+        args = run_acceptance_tests.parse_args(
+            [
+                "dbprep-slurm",
+                "--taxdump",
+                "/tmp/taxdump",
+                "--checkm2-db",
+                "/tmp/checkm2",
+                "--busco-db",
+                "/tmp/busco",
+                "--eggnog-db",
+                "/tmp/eggnog",
+                "--padloc-db",
+                "/tmp/padloc",
+                "--force-runtime-database-rebuild",
+            ]
+        )
+
+        self.assertTrue(args.force_runtime_database_rebuild)
 
 
 if __name__ == "__main__":

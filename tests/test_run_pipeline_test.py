@@ -137,6 +137,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertIn("This mode runs prepare_databases.nf on SLURM", result.stdout)
         self.assertIn("--dbprep-profile DBPREP_PROFILE", result.stdout)
         self.assertIn("--busco-db BUSCO_DB", result.stdout)
+        self.assertIn("--force-runtime-database-rebuild", result.stdout)
 
     def test_wrapper_dry_run_dbprep_slurm_preserves_runtime_arguments(self) -> None:
         """Forward dbprep-slurm arguments unchanged during dry-run output."""
@@ -155,6 +156,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/eggnog",
             "--padloc-db",
             "/tmp/padloc",
+            "--force-runtime-database-rebuild",
             "--slurm-queue",
             "short",
             "--singularity-cache-dir",
@@ -166,7 +168,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py dbprep-slurm --dbprep-profile oist "
             "--taxdump /tmp/taxdump --checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
-            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc --slurm-queue short "
+            "--eggnog-db /tmp/eggnog --padloc-db /tmp/padloc "
+            "--force-runtime-database-rebuild --slurm-queue short "
             "--singularity-cache-dir /tmp/singularity-cache",
         )
         self.assertEqual(result.stderr, "")

@@ -754,6 +754,8 @@ def build_dbprep_command(
     ]
     if args.resume:
         command.append("-resume")
+    if args.force_runtime_database_rebuild:
+        command.extend(["--force_runtime_database_rebuild", "true"])
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
     maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
@@ -1257,6 +1259,11 @@ def build_dbprep_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--busco-db", type=Path, default=None, help="BUSCO database root.")
     parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
     parser.add_argument("--padloc-db", type=Path, default=None, help="PADLOC database path.")
+    parser.add_argument(
+        "--force-runtime-database-rebuild",
+        action="store_true",
+        help="Rebuild incomplete runtime database destinations in place.",
+    )
     parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
     parser.add_argument(
         "--slurm-cluster-options",
