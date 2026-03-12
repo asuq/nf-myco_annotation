@@ -120,6 +120,16 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("padloc_container = 'quay.io/asuq1617/padloc:2.0.0'", config_text)
         self.assertNotIn("padloc_container = 'quay.io/biocontainers/padloc:2.0.0--hdfd78af_1'", config_text)
 
+    def test_eggnog_container_points_at_the_fixed_runtime_tag(self) -> None:
+        """Use the fixed eggNOG image tag by default."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("eggnog_container = 'quay.io/asuq1617/eggnog-mapper:2.1.13'", config_text)
+        self.assertNotIn(
+            "eggnog_container = 'quay.io/biocontainers/eggnog-mapper:2.1.13--pyhdfd78af_2'",
+            config_text,
+        )
+
     def test_python_helper_processes_are_pinned_explicitly(self) -> None:
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
