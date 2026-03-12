@@ -18,6 +18,20 @@ process DOWNLOAD_PADLOC_DATABASE {
     destination_path="${destination}"
     mode="prepared"
 
+    mkdir -p padloc_bin padloc_bootstrap_data
+    cp "\$(command -v padloc)" padloc_bin/padloc.real
+    sed -i 's#mkdir -p "${SRC_DIR}/../data"#mkdir -p "${PADLOC_BOOTSTRAP_DATA}"#' padloc_bin/padloc.real
+    chmod +x padloc_bin/padloc.real
+    export PADLOC_WRAPPER_REAL="$PWD/padloc_bin/padloc.real"
+    cat <<'EOF' > padloc_bin/padloc
+#!/usr/bin/env bash
+set -euo pipefail
+exec bash "${PADLOC_WRAPPER_REAL}" "$@"
+EOF
+    chmod +x padloc_bin/padloc
+    export PADLOC_BOOTSTRAP_DATA="$PWD/padloc_bootstrap_data"
+    export PATH="$PWD/padloc_bin:$PATH"
+
     if [[ -e "\${destination_path}" && ! -d "\${destination_path}" ]]; then
         echo "PADLOC destination must be a directory: \${destination_path}" >&2
         exit 1
@@ -48,7 +62,7 @@ process DOWNLOAD_PADLOC_DATABASE {
 
     {
         printf '"%s":\n' "${task.process}"
-        printf '  padloc: "%s"\n' "\$(padloc --help 2>&1 | head -n 1 || echo NA)"
+        printf '  padloc: "%s"\n' "\$(padloc --version 2>&1 | awk 'NF { print; exit }' || echo NA)"
     } > versions.yml
     """
 

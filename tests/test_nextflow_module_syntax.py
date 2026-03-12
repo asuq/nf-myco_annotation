@@ -394,9 +394,27 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('padloc_db_dir="\\$(cd "${padloc_db}" && pwd)"', module_text)
         self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
         self.assertIn('--data "\\${padloc_db_dir}"', module_text)
+        self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
+        self.assertIn('sed -i \'s#mkdir -p "${SRC_DIR}/../data"#mkdir -p "${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
+        self.assertIn('export PADLOC_BOOTSTRAP_DATA="$PWD/padloc_bootstrap_data"', module_text)
         self.assertIn("PADLOC(PROKKA.out.padloc_inputs.combine(padloc_db))", workflow_text)
         self.assertIn("padlocDb = params.padloc_db", main_text)
         self.assertIn('--padloc-db "${params.padloc_db ?: \'NA\'}" \\', collect_versions_text)
+
+    def test_download_padloc_database_patches_bootstrap_data_dir(self) -> None:
+        """Require PADLOC DB prep to avoid writing to the image install tree."""
+        module_text = (MODULES_DIR / "download_padloc_database.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
+        self.assertIn('sed -i \'s#mkdir -p "${SRC_DIR}/../data"#mkdir -p "${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
+        self.assertIn('export PADLOC_BOOTSTRAP_DATA="$PWD/padloc_bootstrap_data"', module_text)
+        self.assertIn('padloc --data "\\${destination_path}" --db-update', module_text)
+        self.assertIn(
+            'printf \'  padloc: "%s"\\n\' "\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"',
+            module_text,
+        )
 
     def test_eggnog_short_circuit_filters_only_eggnog_inputs(self) -> None:
         """Require acceptance eggNOG short-circuiting to filter only eggNOG jobs."""
