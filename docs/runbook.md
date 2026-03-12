@@ -290,8 +290,7 @@ the dedicated wrapper:
 
 ```bash
 bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all \
-  --medium-sample-csv /path/to/medium_sample_sheet.csv \
-  --medium-metadata /path/to/medium_metadata.tsv
+  --medium-candidates-tsv /path/to/medium_candidates.tsv
 ```
 
 That wrapper:
@@ -300,10 +299,32 @@ That wrapper:
 - runs the full runtime DB gate and the disposable DB existence-state cases
 - runs the tracked 9-sample real pipeline gate
 - runs the medium Mycoplasmatota/Bacillota real-data gate
+- generates the medium run `sample_sheet.csv`, `metadata.tsv`,
+  `selection_report.tsv`, and `coverage_report.tsv` under
+  `"$HPC_ROOT/medium_inputs/generated"`
 
 It intentionally uses the resource defaults already coded in the OIST profile
 and process configuration. It does not pass explicit `--max_cpus`,
 `--max_memory`, or `--max_time` overrides.
+
+The medium candidate TSV must include:
+
+- `accession`
+- `genome_fasta`
+- `is_new`
+- `assembly_level`
+- `include_metadata`
+- `tax_id`
+- `organism_name`
+- `n50`
+- `scaffolds`
+- `genome_size`
+- `atypical_warnings`
+- `phylum`
+- `role_tags`
+
+`role_tags` is a semicolon-delimited field used to drive medium-run edge-case
+selection within the Mycoplasmatota/Bacillota cohort.
 
 Step-by-step procedure:
 

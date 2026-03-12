@@ -34,12 +34,30 @@ dedicated wrapper:
 
 ```bash
 bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all \
-  --medium-sample-csv /path/to/medium_sample_sheet.csv \
-  --medium-metadata /path/to/medium_metadata.tsv
+  --medium-candidates-tsv /path/to/medium_candidates.tsv
 ```
 
 That wrapper keeps using the coded OIST resource defaults. It does not add
 `--max_cpus`, `--max_memory`, or `--max_time` overrides.
+
+The medium candidate TSV must provide:
+
+- `accession`
+- `genome_fasta`
+- `is_new`
+- `assembly_level`
+- `include_metadata`
+- `tax_id`
+- `organism_name`
+- `n50`
+- `scaffolds`
+- `genome_size`
+- `atypical_warnings`
+- `phylum`
+- `role_tags`
+
+`role_tags` is a semicolon-delimited field used to drive medium-run edge-case
+selection within the Mycoplasmatota/Bacillota cohort.
 
 The wrapper's normal `slurm` path remains centred on the debug acceptance
 cohort and local-baseline comparison.

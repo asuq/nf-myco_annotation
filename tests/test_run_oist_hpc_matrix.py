@@ -91,7 +91,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--medium-sample-csv and --medium-metadata are required", result.stderr)
+        self.assertIn(
+            "--medium-candidates-tsv or both --medium-sample-csv and --medium-metadata are required",
+            result.stderr,
+        )
 
     def test_all_requires_medium_inputs(self) -> None:
         """Fail when the full campaign lacks the medium cohort inputs."""
@@ -103,7 +106,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--medium-sample-csv and --medium-metadata are required", result.stderr)
+        self.assertIn(
+            "--medium-candidates-tsv or both --medium-sample-csv and --medium-metadata are required",
+            result.stderr,
+        )
 
     def test_all_accepts_medium_inputs_after_mode(self) -> None:
         """Accept medium inputs even when they appear after the mode token."""
@@ -125,6 +131,52 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
         self.assertIn(
             "--metadata /tmp/medium_metadata.tsv",
+            result.stdout,
+        )
+
+    def test_p2_generates_medium_inputs_from_candidate_manifest(self) -> None:
+        """Generate medium inputs automatically when a candidates TSV is supplied."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            "/tmp/hpc",
+            "p2",
+            "--medium-candidates-tsv",
+            "/tmp/candidates.tsv",
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("python3 bin/build_real_run_inputs.py", result.stdout)
+        self.assertIn("--candidate-tsv /tmp/candidates.tsv", result.stdout)
+        self.assertIn("--outdir /tmp/hpc/medium_inputs/generated", result.stdout)
+        self.assertIn(
+            "--sample_csv /tmp/hpc/medium_inputs/generated/sample_sheet.csv",
+            result.stdout,
+        )
+        self.assertIn(
+            "--metadata /tmp/hpc/medium_inputs/generated/metadata.tsv",
+            result.stdout,
+        )
+
+    def test_all_accepts_medium_candidates_tsv_after_mode(self) -> None:
+        """Allow the full campaign to generate medium inputs from one candidates TSV."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            "/tmp/hpc",
+            "all",
+            "--medium-candidates-tsv",
+            "/tmp/candidates.tsv",
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("python3 bin/build_real_run_inputs.py", result.stdout)
+        self.assertIn(
+            "--sample_csv /tmp/hpc/medium_inputs/generated/sample_sheet.csv",
+            result.stdout,
+        )
+        self.assertIn(
+            "--metadata /tmp/hpc/medium_inputs/generated/metadata.tsv",
             result.stdout,
         )
 
