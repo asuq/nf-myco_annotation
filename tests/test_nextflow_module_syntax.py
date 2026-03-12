@@ -395,7 +395,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('if [[ ! -f "\\${padloc_db_dir}/hmm/padlocdb.hmm" ]]; then', module_text)
         self.assertIn('--data "\\${padloc_db_dir}"', module_text)
         self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('sed -i \'s#mkdir -p "${SRC_DIR}/../data"#mkdir -p "${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
+        self.assertIn('sed -i \'s#mkdir -p "\\\\${SRC_DIR}/../data"#mkdir -p "\\\\${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
         self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
         self.assertIn('exec bash "\\${PADLOC_WRAPPER_REAL}" "\\$@"', module_text)
         self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
@@ -410,7 +410,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         )
 
         self.assertIn('cp "\\$(command -v padloc)" padloc_bin/padloc.real', module_text)
-        self.assertIn('sed -i \'s#mkdir -p "${SRC_DIR}/../data"#mkdir -p "${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
+        self.assertIn('sed -i \'s#mkdir -p "\\\\${SRC_DIR}/../data"#mkdir -p "\\\\${PADLOC_BOOTSTRAP_DATA}"#\' padloc_bin/padloc.real', module_text)
         self.assertIn('export PADLOC_WRAPPER_REAL="\\$PWD/padloc_bin/padloc.real"', module_text)
         self.assertIn('exec bash "\\${PADLOC_WRAPPER_REAL}" "\\$@"', module_text)
         self.assertIn('export PADLOC_BOOTSTRAP_DATA="\\$PWD/padloc_bootstrap_data"', module_text)
