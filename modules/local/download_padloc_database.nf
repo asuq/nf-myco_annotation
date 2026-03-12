@@ -18,21 +18,6 @@ process DOWNLOAD_PADLOC_DATABASE {
     destination_path="${destination}"
     mode="prepared"
 
-    mkdir -p padloc_bin padloc_bootstrap_data
-    cp "\$(command -v padloc)" padloc_bin/padloc.real
-    patch_script="\$(command -v patch_padloc_launcher.py)"
-    python3 "\${patch_script}" padloc_bin/padloc.real
-    chmod +x padloc_bin/padloc.real
-    export PADLOC_WRAPPER_REAL="\$PWD/padloc_bin/padloc.real"
-    cat <<'EOF' > padloc_bin/padloc
-#!/usr/bin/env bash
-set -euo pipefail
-exec bash "\$PADLOC_WRAPPER_REAL" "\$@"
-EOF
-    chmod +x padloc_bin/padloc
-    export PADLOC_BOOTSTRAP_DATA="\$PWD/padloc_bootstrap_data"
-    export PATH="\$PWD/padloc_bin:\$PATH"
-
     if [[ -e "\${destination_path}" && ! -d "\${destination_path}" ]]; then
         echo "PADLOC destination must be a directory: \${destination_path}" >&2
         exit 1
