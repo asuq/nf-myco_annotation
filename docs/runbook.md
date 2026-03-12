@@ -288,6 +288,13 @@ nextflow run . -profile oist ...
 Do not include `debug` and do not set `--eggnog_only_accessions` when the goal
 is to validate full eggNOG execution on HPC.
 
+Build everything on HPC-native storage. Do not copy the local database tree to
+HPC. Use three stages in order:
+
+1. prepare the tracked acceptance cohort on the HPC login node
+2. prepare runtime databases on SLURM with `dbprep-slurm`
+3. run the real pipeline with raw `nextflow run . -profile oist`
+
 Step-by-step procedure:
 
 1. Start a persistent shell on the login node and move into the repository.
@@ -297,18 +304,16 @@ tmux new -s nf_myco_hpc
 cd /path/to/nf-myco_annotation
 ```
 
-2. Define one clean test root and the shared working paths.
+2. Define one clean HPC root.
 
 ```bash
 export HPC_ROOT=/scratch/$USER/nf_myco_hpc_$(date +%Y%m%d)
-export DB_SRC_ROOT=/shared/staged_db_sources
-export DB_TEST_ROOT=$HPC_ROOT/db_prep_tests
-export DB_RUNTIME_ROOT=$HPC_ROOT/db_runtime
-export WORK_ROOT=$HPC_ROOT/work
-export RESULTS_ROOT=$HPC_ROOT/results
+export ACCEPT_ROOT=$HPC_ROOT/acceptance
+export DB_ROOT=$HPC_ROOT/db
+export RESULT_ROOT=$HPC_ROOT/results
 export SINGULARITY_CACHE=$HPC_ROOT/singularity_cache
 
-mkdir -p "$DB_TEST_ROOT" "$DB_RUNTIME_ROOT" "$WORK_ROOT" "$RESULTS_ROOT" "$SINGULARITY_CACHE"
+mkdir -p "$ACCEPT_ROOT" "$DB_ROOT" "$RESULT_ROOT" "$SINGULARITY_CACHE"
 ```
 
 3. Run preflight checks.
@@ -321,133 +326,139 @@ sbatch --version
 nextflow config -profile oist >/dev/null
 ```
 
-4. Test runtime database preparation by downloading into explicit tool
-directories.
+4. Prepare the tracked 9-sample cohort on the HPC login node.
 
 ```bash
-nextflow run prepare_databases.nf -profile oist \
-  --taxdump "$DB_TEST_ROOT/db1/ncbi_taxdump_20240914" \
-  --checkm2_db "$DB_TEST_ROOT/db1/checkm2/CheckM2_database" \
-  --busco_db "$DB_TEST_ROOT/db1/busco" \
-  --eggnog_db "$DB_TEST_ROOT/db1/Eggnog_db/Eggnog_Diamond_db" \
-  --padloc_db "$DB_TEST_ROOT/db1/padloc" \
-  --download_missing_databases true \
-  --runtime_db_scratch_root "$DB_TEST_ROOT/db1/.scratch" \
-  --outdir "$DB_TEST_ROOT/db1/out"
+bin/run_pipeline_test.sh prepare \
+  --work-root "$ACCEPT_ROOT"
 ```
 
 Expected result:
 
-- `runtime_database_report.tsv` shows `prepared`
-- every destination contains `.nf_myco_ready.json`
-- `nextflow_args.txt` is ready to paste into the main workflow
+- `$ACCEPT_ROOT/generated/sample_sheet.csv`
+- `$ACCEPT_ROOT/generated/metadata.tsv`
+- `$ACCEPT_ROOT/download_checksums.tsv`
+- downloaded FASTA files under `$ACCEPT_ROOT/downloads/`
 
-5. Re-run the exact same command from step 4.
+If this step fails, bring back:
 
-Expected result:
+- `$ACCEPT_ROOT/prepare.log` if present
+- `$ACCEPT_ROOT/generated/`
+- `$ACCEPT_ROOT/download_checksums.tsv`
 
-- report rows become `present`
+5. Prepare the runtime databases on SLURM with the wrapper gate.
 
-6. Test partial preparation by reusing four existing destinations and creating
-one missing destination.
+Set the explicit HPC destination directories first:
 
 ```bash
-cp -R "$DB_TEST_ROOT/db1" "$DB_TEST_ROOT/db2"
-rm -rf "$DB_TEST_ROOT/db2/padloc"
+export TAXDUMP_DIR=$DB_ROOT/ncbi_taxdump_20240914
+export CHECKM2_DIR=$DB_ROOT/checkm2/CheckM2_database
+export BUSCO_DIR=$DB_ROOT/busco
+export EGGNOG_DIR=$DB_ROOT/Eggnog_db/Eggnog_Diamond_db
+export PADLOC_DIR=$DB_ROOT/padloc
+```
 
-nextflow run prepare_databases.nf -profile oist \
-  --padloc_db "$DB_TEST_ROOT/db2/padloc" \
-  --download_missing_databases true \
-  --runtime_db_scratch_root "$DB_TEST_ROOT/db2/.scratch" \
-  --outdir "$DB_TEST_ROOT/db2/out"
+```bash
+bin/run_pipeline_test.sh dbprep-slurm \
+  --dbprep-profile oist \
+  --work-root "$ACCEPT_ROOT" \
+  --taxdump "$TAXDUMP_DIR" \
+  --checkm2-db "$CHECKM2_DIR" \
+  --busco-db "$BUSCO_DIR" \
+  --eggnog-db "$EGGNOG_DIR" \
+  --padloc-db "$PADLOC_DIR" \
+  --singularity-cache-dir "$SINGULARITY_CACHE"
 ```
 
 Expected result:
 
-- preparation succeeds
-- the existing taxdump, CheckM2, BUSCO, and eggNOG directories are reused
-- PADLOC is freshly prepared under the requested directory
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/runtime_database_report.tsv`
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/nextflow_args.txt`
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/pipeline_info/trace.tsv`
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/pipeline_info/report.html`
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/pipeline_info/timeline.html`
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/pipeline_info/dag.html`
 
-7. Test invalid-destination failure and `--force` recovery.
+Validate the prepared DB directories:
 
-```bash
-mkdir -p "$DB_TEST_ROOT/db3/padloc"
-printf 'broken\n' > "$DB_TEST_ROOT/db3/padloc/broken.txt"
+- taxdump:
+  - `$TAXDUMP_DIR/names.dmp`
+  - `$TAXDUMP_DIR/nodes.dmp`
+- CheckM2:
+  - exactly one top-level `*.dmnd` in `$CHECKM2_DIR`
+- BUSCO:
+  - `$BUSCO_DIR/bacillota_odb12/dataset.cfg`
+  - `$BUSCO_DIR/mycoplasmatota_odb12/dataset.cfg`
+- eggNOG:
+  - `$EGGNOG_DIR/eggnog.db`
+  - `$EGGNOG_DIR/eggnog_proteins.dmnd`
+- PADLOC:
+  - `$PADLOC_DIR/hmm/padlocdb.hmm`
+- ready markers:
+  - `.nf_myco_ready.json` in each prepared DB root
 
-nextflow run prepare_databases.nf -profile oist \
-  --padloc_db "$DB_TEST_ROOT/db3/padloc" \
-  --download_missing_databases true \
-  --outdir "$DB_TEST_ROOT/db3/out"
-```
+If this step fails, bring back:
 
-Expected result:
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/`
+- failed task dir under `$ACCEPT_ROOT/runs/dbprep-slurm/work/`
+- `.nextflow.log`
+- `.command.sh`, `.command.out`, `.command.err`, and `.exitcode` from the failed task
 
-- non-zero exit because the destination is invalid
-
-Then rerun with `--force`:
-
-```bash
-nextflow run prepare_databases.nf -profile oist \
-  --padloc_db "$DB_TEST_ROOT/db3/padloc" \
-  --download_missing_databases true \
-  --force_runtime_database_rebuild true \
-  --outdir "$DB_TEST_ROOT/db3/out"
-```
-
-Expected result:
-
-- success
-- `broken.txt` is gone
-
-8. Prepare the final shared runtime database directories for the real HPC runs.
+6. Run one optional structural smoke test.
 
 ```bash
-nextflow run prepare_databases.nf -profile oist \
-  --taxdump "$DB_RUNTIME_ROOT/ncbi_taxdump_20240914" \
-  --checkm2_db "$DB_RUNTIME_ROOT/checkm2/CheckM2_database" \
-  --busco_db "$DB_RUNTIME_ROOT/busco" \
-  --eggnog_db "$DB_RUNTIME_ROOT/Eggnog_db/Eggnog_Diamond_db" \
-  --padloc_db "$DB_RUNTIME_ROOT/padloc" \
-  --download_missing_databases true \
-  --runtime_db_scratch_root "$DB_RUNTIME_ROOT/.scratch" \
-  --outdir "$DB_RUNTIME_ROOT/out"
+nextflow run . -profile test -stub-run --outdir "$RESULT_ROOT/stub"
 ```
 
-9. Run one optional structural smoke test.
-
-```bash
-nextflow run . -profile test -stub-run --outdir "$RESULTS_ROOT/stub"
-```
-
-10. Generate the tracked 9-sample cohort from the locked acceptance assets.
-
-```bash
-python3 bin/run_acceptance_tests.py prepare --work-root "$WORK_ROOT/p1"
-```
-
-This creates the sample sheet and metadata from the tracked cohort plan under
-`assets/testdata/acceptance/`.
-
-11. Run the tracked 9-sample cohort on OIST with full eggNOG.
+7. Run the tracked 9-sample cohort on OIST with full eggNOG.
 
 ```bash
 nextflow run . -profile oist \
-  -work-dir "$WORK_ROOT/p1/runs/full_eggnog/work" \
-  --sample_csv "$WORK_ROOT/p1/generated/sample_sheet.csv" \
-  --metadata "$WORK_ROOT/p1/generated/metadata.tsv" \
-  --taxdump "$DB_RUNTIME_ROOT/ncbi_taxdump_20240914" \
-  --checkm2_db "$DB_RUNTIME_ROOT/checkm2/CheckM2_database" \
-  --busco_db "$DB_RUNTIME_ROOT/busco" \
-  --eggnog_db "$DB_RUNTIME_ROOT/Eggnog_db/Eggnog_Diamond_db" \
-  --padloc_db "$DB_RUNTIME_ROOT/padloc" \
+  -work-dir "$RESULT_ROOT/p1/work" \
+  --sample_csv "$ACCEPT_ROOT/generated/sample_sheet.csv" \
+  --metadata "$ACCEPT_ROOT/generated/metadata.tsv" \
+  --taxdump "$TAXDUMP_DIR" \
+  --checkm2_db "$CHECKM2_DIR" \
+  --busco_db "$BUSCO_DIR" \
+  --eggnog_db "$EGGNOG_DIR" \
+  --padloc_db "$PADLOC_DIR" \
   --singularity_cache_dir "$SINGULARITY_CACHE" \
-  --outdir "$RESULTS_ROOT/p1" \
+  --outdir "$RESULT_ROOT/p1/out" \
   --max_cpus 64 \
   --max_memory 256.GB \
   --max_time 72.h
 ```
 
-12. Prepare and run a medium real-data cohort of about 20 to 30 samples.
+Do not include `debug` and do not set `--eggnog_only_accessions`.
+
+Monitor:
+
+```bash
+squeue -u "$USER"
+tail -f .nextflow.log
+```
+
+Expected final outputs:
+
+- `$RESULT_ROOT/p1/out/tables/master_table.tsv`
+- `$RESULT_ROOT/p1/out/tables/sample_status.tsv`
+- `$RESULT_ROOT/p1/out/tables/tool_and_db_versions.tsv`
+- `$RESULT_ROOT/p1/out/pipeline_info/trace.tsv`
+- `$RESULT_ROOT/p1/out/pipeline_info/report.html`
+- `$RESULT_ROOT/p1/out/pipeline_info/timeline.html`
+- `$RESULT_ROOT/p1/out/pipeline_info/dag.html`
+
+Acceptance checks:
+
+- `sample_status.tsv` has no failed samples
+- `tool_and_db_versions.tsv` has no `unknown` rows
+- `eggnog_mapper` is `2.1.13`
+- PADLOC tool version is clean
+- DB path rows point at `$DB_ROOT/...`
+- for full eggNOG runs, `eggnog_status` is `done` for eligible samples and
+  `skipped` only when `gcode = NA`
+
+8. Prepare and run a medium real-data cohort of about 20 to 30 samples.
 
 Use your own `sample_csv` and `metadata.tsv`, but make sure the cohort includes:
 
@@ -460,29 +471,44 @@ Use your own `sample_csv` and `metadata.tsv`, but make sure the cohort includes:
 - at least one ANI-near pair
 - at least two `is_new=true` rows
 
-Run it with the same command pattern, but use a fresh `-work-dir` and
-`--outdir`.
+Run it with the same command pattern, but use:
 
-13. Run the large or full real-data cohort.
+- `-work-dir "$RESULT_ROOT/p2/work"`
+- `--outdir "$RESULT_ROOT/p2/out"`
 
-Use the same command pattern again with its own `-work-dir` and `--outdir`.
-Increase `--max_time`, `--max_memory`, or `--slurm_queue` only if your site
-policy or the earlier runs show that the defaults are too tight.
+9. Run the large or full real-data cohort.
 
-14. Monitor all real runs.
+Use the same command pattern again with:
 
-```bash
-squeue -u "$USER"
-tail -f .nextflow.log
-```
+- `-work-dir "$RESULT_ROOT/p3/work"`
+- `--outdir "$RESULT_ROOT/p3/out"`
 
-Full-eggNOG success criteria:
+Only increase `--max_cpus`, `--max_memory`, or `--max_time` if the first two
+HPC runs show that the defaults are too tight.
 
-- `results/tables/master_table.tsv`, `sample_status.tsv`, and `tool_and_db_versions.tsv` exist
-- `results/pipeline_info/trace.tsv`, `report.html`, `timeline.html`, and `dag.html` exist
-- `tool_and_db_versions.tsv` points at the prepared runtime database root
-- `eggnog_status` is `done` for gcode-qualified samples and `skipped` only when `gcode = NA`
-- eligible sample folders contain fresh eggNOG, PADLOC, and CCFINDER outputs
+10. If a run fails, download the useful artefacts back to local.
+
+For database-prep failures, bring back:
+
+- `$ACCEPT_ROOT/runs/dbprep-slurm/results/`
+- failed task dir under `$ACCEPT_ROOT/runs/dbprep-slurm/work/`
+- `.nextflow.log`
+
+For pipeline failures, bring back:
+
+- `$RESULT_ROOT/<case>/out/tables/`
+- `$RESULT_ROOT/<case>/out/pipeline_info/`
+- failed task dir under `$RESULT_ROOT/<case>/work/`
+- `.nextflow.log`
+
+Minimum useful artefacts:
+
+- `.command.sh`
+- `.command.out`
+- `.command.err`
+- `.exitcode`
+- `versions.yml`
+- task-specific logs such as `fastani.log`, `ccfinder.log`, or `result.json`
 
 ## Final outputs
 

@@ -12,17 +12,25 @@ The wrapper does not re-implement pipeline logic. It forwards work to the
 acceptance harness, which remains the single source of truth for validation,
 Nextflow command construction, and output checks.
 
-For runtime database preparation, use `nextflow run prepare_databases.nf`
-instead. The wrapper's `prepare` mode only prepares the tracked acceptance
-cohort and its cached source genomes.
+For runtime database preparation on HPC, prefer the wrapper's `dbprep-slurm`
+mode. The wrapper's `prepare` mode only prepares the tracked acceptance cohort
+and its cached source genomes.
+
+Use raw `nextflow run prepare_databases.nf` only when you need direct operator
+control outside the standard SLURM validation gate.
 
 For a scripted SLURM validation of runtime database preparation itself, use the
 wrapper's `dbprep-slurm` mode. That mode runs `prepare_databases.nf`, downloads
 the curated runtime databases, and validates the prepared database tree.
 
-For OIST or any other full-eggNOG HPC validation, prefer raw `nextflow run .`
-over this wrapper. The wrapper's SLURM path remains centred on the debug
-acceptance cohort and local-baseline comparison.
+For OIST or any other full-eggNOG HPC validation, use this sequence:
+
+1. `bin/run_pipeline_test.sh prepare` on the login node
+2. `bin/run_pipeline_test.sh dbprep-slurm` on SLURM
+3. raw `nextflow run . -profile oist` for the real pipeline run
+
+The wrapper's normal `slurm` path remains centred on the debug acceptance
+cohort and local-baseline comparison.
 
 ## Command
 
