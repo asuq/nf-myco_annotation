@@ -9,6 +9,7 @@ readonly ACCEPTANCE_HARNESS="bin/run_acceptance_tests.py"
 readonly MEDIUM_SOURCE_CATALOG="${REPO_ROOT}/assets/testdata/medium/source_catalog.tsv"
 readonly MEDIUM_COHORT_PLAN="${REPO_ROOT}/assets/testdata/medium/cohort_plan.tsv"
 readonly MEDIUM_SAMPLE_COUNT="20"
+readonly DB_READY_MARKER=".nf_myco_ready.json"
 readonly VALID_MODES="prepare medium-prepare db-full db-reuse db-matrix p1 p2 all"
 
 show_usage() {
@@ -132,10 +133,10 @@ require_path() {
 }
 
 require_golden_db_tree() {
-    require_path "${TAXDUMP_DIR}/.nf_myco_ready.json" "taxdump ready marker"
-    require_path "${CHECKM2_DIR}/.nf_myco_ready.json" "CheckM2 ready marker"
-    require_path "${BUSCO_DIR}/.nf_myco_ready.json" "BUSCO ready marker"
-    require_path "${EGGNOG_DIR}/.nf_myco_ready.json" "eggNOG ready marker"
+    require_path "${TAXDUMP_DIR}/${DB_READY_MARKER}" "taxdump ready marker"
+    require_path "${CHECKM2_DIR}/${DB_READY_MARKER}" "CheckM2 ready marker"
+    require_path "${BUSCO_DIR}/${DB_READY_MARKER}" "BUSCO ready marker"
+    require_path "${EGGNOG_DIR}/${DB_READY_MARKER}" "eggNOG ready marker"
 }
 
 require_tracked_cohort() {
@@ -145,6 +146,42 @@ require_tracked_cohort() {
 
 run_prepare() {
     run_or_print "${PIPELINE_WRAPPER}" prepare --work-root "${ACCEPT_ROOT}"
+}
+
+set_dbfull_expected_status() {
+    local component path
+    local -a ready_components=()
+    local -a unready_components=()
+    local -a db_roots=(
+        "taxdump:${TAXDUMP_DIR}"
+        "checkm2:${CHECKM2_DIR}"
+        "busco_root:${BUSCO_DIR}"
+        "eggnog:${EGGNOG_DIR}"
+    )
+
+    for entry in "${db_roots[@]}"; do
+        component="${entry%%:*}"
+        path="${entry#*:}"
+        if [[ -f "${path}/${DB_READY_MARKER}" ]]; then
+            ready_components+=("${component}")
+        else
+            unready_components+=("${component}")
+        fi
+    done
+
+    if [[ "${#ready_components[@]}" -eq 0 ]]; then
+        DBFULL_EXPECTED_STATUS="prepared"
+        return 0
+    fi
+
+    if [[ "${#ready_components[@]}" -eq "${#db_roots[@]}" ]]; then
+        DBFULL_EXPECTED_STATUS="present"
+        return 0
+    fi
+
+    fail \
+        "Inconsistent runtime DB root under ${DB_ROOT}: ready [${ready_components[*]}], " \
+        "not ready [${unready_components[*]}]. Clean the root or rebuild it explicitly."
 }
 
 run_dbprep_wrapper() {
@@ -666,7 +703,8 @@ main() {
             run_medium_prepare
             ;;
         db-full)
-            run_dbprep_wrapper prepared
+            set_dbfull_expected_status
+            run_dbprep_wrapper "${DBFULL_EXPECTED_STATUS}"
             ;;
         db-reuse)
             run_dbprep_wrapper present
@@ -683,7 +721,8 @@ main() {
         all)
             run_prepare
             run_medium_prepare
-            run_dbprep_wrapper prepared
+            set_dbfull_expected_status
+            run_dbprep_wrapper "${DBFULL_EXPECTED_STATUS}"
             run_dbprep_wrapper present
             run_db_matrix
             run_p1
