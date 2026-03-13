@@ -120,6 +120,16 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("padloc_container = 'quay.io/asuq1617/padloc:2.0.0'", config_text)
         self.assertNotIn("padloc_container = 'quay.io/biocontainers/padloc:2.0.0--hdfd78af_1'", config_text)
 
+    def test_prokka_container_points_at_the_fixed_runtime_tag(self) -> None:
+        """Use the fixed Prokka image tag by default."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("prokka_container = 'quay.io/asuq1617/prokka:1.15.6'", config_text)
+        self.assertNotIn(
+            "prokka_container = 'quay.io/biocontainers/prokka:1.15.6--pl5321hdfd78af_0'",
+            config_text,
+        )
+
     def test_eggnog_container_points_at_the_fixed_runtime_tag(self) -> None:
         """Use the fixed eggNOG image tag by default."""
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
