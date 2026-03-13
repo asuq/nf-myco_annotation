@@ -29,21 +29,28 @@ process DOWNLOAD_BUSCO_DATABASES {
         exit 1
     fi
 
-    is_ready=true
-    if [[ ! -d "\${destination_path}" || ! -f "\${destination_path}/.nf_myco_ready.json" ]]; then
-        is_ready=false
+    has_all_lineages=true
+    if [[ ! -d "\${destination_path}" ]]; then
+        has_all_lineages=false
     else
         while IFS= read -r lineage; do
             [[ -z "\${lineage}" ]] && continue
             if [[ ! -f "\${destination_path}/\${lineage}/dataset.cfg" ]]; then
-                is_ready=false
+                has_all_lineages=false
                 break
             fi
         done < lineages.txt
     fi
 
+    is_ready=false
+    if [[ "\${has_all_lineages}" == "true" && -f "\${destination_path}/.nf_myco_ready.json" ]]; then
+        is_ready=true
+    fi
+
     if [[ "\${is_ready}" == "true" ]]; then
         mode="reuse"
+    elif [[ "\${has_all_lineages}" == "true" ]]; then
+        mode="prepared"
     else
         if [[ -d "\${destination_path}" ]]; then
             if [[ "${force}" != "true" ]]; then
