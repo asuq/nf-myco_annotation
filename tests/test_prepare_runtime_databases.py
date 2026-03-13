@@ -811,6 +811,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                 ),
             )
 
+            recorded_calls: list[list[str]] = []
             with (
                 mock.patch.object(prepare_runtime_databases.shutil, "which", return_value="/usr/bin/aria2c"),
                 mock.patch.object(
@@ -818,7 +819,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                     "run",
                     self.make_fake_aria2(
                         {"https://example.invalid/taxdump.zip": taxdump_archive},
-                        [],
+                        recorded_calls,
                     ),
                 ),
             ):
@@ -835,6 +836,110 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("Checksum mismatch", stderr)
             self.assertFalse((tmpdir / "prepared" / "taxdump").exists())
+            self.assertEqual(
+                sum(
+                    1
+                    for call in recorded_calls
+                    if call[-1] == "https://example.invalid/taxdump.zip"
+                ),
+                prepare_runtime_databases.MAX_MD5_DOWNLOAD_ATTEMPTS,
+            )
+
+    def test_main_checksum_mismatch_retries_and_recovers(self) -> None:
+        """Accept one remote archive when a later MD5 retry succeeds."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            bad_taxdump_dir = tmpdir / "fixtures" / "taxdump_bad"
+            self.write_text_file(
+                bad_taxdump_dir / "names.dmp",
+                "1\t|\tbad root\t|\t\t|\tscientific name\t|\n",
+            )
+            self.write_text_file(
+                bad_taxdump_dir / "nodes.dmp",
+                "1\t|\t1\t|\tno rank\t|\n",
+            )
+            bad_archive = self.create_zip_archive(
+                bad_taxdump_dir,
+                tmpdir / "fixtures" / "taxdump_bad.zip",
+                "taxdump_payload",
+            )
+            good_archive = self.create_zip_archive(
+                self.create_taxdump_dir(tmpdir / "fixtures" / "taxdump_good"),
+                tmpdir / "fixtures" / "taxdump_good.zip",
+                "taxdump_payload",
+            )
+            manifest_path = self.write_remote_manifest(
+                tmpdir / "remote_sources.json",
+                self.build_remote_manifest(
+                    taxdump_url="https://example.invalid/taxdump.zip",
+                    checkm2_url="https://example.invalid/checkm2.tar.gz",
+                    busco_template="https://example.invalid/{lineage}.tar.gz",
+                    eggnog_db_url="https://example.invalid/eggnog.db.gz",
+                    eggnog_dmnd_url="https://example.invalid/eggnog_proteins.dmnd.gz",
+                    padloc_url="https://example.invalid/padloc.zip",
+                    taxdump_checksum_value=self.checksum_md5(good_archive),
+                    checkm2_checksum_value="unused",
+                ),
+            )
+
+            recorded_calls: list[list[str]] = []
+            download_attempts = 0
+
+            def fake_run(
+                args: list[str],
+                *,
+                check: bool = False,
+                capture_output: bool = True,
+                text: bool = True,
+            ) -> subprocess.CompletedProcess[str]:
+                """Return corrupt downloads first, then one valid archive."""
+                nonlocal download_attempts
+                self.assertEqual(args[0], "aria2c")
+                self.assertFalse(check)
+                self.assertTrue(capture_output)
+                self.assertTrue(text)
+                recorded_calls.append(args)
+                url = args[-1]
+                destination_dir = Path(args[args.index("--dir") + 1])
+                destination_name = args[args.index("--out") + 1]
+                destination_dir.mkdir(parents=True, exist_ok=True)
+                if url == "https://example.invalid/taxdump.zip":
+                    download_attempts += 1
+                    source = bad_archive if download_attempts < 3 else good_archive
+                    shutil.copy2(source, destination_dir / destination_name)
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                raise AssertionError(f"Unexpected URL: {url}")
+
+            with (
+                mock.patch.object(prepare_runtime_databases.shutil, "which", return_value="/usr/bin/aria2c"),
+                mock.patch.object(
+                    prepare_runtime_databases.subprocess,
+                    "run",
+                    mock.Mock(side_effect=fake_run),
+                ),
+            ):
+                exit_code, stdout, stderr = self.run_cli(
+                    [
+                        "--taxdump-dest",
+                        str(tmpdir / "prepared" / "taxdump"),
+                        "--download",
+                        "--remote-source-manifest",
+                        str(manifest_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("--taxdump", stdout)
+            self.assertIn("Checksum mismatch", stderr)
+            self.assertEqual(download_attempts, 3)
+            self.assertTrue(
+                (
+                    tmpdir
+                    / "prepared"
+                    / "taxdump"
+                    / prepare_runtime_databases.MARKER_FILE_NAME
+                ).is_file()
+            )
 
     def test_main_remote_download_failure_propagates_aria2_error(self) -> None:
         """Surface aria2 failures when one remote download cannot be retrieved."""
