@@ -554,6 +554,23 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("""printf '%s\\n' "\\${lineages[@]}" > lineages.txt""", busco_module_text)
         self.assertIn('helper_args+=(--busco-lineage "\\${lineage}")', finalise_module_text)
 
+    def test_busco_prep_accepts_valid_roots_without_ready_markers(self) -> None:
+        """Require BUSCO prep to finalise valid lineage roots that lack a marker."""
+        module_text = (MODULES_DIR / "download_busco_databases.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('has_all_lineages=true', module_text)
+        self.assertIn(
+            'if [[ "\\${has_all_lineages}" == "true" && -f "\\${destination_path}/.nf_myco_ready.json" ]]; then',
+            module_text,
+        )
+        self.assertIn('elif [[ "\\${has_all_lineages}" == "true" ]]; then', module_text)
+        self.assertIn(
+            'echo "BUSCO destination exists but is not ready: \\${destination_path}" >&2',
+            module_text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
