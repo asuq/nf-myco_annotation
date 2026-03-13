@@ -30,6 +30,7 @@ LOCK_FILE_SUFFIX = ".nf_myco_prepare.lock"
 DEFAULT_BUSCO_LINEAGES = ("bacillota_odb12", "mycoplasmatota_odb12")
 REPORT_COLUMNS = ("component", "status", "source", "destination", "details")
 LINK_MODES = ("copy", "symlink", "hardlink")
+MAX_MD5_DOWNLOAD_ATTEMPTS = 3
 DEFAULT_REMOTE_SOURCE_MANIFEST = Path(
     os.environ.get(
         "NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST",
@@ -40,6 +41,27 @@ DEFAULT_REMOTE_SOURCE_MANIFEST = Path(
 
 class PrepareRuntimeDatabasesError(RuntimeError):
     """Raised when one runtime database cannot be prepared safely."""
+
+
+class ChecksumMismatchError(PrepareRuntimeDatabasesError):
+    """Raised when one downloaded file checksum does not match."""
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        checksum_type: str,
+        expected: str,
+        observed: str,
+    ) -> None:
+        """Initialise one checksum-mismatch error."""
+        self.path = path
+        self.checksum_type = checksum_type
+        self.expected = expected
+        self.observed = observed
+        super().__init__(
+            f"Checksum mismatch for {path.name}: expected {expected}, observed {observed}"
+        )
 
 
 @dataclass(frozen=True)
@@ -737,10 +759,43 @@ def verify_download_checksum(
     checksum_type, expected = resolved
     observed = compute_checksum(path, checksum_type)
     if observed.lower() != expected.lower():
-        raise PrepareRuntimeDatabasesError(
-            f"Checksum mismatch for {path.name}: expected {expected}, observed {observed}"
+        raise ChecksumMismatchError(
+            path=path,
+            checksum_type=checksum_type,
+            expected=expected,
+            observed=observed,
         )
     return f"{checksum_type}:{expected.lower()}"
+
+
+def download_with_checksum_retries(
+    *,
+    url: str,
+    destination: Path,
+    checksum_config: dict[str, Any] | None,
+    scratch_dir: Path,
+) -> str:
+    """Download one file and retry transient MD5 checksum mismatches."""
+    attempt = 0
+    while True:
+        attempt += 1
+        destination.unlink(missing_ok=True)
+        download_with_aria2(url, destination)
+        try:
+            return verify_download_checksum(
+                destination,
+                checksum_config=checksum_config,
+                scratch_dir=scratch_dir,
+            )
+        except ChecksumMismatchError as error:
+            if error.checksum_type.lower() != "md5" or attempt >= MAX_MD5_DOWNLOAD_ATTEMPTS:
+                raise
+            LOGGER.warning(
+                "Checksum mismatch for %s on attempt %s/%s; retrying download.",
+                destination.name,
+                attempt,
+                MAX_MD5_DOWNLOAD_ATTEMPTS,
+            )
 
 
 def build_remote_scratch_dir(destination: Path, scratch_root: Path | None) -> Path:
@@ -775,9 +830,9 @@ def prepare_remote_archive_component(
     scratch_dir = build_remote_scratch_dir(destination, scratch_root)
     try:
         archive_path = scratch_dir / archive_name
-        download_with_aria2(url, archive_path)
-        checksum_status = verify_download_checksum(
-            archive_path,
+        checksum_status = download_with_checksum_retries(
+            url=url,
+            destination=archive_path,
             checksum_config=checksum_config,
             scratch_dir=scratch_dir,
         )
@@ -831,9 +886,9 @@ def prepare_remote_file_bundle_component(
             if not isinstance(download_name, str) or not download_name:
                 download_name = infer_download_name(url, f"{component}.download")
             downloaded_path = scratch_dir / download_name
-            download_with_aria2(url, downloaded_path)
-            checksum_status = verify_download_checksum(
-                downloaded_path,
+            checksum_status = download_with_checksum_retries(
+                url=url,
+                destination=downloaded_path,
                 checksum_config=file_config.get("checksum"),
                 scratch_dir=scratch_dir,
             )
