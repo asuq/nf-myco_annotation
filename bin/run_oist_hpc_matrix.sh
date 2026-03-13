@@ -82,6 +82,31 @@ run_or_print() {
     "$@"
 }
 
+reset_case_root() {
+    local resolved_case_root
+
+    if [[ -z "${CASE_ROOT}" ]]; then
+        fail "CASE_ROOT must not be empty"
+    fi
+
+    resolved_case_root="$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())' "${CASE_ROOT}")"
+    if [[ "${resolved_case_root}" == "/" ]]; then
+        fail "Refusing to remove root directory for db-matrix reset"
+    fi
+    if [[ "${resolved_case_root}" != */db_cases ]]; then
+        fail "Refusing to reset non-disposable case root: ${resolved_case_root}"
+    fi
+
+    if [[ "${DRY_RUN}" == "true" ]]; then
+        print_command rm -rf "${resolved_case_root}"
+        print_command mkdir -p "${resolved_case_root}"
+        return 0
+    fi
+
+    rm -rf "${resolved_case_root}"
+    mkdir -p "${resolved_case_root}"
+}
+
 run_expect_failure() {
     local expected_text="$1"
     local log_path="$2"
@@ -258,7 +283,7 @@ run_db_matrix() {
         require_golden_db_tree
     fi
 
-    run_or_print mkdir -p "${case_root}"
+    reset_case_root
 
     local valid_root="${case_root}/db3_valid_without_marker"
     seed_valid_without_marker_cases "${valid_root}"
