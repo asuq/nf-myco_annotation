@@ -343,7 +343,7 @@ run_db_matrix() {
 
     fail_log="${case_root}/db5_taxdump_missing_no_download.log"
     run_expect_failure \
-        "Taxdump destination is missing and download is disabled" \
+        "No local source was supplied for taxdump, and remote download is disabled." \
         "${fail_log}" \
         nextflow run prepare_databases.nf -profile oist \
         -work-dir "${case_root}/db5_taxdump/work" \
@@ -386,7 +386,7 @@ run_db_matrix() {
     run_or_print touch "${case_root}/db6_eggnog/db/Eggnog_db/Eggnog_Diamond_db"
     fail_log="${case_root}/db6_taxdump_file.log"
     run_expect_failure \
-        "Taxdump destination must be a directory" \
+        "Destination must be a directory for taxdump" \
         "${fail_log}" \
         nextflow run prepare_databases.nf -profile oist \
         -work-dir "${case_root}/db6_taxdump/work" \
