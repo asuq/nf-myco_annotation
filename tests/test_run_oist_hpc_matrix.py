@@ -63,6 +63,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn(
+            "INFO: [prepare] Running tracked 9-sample cohort prepare",
+            result.stdout,
+        )
+        self.assertIn(
             "bin/run_pipeline_test.sh prepare --work-root /tmp/hpc/acceptance",
             result.stdout,
         )
@@ -77,6 +81,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
+        self.assertIn(
+            "INFO: [medium-prepare] Running fixed medium Mycoplasmatota/Bacillota cohort prepare",
+            result.stdout,
+        )
         self.assertIn(
             "python3 bin/run_acceptance_tests.py prepare --work-root /tmp/hpc/medium",
             result.stdout,
@@ -100,6 +108,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
+        self.assertIn(
+            "INFO: [db-full] Running full runtime DB prep gate",
+            result.stdout,
+        )
         self.assertIn("bin/run_pipeline_test.sh dbprep-slurm", result.stdout)
         self.assertIn("--dbprep-profile oist", result.stdout)
         self.assertIn("python3 bin/validate_hpc_matrix.py dbprep", result.stdout)
@@ -146,6 +158,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
+        self.assertIn(
+            "INFO: [p1] Running tracked 9-sample edge-case pipeline test",
+            result.stdout,
+        )
         self.assertIn("nextflow run . -profile oist", result.stdout)
         self.assertIn("--sample_csv /tmp/hpc/acceptance/generated/sample_sheet.csv", result.stdout)
         self.assertIn("--eggnog_db /tmp/hpc/db/Eggnog_db/Eggnog_Diamond_db", result.stdout)
@@ -164,6 +180,10 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn(
+            "INFO: [p2] Running medium Mycoplasmatota/Bacillota pipeline test",
+            result.stdout,
+        )
         self.assertIn(
             "python3 bin/run_acceptance_tests.py prepare --work-root /tmp/hpc/medium",
             result.stdout,
@@ -218,6 +238,18 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn(f"rm -rf {resolved_case_root}", result.stdout)
         self.assertIn(f"mkdir -p {resolved_case_root}", result.stdout)
+        self.assertIn(
+            "INFO: [db-matrix] Running db3_valid_without_marker/checkm2",
+            result.stdout,
+        )
+        self.assertIn(
+            "INFO: [db-matrix] Running db5_taxdump_missing_no_download",
+            result.stdout,
+        )
+        self.assertIn(
+            "INFO: [db-matrix] Running db10_checkm2_nested_layout",
+            result.stdout,
+        )
 
     def test_db_matrix_reset_targets_db_cases_only(self) -> None:
         """Guard the reset so it cannot target the wider HPC root."""
