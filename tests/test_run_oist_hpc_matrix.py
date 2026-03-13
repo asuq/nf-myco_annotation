@@ -192,6 +192,19 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             result.stdout,
         )
 
+    def test_db_matrix_uses_taxdump_helper_failure_text(self) -> None:
+        """Keep taxdump negative-case expectations aligned with the helper."""
+        script_text = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "No local source was supplied for taxdump, and remote download is disabled.",
+            script_text,
+        )
+        self.assertIn(
+            "Destination must be a directory for taxdump",
+            script_text,
+        )
+
     def test_all_accepts_medium_inputs_after_mode(self) -> None:
         """Accept medium inputs even when they appear after the mode token."""
         result = self.run_wrapper(
