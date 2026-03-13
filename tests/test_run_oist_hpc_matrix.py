@@ -205,6 +205,28 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             script_text,
         )
 
+    def test_db_matrix_dry_run_resets_disposable_case_root(self) -> None:
+        """Reset only the disposable db_cases tree before seeding matrix cases."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            "/tmp/hpc",
+            "db-matrix",
+        )
+        resolved_case_root = str(Path("/tmp/hpc/db_cases").resolve())
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn(f"rm -rf {resolved_case_root}", result.stdout)
+        self.assertIn(f"mkdir -p {resolved_case_root}", result.stdout)
+
+    def test_db_matrix_reset_targets_db_cases_only(self) -> None:
+        """Guard the reset so it cannot target the wider HPC root."""
+        script_text = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn('resolved_case_root="$(python3 -c', script_text)
+        self.assertIn('if [[ "${resolved_case_root}" == "/" ]]; then', script_text)
+        self.assertIn('if [[ "${resolved_case_root}" != */db_cases ]]; then', script_text)
+
     def test_all_accepts_medium_inputs_after_mode(self) -> None:
         """Accept medium inputs even when they appear after the mode token."""
         result = self.run_wrapper(
