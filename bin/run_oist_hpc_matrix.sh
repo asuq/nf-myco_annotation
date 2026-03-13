@@ -63,6 +63,13 @@ fail() {
     exit 1
 }
 
+announce_test() {
+    local label="$1"
+    local description="$2"
+
+    printf 'INFO: [%s] Running %s\n' "${label}" "${description}"
+}
+
 is_valid_mode() {
     case "$1" in
         prepare | medium-prepare | db-full | db-reuse | db-matrix | p1 | p2 | all)
@@ -142,6 +149,7 @@ ensure_medium_inputs() {
 }
 
 run_medium_prepare() {
+    announce_test "medium-prepare" "fixed medium Mycoplasmatota/Bacillota cohort prepare"
     run_or_print \
         python3 "${ACCEPTANCE_HARNESS}" prepare \
         --work-root "${MEDIUM_ROOT}" \
@@ -170,6 +178,7 @@ require_tracked_cohort() {
 }
 
 run_prepare() {
+    announce_test "prepare" "tracked 9-sample cohort prepare"
     run_or_print "${PIPELINE_WRAPPER}" prepare --work-root "${ACCEPT_ROOT}"
 }
 
@@ -210,8 +219,12 @@ set_dbfull_expected_status() {
 }
 
 run_dbprep_wrapper() {
-    local expected_status="$1"
+    local label="$1"
+    local description="$2"
+    local expected_status="$3"
     local resume_args=()
+
+    announce_test "${label}" "${description}"
 
     if [[ "${RESUME}" == "true" ]]; then
         resume_args+=(--resume)
@@ -279,6 +292,8 @@ run_db_matrix() {
     local case_root="${CASE_ROOT}"
     local fail_log
 
+    announce_test "db-matrix" "runtime database existence-state matrix"
+
     if [[ "${DRY_RUN}" != "true" ]]; then
         require_golden_db_tree
     fi
@@ -286,6 +301,7 @@ run_db_matrix() {
     reset_case_root
 
     local valid_root="${case_root}/db3_valid_without_marker"
+    announce_test "db-matrix" "db3_valid_without_marker/checkm2"
     seed_valid_without_marker_cases "${valid_root}"
     run_partial_prepare_case \
         "${valid_root}/work_checkm2" \
@@ -298,6 +314,7 @@ run_db_matrix() {
         --expected-component checkm2 \
         --expected-status prepared \
         --expected-arg=--checkm2_db
+    announce_test "db-matrix" "db3_valid_without_marker/busco"
     run_partial_prepare_case \
         "${valid_root}/work_busco" \
         "${valid_root}/results_busco" \
@@ -309,6 +326,7 @@ run_db_matrix() {
         --expected-component busco_root \
         --expected-status prepared \
         --expected-arg=--busco_db
+    announce_test "db-matrix" "db3_valid_without_marker/eggnog"
     run_partial_prepare_case \
         "${valid_root}/work_eggnog" \
         "${valid_root}/results_eggnog" \
@@ -321,6 +339,7 @@ run_db_matrix() {
         --expected-status prepared \
         --expected-arg=--eggnog_db
 
+    announce_test "db-matrix" "db4_taxdump_missing_with_download"
     run_partial_prepare_case \
         "${case_root}/db4_taxdump/work" \
         "${case_root}/db4_taxdump/results" \
@@ -332,6 +351,7 @@ run_db_matrix() {
         --expected-component taxdump \
         --expected-status prepared \
         --expected-arg=--taxdump
+    announce_test "db-matrix" "db4_checkm2_missing_with_download"
     run_partial_prepare_case \
         "${case_root}/db4_checkm2/work" \
         "${case_root}/db4_checkm2/results" \
@@ -343,6 +363,7 @@ run_db_matrix() {
         --expected-component checkm2 \
         --expected-status prepared \
         --expected-arg=--checkm2_db
+    announce_test "db-matrix" "db4_busco_missing_with_download"
     run_partial_prepare_case \
         "${case_root}/db4_busco/work" \
         "${case_root}/db4_busco/results" \
@@ -354,6 +375,7 @@ run_db_matrix() {
         --expected-component busco_root \
         --expected-status prepared \
         --expected-arg=--busco_db
+    announce_test "db-matrix" "db4_eggnog_missing_with_download"
     run_partial_prepare_case \
         "${case_root}/db4_eggnog/work" \
         "${case_root}/db4_eggnog/results" \
@@ -366,6 +388,7 @@ run_db_matrix() {
         --expected-status prepared \
         --expected-arg=--eggnog_db
 
+    announce_test "db-matrix" "db5_taxdump_missing_no_download"
     fail_log="${case_root}/db5_taxdump_missing_no_download.log"
     run_expect_failure \
         "No local source was supplied for taxdump, and remote download is disabled." \
@@ -375,6 +398,7 @@ run_db_matrix() {
         --taxdump "${case_root}/db5_taxdump/db/ncbi_taxdump_20240914" \
         --outdir "${case_root}/db5_taxdump/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db5_checkm2_missing_no_download"
     fail_log="${case_root}/db5_checkm2_missing_no_download.log"
     run_expect_failure \
         "CheckM2 destination is missing and download is disabled" \
@@ -384,6 +408,7 @@ run_db_matrix() {
         --checkm2_db "${case_root}/db5_checkm2/db/checkm2/CheckM2_database" \
         --outdir "${case_root}/db5_checkm2/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db5_busco_missing_no_download"
     fail_log="${case_root}/db5_busco_missing_no_download.log"
     run_expect_failure \
         "BUSCO destination is missing and download is disabled" \
@@ -393,6 +418,7 @@ run_db_matrix() {
         --busco_db "${case_root}/db5_busco/db/busco" \
         --outdir "${case_root}/db5_busco/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db5_eggnog_missing_no_download"
     fail_log="${case_root}/db5_eggnog_missing_no_download.log"
     run_expect_failure \
         "eggNOG destination is missing and download is disabled" \
@@ -409,6 +435,7 @@ run_db_matrix() {
     run_or_print touch "${case_root}/db6_checkm2/db/checkm2/CheckM2_database"
     run_or_print touch "${case_root}/db6_busco/db/busco"
     run_or_print touch "${case_root}/db6_eggnog/db/Eggnog_db/Eggnog_Diamond_db"
+    announce_test "db-matrix" "db6_taxdump_file_not_directory"
     fail_log="${case_root}/db6_taxdump_file.log"
     run_expect_failure \
         "Destination must be a directory for taxdump" \
@@ -419,6 +446,7 @@ run_db_matrix() {
         --download_missing_databases true \
         --outdir "${case_root}/db6_taxdump/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db6_checkm2_file_not_directory"
     fail_log="${case_root}/db6_checkm2_file.log"
     run_expect_failure \
         "CheckM2 destination must be a directory" \
@@ -429,6 +457,7 @@ run_db_matrix() {
         --download_missing_databases true \
         --outdir "${case_root}/db6_checkm2/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db6_busco_file_not_directory"
     fail_log="${case_root}/db6_busco_file.log"
     run_expect_failure \
         "BUSCO destination must be a directory" \
@@ -439,6 +468,7 @@ run_db_matrix() {
         --download_missing_databases true \
         --outdir "${case_root}/db6_busco/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db6_eggnog_file_not_directory"
     fail_log="${case_root}/db6_eggnog_file.log"
     run_expect_failure \
         "eggNOG destination must be a directory" \
@@ -456,6 +486,7 @@ run_db_matrix() {
     run_or_print touch "${case_root}/db7_checkm2/db/checkm2/CheckM2_database/broken.txt"
     run_or_print touch "${case_root}/db7_busco/db/busco/bacillota_odb12/dataset.cfg"
     run_or_print touch "${case_root}/db7_eggnog/db/Eggnog_db/Eggnog_Diamond_db/broken.txt"
+    announce_test "db-matrix" "db7_checkm2_invalid_no_force"
     fail_log="${case_root}/db7_checkm2_invalid.log"
     run_expect_failure \
         "CheckM2 destination exists but is not ready" \
@@ -466,6 +497,7 @@ run_db_matrix() {
         --download_missing_databases true \
         --outdir "${case_root}/db7_checkm2/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db7_busco_invalid_no_force"
     fail_log="${case_root}/db7_busco_invalid.log"
     run_expect_failure \
         "BUSCO destination exists but is not ready" \
@@ -476,6 +508,7 @@ run_db_matrix() {
         --download_missing_databases true \
         --outdir "${case_root}/db7_busco/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db7_eggnog_invalid_no_force"
     fail_log="${case_root}/db7_eggnog_invalid.log"
     run_expect_failure \
         "eggNOG destination exists but is not ready" \
@@ -487,6 +520,7 @@ run_db_matrix() {
         --outdir "${case_root}/db7_eggnog/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
 
+    announce_test "db-matrix" "db8_checkm2_invalid_with_force"
     run_partial_prepare_case \
         "${case_root}/db7_checkm2/work_force" \
         "${case_root}/db7_checkm2/results_force" \
@@ -499,6 +533,7 @@ run_db_matrix() {
         --expected-component checkm2 \
         --expected-status prepared \
         --expected-arg=--checkm2_db
+    announce_test "db-matrix" "db8_busco_invalid_with_force"
     run_partial_prepare_case \
         "${case_root}/db7_busco/work_force" \
         "${case_root}/db7_busco/results_force" \
@@ -511,6 +546,7 @@ run_db_matrix() {
         --expected-component busco_root \
         --expected-status prepared \
         --expected-arg=--busco_db
+    announce_test "db-matrix" "db8_eggnog_invalid_with_force"
     run_partial_prepare_case \
         "${case_root}/db7_eggnog/work_force" \
         "${case_root}/db7_eggnog/results_force" \
@@ -526,6 +562,7 @@ run_db_matrix() {
 
     run_or_print mkdir -p "${case_root}/db9_busco/db/busco/bacillota_odb12"
     run_or_print touch "${case_root}/db9_busco/db/busco/bacillota_odb12/dataset.cfg"
+    announce_test "db-matrix" "db9_busco_missing_lineage_no_force"
     fail_log="${case_root}/db9_busco_missing_lineage.log"
     run_expect_failure \
         "BUSCO destination exists but is not ready" \
@@ -536,6 +573,7 @@ run_db_matrix() {
         --download_missing_databases true \
         --outdir "${case_root}/db9_busco/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db9_busco_missing_lineage_with_force"
     run_partial_prepare_case \
         "${case_root}/db9_busco/work_force" \
         "${case_root}/db9_busco/results_force" \
@@ -551,6 +589,7 @@ run_db_matrix() {
 
     run_or_print mkdir -p "${case_root}/db10_checkm2/db/checkm2/CheckM2_database/CheckM2_database"
     run_or_print touch "${case_root}/db10_checkm2/db/checkm2/CheckM2_database/CheckM2_database/CheckM2_database.dmnd"
+    announce_test "db-matrix" "db10_checkm2_nested_layout"
     run_partial_prepare_case \
         "${case_root}/db10_checkm2/work" \
         "${case_root}/db10_checkm2/results" \
@@ -564,6 +603,7 @@ run_db_matrix() {
         --expected-arg=--checkm2_db
 
     fail_log="${case_root}/db11_readonly_checkout.log"
+    announce_test "db-matrix" "db11_readonly_software_checkout"
     if [[ "${DRY_RUN}" == "true" ]]; then
         print_command test ! -e "${REPO_ROOT}/download_eggnog_data.py.patched"
     else
@@ -599,6 +639,7 @@ run_real_case() {
 }
 
 run_p1() {
+    announce_test "p1" "tracked 9-sample edge-case pipeline test"
     if [[ "${DRY_RUN}" != "true" ]]; then
         require_tracked_cohort
         require_golden_db_tree
@@ -616,6 +657,7 @@ run_p1() {
 }
 
 run_p2() {
+    announce_test "p2" "medium Mycoplasmatota/Bacillota pipeline test"
     ensure_medium_inputs
     if [[ "${DRY_RUN}" != "true" ]]; then
         require_golden_db_tree
@@ -729,10 +771,10 @@ main() {
             ;;
         db-full)
             set_dbfull_expected_status
-            run_dbprep_wrapper "${DBFULL_EXPECTED_STATUS}"
+            run_dbprep_wrapper "db-full" "full runtime DB prep gate" "${DBFULL_EXPECTED_STATUS}"
             ;;
         db-reuse)
-            run_dbprep_wrapper present
+            run_dbprep_wrapper "db-reuse" "runtime DB prep reuse gate" present
             ;;
         db-matrix)
             run_db_matrix
@@ -747,8 +789,8 @@ main() {
             run_prepare
             run_medium_prepare
             set_dbfull_expected_status
-            run_dbprep_wrapper "${DBFULL_EXPECTED_STATUS}"
-            run_dbprep_wrapper present
+            run_dbprep_wrapper "db-full" "full runtime DB prep gate" "${DBFULL_EXPECTED_STATUS}"
+            run_dbprep_wrapper "db-reuse" "runtime DB prep reuse gate" present
             run_db_matrix
             run_p1
             run_p2
