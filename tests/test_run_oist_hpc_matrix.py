@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,6 +14,20 @@ SCRIPT = ROOT / "bin" / "run_oist_hpc_matrix.sh"
 
 class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
     """Exercise the OIST HPC matrix wrapper."""
+
+    def make_ready_hpc_root(self) -> Path:
+        """Create one temporary HPC root with ready markers for all DBs."""
+        root = Path(tempfile.mkdtemp(prefix="oist_hpc_matrix_"))
+        ready_roots = (
+            root / "db" / "ncbi_taxdump_20240914",
+            root / "db" / "checkm2" / "CheckM2_database",
+            root / "db" / "busco",
+            root / "db" / "Eggnog_db" / "Eggnog_Diamond_db",
+        )
+        for ready_root in ready_roots:
+            ready_root.mkdir(parents=True, exist_ok=True)
+            (ready_root / ".nf_myco_ready.json").write_text("{}", encoding="ascii")
+        return root
 
     def run_wrapper(self, *args: str) -> subprocess.CompletedProcess[str]:
         """Run the wrapper with text capture enabled."""
@@ -76,7 +91,7 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
 
     def test_db_full_dry_run_uses_wrapper_and_validator(self) -> None:
-        """Print the full DB-prep gate and its validation command."""
+        """Validate a fresh DB root as one prepared first-pass run."""
         result = self.run_wrapper(
             "--dry-run",
             "--hpc-root",
@@ -88,7 +103,38 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         self.assertIn("bin/run_pipeline_test.sh dbprep-slurm", result.stdout)
         self.assertIn("--dbprep-profile oist", result.stdout)
         self.assertIn("python3 bin/validate_hpc_matrix.py dbprep", result.stdout)
+        self.assertIn("--expected-status prepared", result.stdout)
         self.assertNotIn("--padloc-db", result.stdout)
+
+    def test_db_full_dry_run_uses_present_for_ready_root(self) -> None:
+        """Validate an already-ready DB root as a reuse pass."""
+        hpc_root = self.make_ready_hpc_root()
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            str(hpc_root),
+            "db-full",
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("--expected-status present", result.stdout)
+
+    def test_db_full_dry_run_rejects_partially_ready_root(self) -> None:
+        """Fail fast when only some canonical DB roots are ready."""
+        hpc_root = Path(tempfile.mkdtemp(prefix="oist_hpc_matrix_partial_"))
+        ready_root = hpc_root / "db" / "ncbi_taxdump_20240914"
+        ready_root.mkdir(parents=True, exist_ok=True)
+        (ready_root / ".nf_myco_ready.json").write_text("{}", encoding="ascii")
+
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            str(hpc_root),
+            "db-full",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Inconsistent runtime DB root", result.stderr)
 
     def test_p1_dry_run_uses_profile_defaults(self) -> None:
         """Avoid explicit max-resource overrides in the real tracked run."""
