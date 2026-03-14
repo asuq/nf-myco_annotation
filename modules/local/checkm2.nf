@@ -41,18 +41,38 @@ process CHECKM2 {
 
     output_dir="checkm2_gcode${translation_table}"
 
-    set +e
-    checkm2 predict \
-        --extension fasta \
-        --input "${genome}" \
-        --output-directory "\${output_dir}" \
-        --database_path "\${database_path}" \
-        --threads ${task.cpus} \
-        --ttable ${translation_table} \
-        --force \
-        > checkm2.log 2>&1
-    exit_code=\$?
-    set -e
+    max_attempts="${params.task_attempts}"
+    if [[ "\${max_attempts}" -lt 1 ]]; then
+        max_attempts=1
+    fi
+
+    attempt=1
+    exit_code=1
+    : > checkm2.log
+    while (( attempt <= max_attempts )); do
+        printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> checkm2.log
+        set +e
+        checkm2 predict \
+            --extension fasta \
+            --input "${genome}" \
+            --output-directory "\${output_dir}" \
+            --database_path "\${database_path}" \
+            --threads ${task.cpus} \
+            --ttable ${translation_table} \
+            --force \
+            >> checkm2.log 2>&1
+        exit_code=\$?
+        set -e
+
+        if [[ "\${exit_code}" -eq 0 ]]; then
+            break
+        fi
+        if (( attempt == max_attempts )); then
+            break
+        fi
+        printf 'retrying_checkm2_predict=%s\n' "\${attempt}" >> checkm2.log
+        (( attempt += 1 ))
+    done
 
     mkdir -p "\${output_dir}"
     if [[ -f "\${output_dir}/quality_report.tsv" ]]; then

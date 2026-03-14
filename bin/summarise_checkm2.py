@@ -14,6 +14,9 @@ from typing import Sequence
 
 
 LOGGER = logging.getLogger(__name__)
+STRICT_DELTA_RULE = "strict_delta"
+DELTA_THEN_ELEVEN_RULE = "delta_then_11"
+GCODE_RULE_CHOICES = (STRICT_DELTA_RULE, DELTA_THEN_ELEVEN_RULE)
 
 OUTPUT_COLUMNS = (
     "accession",
@@ -82,6 +85,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         required=True,
         type=Path,
         help="Path to the combined per-sample QC TSV.",
+    )
+    parser.add_argument(
+        "--gcode-rule",
+        choices=GCODE_RULE_CHOICES,
+        default=STRICT_DELTA_RULE,
+        help="Rule used to resolve gcode from paired CheckM2 reports.",
     )
     return parser.parse_args(argv)
 
@@ -194,10 +203,55 @@ def empty_output_row(accession: str) -> dict[str, str]:
     return row
 
 
+def assign_low_quality(
+    row: dict[str, str],
+    report: ParsedCheckM2Report,
+) -> None:
+    """Populate Low_quality from the chosen report metrics."""
+    low_quality_score = (
+        report.metrics["Completeness"] - 5 * report.metrics["Contamination"]
+    )
+    row["Low_quality"] = "true" if low_quality_score <= 50 else "false"
+
+
+def assign_gcode_from_valid_pair(
+    row: dict[str, str],
+    report_four: ParsedCheckM2Report,
+    report_eleven: ParsedCheckM2Report,
+    *,
+    gcode_rule: str,
+    warnings: list[str],
+) -> None:
+    """Assign gcode from a valid paired CheckM2 comparison."""
+    completeness_four = report_four.metrics["Completeness"]
+    completeness_eleven = report_eleven.metrics["Completeness"]
+
+    if completeness_four - completeness_eleven > 10:
+        row["Gcode"] = "4"
+        assign_low_quality(row, report_four)
+        return
+
+    if completeness_eleven - completeness_four > 10:
+        row["Gcode"] = "11"
+        assign_low_quality(row, report_eleven)
+        return
+
+    if gcode_rule == DELTA_THEN_ELEVEN_RULE:
+        row["Gcode"] = "11"
+        assign_low_quality(row, report_eleven)
+        return
+
+    row["Gcode"] = "NA"
+    row["Low_quality"] = "NA"
+    warnings.append("gcode_na")
+
+
 def build_output_row(
     accession: str,
     report_four: ParsedCheckM2Report | None,
     report_eleven: ParsedCheckM2Report | None,
+    *,
+    gcode_rule: str,
     warnings: list[str],
 ) -> dict[str, str]:
     """Create the final output row from two optional parsed reports."""
@@ -235,26 +289,13 @@ def build_output_row(
         report_four,
         report_eleven,
     ):
-        completeness_four = report_four.metrics["Completeness"]
-        completeness_eleven = report_eleven.metrics["Completeness"]
-        if completeness_four - completeness_eleven > 10:
-            row["Gcode"] = "4"
-            low_quality_score = (
-                report_four.metrics["Completeness"]
-                - 5 * report_four.metrics["Contamination"]
-            )
-            row["Low_quality"] = "true" if low_quality_score <= 50 else "false"
-        elif completeness_eleven - completeness_four > 10:
-            row["Gcode"] = "11"
-            low_quality_score = (
-                report_eleven.metrics["Completeness"]
-                - 5 * report_eleven.metrics["Contamination"]
-            )
-            row["Low_quality"] = "true" if low_quality_score <= 50 else "false"
-        else:
-            row["Gcode"] = "NA"
-            row["Low_quality"] = "NA"
-            warnings.append("gcode_na")
+        assign_gcode_from_valid_pair(
+            row,
+            report_four,
+            report_eleven,
+            gcode_rule=gcode_rule,
+            warnings=warnings,
+        )
     else:
         row["Gcode"] = "NA"
         row["Low_quality"] = "NA"
@@ -285,6 +326,8 @@ def run_summary(
     gcode4_report: Path,
     gcode11_report: Path,
     output: Path,
+    *,
+    gcode_rule: str,
 ) -> None:
     """Summarise paired CheckM2 reports into one per-sample TSV row."""
     warnings: list[str] = []
@@ -310,7 +353,13 @@ def run_summary(
     ):
         warnings.append("inconsistent_shared_stats")
 
-    row = build_output_row(accession, report_four, report_eleven, warnings)
+    row = build_output_row(
+        accession,
+        report_four,
+        report_eleven,
+        gcode_rule=gcode_rule,
+        warnings=warnings,
+    )
     write_output(output, row)
 
 
@@ -323,6 +372,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         gcode4_report=args.gcode4_report,
         gcode11_report=args.gcode11_report,
         output=args.output,
+        gcode_rule=args.gcode_rule,
     )
     LOGGER.info("Wrote CheckM2 summary for %s.", args.accession)
     return 0
