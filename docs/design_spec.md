@@ -80,10 +80,16 @@ This is a **behaviour-preserving v1 refactor**, not a methodological redesign.
 - Run CheckM2 twice for every sample:
   - forced `--ttable 4`
   - forced `--ttable 11`
-- Gcode assignment rule is **not** the old default and must be implemented exactly as:
-  - assign `4` if `Completeness_gcode4 - Completeness_gcode11 > 10`
-  - assign `11` if `Completeness_gcode11 - Completeness_gcode4 > 10`
-  - assign `NA` otherwise
+- Gcode assignment must expose a selectable rule via `params.gcode_rule`.
+- Supported rules are:
+  - `strict_delta`
+    - assign `4` if `Completeness_gcode4 - Completeness_gcode11 > 10`
+    - assign `11` if `Completeness_gcode11 - Completeness_gcode4 > 10`
+    - assign `NA` otherwise
+  - `delta_then_11`
+    - apply the `strict_delta` thresholds first
+    - if both CheckM2 reports are valid and internally consistent and the thresholds do not resolve gcode, assign `11`
+- Default rule: `strict_delta`
 - If gcode is `NA`:
   - record a warning in `sample_status.tsv`;
   - do **not** run Prokka, eggNOG, CRISPRCasFinder, or PADLOC for that sample.
@@ -176,6 +182,8 @@ These were not fully specified, so they are fixed here for v1.
   - `ANI_to_Representative`
   - `Score`
 - `sample_status.tsv` must record the exclusion reason as `gcode_na`.
+- `Gcode = NA` remains reserved for genuine CheckM2 failure or inconsistency
+  paths, or for the `strict_delta` rule when neither threshold is met.
 
 ### 3.2 Atypical-genome detection rule
 

@@ -38,6 +38,8 @@ bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all
 
 That wrapper keeps using the coded OIST resource defaults. It does not add
 `--max_cpus`, `--max_memory`, or `--max_time` overrides.
+It also accepts `--gcode-rule strict_delta|delta_then_11` when you need to
+override the pipeline's default gcode-resolution policy.
 
 The medium Mycoplasmatota/Bacillota cohort is now prepared in the same way as
 the tracked small cohort from repo-tracked `source_catalog.tsv` and

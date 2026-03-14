@@ -292,6 +292,12 @@ the dedicated wrapper:
 bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root all
 ```
 
+Optional:
+
+```bash
+bin/run_oist_hpc_matrix.sh --hpc-root /path/on/hpc/root --gcode-rule delta_then_11 all
+```
+
 That wrapper:
 
 - prepares the tracked 9-sample cohort on HPC-native storage
@@ -306,6 +312,8 @@ That wrapper:
 It intentionally uses the resource defaults already coded in the OIST profile
 and process configuration. It does not pass explicit `--max_cpus`,
 `--max_memory`, or `--max_time` overrides.
+Runtime tasks retry up to 3 total attempts. Database download tasks retry up to
+2 total attempts.
 
 Step-by-step procedure:
 
