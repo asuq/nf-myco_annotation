@@ -218,6 +218,36 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             self.assertEqual(row["checkm2_status"], "done")
             self.assertEqual(row["warnings"], "gcode_na")
 
+    def test_main_assigns_gcode11_for_valid_close_scores_with_delta_then_11(self) -> None:
+        """Use the fallback rule to assign translation table 11 for close valid pairs."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_report(tmpdir / "g4.tsv", completeness="88", contamination="4")
+            report11 = self.write_report(tmpdir / "g11.tsv", completeness="82", contamination="2")
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC2",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--gcode-rule",
+                    summarise_checkm2.DELTA_THEN_ELEVEN_RULE,
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["Gcode"], "11")
+            self.assertEqual(row["Low_quality"], "false")
+            self.assertEqual(row["checkm2_status"], "done")
+            self.assertEqual(row["warnings"], "")
+
     def test_main_keeps_partial_metrics_when_one_report_is_missing(self) -> None:
         """Write a summary row even when one CheckM2 report cannot be parsed."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -248,8 +278,8 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             self.assertEqual(row["checkm2_status"], "failed")
             self.assertEqual(row["warnings"], "checkm2_gcode11_failed")
 
-    def test_main_keeps_gcode_na_at_exact_threshold_difference(self) -> None:
-        """Do not assign a gcode when completeness differs by exactly 10."""
+    def test_main_keeps_gcode_na_at_exact_threshold_difference_under_strict_rule(self) -> None:
+        """Keep the strict rule behaviour at an exact threshold difference."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             report4 = self.write_report(tmpdir / "g4.tsv", completeness="90", contamination="2")
@@ -273,6 +303,35 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             row = read_tsv_row(output)
             self.assertEqual(row["Gcode"], "NA")
             self.assertEqual(row["warnings"], "gcode_na")
+
+    def test_main_assigns_gcode11_at_exact_threshold_difference_with_fallback_rule(self) -> None:
+        """Use translation table 11 when the fallback rule sees an exact threshold tie."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_report(tmpdir / "g4.tsv", completeness="90", contamination="2")
+            report11 = self.write_report(tmpdir / "g11.tsv", completeness="80", contamination="1")
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC4",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--gcode-rule",
+                    summarise_checkm2.DELTA_THEN_ELEVEN_RULE,
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["Gcode"], "11")
+            self.assertEqual(row["Low_quality"], "false")
+            self.assertEqual(row["warnings"], "")
 
     def test_main_marks_low_quality_true_at_boundary_score(self) -> None:
         """Use the locked `<= 50` cutoff for low-quality calls."""

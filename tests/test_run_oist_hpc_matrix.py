@@ -50,6 +50,7 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
         self.assertIn("Run the OIST HPC validation campaign", result.stdout)
         self.assertIn("--hpc-root PATH", result.stdout)
+        self.assertIn("--gcode-rule RULE", result.stdout)
         self.assertNotIn("--medium-candidates-tsv", result.stdout)
 
     def test_prepare_dry_run_prints_cohort_command(self) -> None:
@@ -169,6 +170,20 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         self.assertNotIn("--max_memory", result.stdout)
         self.assertNotIn("--max_time", result.stdout)
         self.assertNotIn("--padloc_db", result.stdout)
+
+    def test_p1_dry_run_forwards_gcode_rule_override(self) -> None:
+        """Pass an explicit gcode rule override through to the pipeline run."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            "/tmp/hpc",
+            "--gcode-rule",
+            "delta_then_11",
+            "p1",
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("--gcode_rule delta_then_11", result.stdout)
 
     def test_p2_auto_prepares_medium_inputs(self) -> None:
         """Generate the fixed medium cohort automatically when inputs are missing."""

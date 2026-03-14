@@ -30,8 +30,11 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("busco_db = null", config_text)
         self.assertIn("download_missing_databases = false", config_text)
         self.assertIn("force_runtime_database_rebuild = false", config_text)
+        self.assertIn("gcode_rule = 'strict_delta'", config_text)
         self.assertIn("runtime_db_scratch_root = null", config_text)
+        self.assertIn("task_attempts = 3", config_text)
         self.assertIn("taxdump_version = null", config_text)
+        self.assertIn("db_download_attempts = 2", config_text)
         self.assertIn("eggnog_only_accessions = null", config_text)
         self.assertIn("singularity_cache_dir = null", config_text)
         self.assertIn("singularity_run_options = ''", config_text)
@@ -44,6 +47,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertNotIn("runtime_db_helper_container", config_text)
         self.assertNotIn("apptainer_cache_dir", config_text)
         self.assertNotIn("apptainer_run_options", config_text)
+        self.assertNotIn("max_retries = ", config_text)
 
     def test_singularity_runtime_surface_uses_renamed_config_contract(self) -> None:
         """Keep the renamed Singularity profile, include, and config file wired in."""
@@ -144,9 +148,12 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
-        self.assertIn("withName: CLUSTER_ANI {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
-        self.assertIn("withName: SELECT_ANI_REPRESENTATIVES {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
-        self.assertIn("withName: WRITE_SAMPLE_STATUS {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.python_container", config_text)
+        self.assertIn("def standardMaxRetries = Math.max((params.task_attempts as int) - 1, 0)", config_text)
+        self.assertIn("errorStrategy = 'retry'", config_text)
+        self.assertIn("maxRetries = standardMaxRetries", config_text)
+        self.assertIn("withName: CLUSTER_ANI {\n        container = params.python_container", config_text)
+        self.assertIn("withName: SELECT_ANI_REPRESENTATIVES {\n        container = params.python_container", config_text)
+        self.assertIn("withName: WRITE_SAMPLE_STATUS {\n        container = params.python_container", config_text)
 
     def test_seqtk_helper_processes_are_pinned_explicitly(self) -> None:
         """Keep seqtk-backed helper processes on the shared seqtk image."""
@@ -160,23 +167,31 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "def dbDownloadMaxRetries = Math.max((params.db_download_attempts as int) - 1, 0)",
             config_text,
         )
         self.assertIn(
-            "withLabel: finalise_runtime_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
-            "withLabel: merge_runtime_database_reports {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: finalise_runtime_database {\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_checkm2_database {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.checkm2_container",
+            "withLabel: merge_runtime_database_reports {\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_busco_databases {\n        errorStrategy = 'terminate'\n        maxRetries = 0\n        container = params.busco_container",
+            "withLabel: download_checkm2_database {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = params.checkm2_container",
+            config_text,
+        )
+        self.assertIn(
+            "withLabel: download_busco_databases {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = params.busco_container",
+            config_text,
+        )
+        self.assertIn(
+            "withLabel: download_eggnog_database {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = params.eggnog_container",
             config_text,
         )
         self.assertNotIn("withName: PREP_TAXDUMP_DATABASE", config_text)

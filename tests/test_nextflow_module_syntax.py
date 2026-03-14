@@ -41,7 +41,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("name: 'checkm2_gcode11_report.tsv'", module_text)
 
     def test_checkm2_resolves_directory_parameters_to_dmnd_files(self) -> None:
-        """Require CheckM2 to accept a database directory containing one `.dmnd` file."""
+        """Require CheckM2 to accept one DMND directory and retry transient failures."""
         module_path = MODULES_DIR / "checkm2.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
@@ -49,6 +49,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('database_path="${checkm2_db}"', module_text)
         self.assertIn('dmnd_candidates=("\\${database_path}"/*.dmnd)', module_text)
         self.assertIn('--database_path "\\${database_path}"', module_text)
+        self.assertIn('max_attempts="${params.task_attempts}"', module_text)
+        self.assertIn('while (( attempt <= max_attempts ))', module_text)
+        self.assertIn("retrying_checkm2_predict", module_text)
 
     def test_runtime_database_dirs_are_staged_into_checkm2_and_eggnog(self) -> None:
         """Require external database directories to enter containers as path inputs."""
