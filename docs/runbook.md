@@ -312,8 +312,10 @@ That wrapper:
 It intentionally uses the resource defaults already coded in the OIST profile
 and process configuration. It does not pass explicit `--max_cpus`,
 `--max_memory`, or `--max_time` overrides.
-Runtime tasks retry up to 3 total attempts. Database download tasks retry up to
-2 total attempts.
+Nextflow runtime tasks retry up to 3 total attempts. Database download tasks
+retry up to 2 total attempts. Sample-level soft-fail modules also retry their
+wrapped tools internally up to `soft_fail_attempts` total attempts before
+emitting fallback placeholder outputs.
 
 Step-by-step procedure:
 

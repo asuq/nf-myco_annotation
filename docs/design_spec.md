@@ -242,6 +242,17 @@ Even though the primary runtime target was not locked explicitly, Codex should i
 
 This is an implementation convenience, not a scientific rule.
 
+### 3.8 Retry behaviour
+
+- Nextflow task retries remain controlled by `params.task_attempts`.
+- Database download task retries remain controlled by
+  `params.db_download_attempts`.
+- Sample-level modules that intentionally degrade on tool failure instead of
+  killing the whole pipeline may also retry the wrapped tool internally before
+  emitting placeholder outputs.
+- That internal soft-fail retry count is controlled separately by
+  `params.soft_fail_attempts`.
+
 ---
 
 ## 4. Repository layout to implement
