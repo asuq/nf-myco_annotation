@@ -355,6 +355,15 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             sum(record.source_accession.startswith("GCF_") for record in plan),
             10,
         )
+        ani_cluster_candidates = [
+            record for record in plan if "ani_cluster_candidate" in record.role_tags
+        ]
+        self.assertEqual(len(ani_cluster_candidates), 2)
+        self.assertEqual(
+            len({record.source_accession for record in ani_cluster_candidates}),
+            1,
+        )
+
 
     def test_prepare_medium_cohort_builds_generated_inputs_and_reuses_downloads(self) -> None:
         """Prepare the fixed medium cohort from local sources and reuse cached FASTA files."""
