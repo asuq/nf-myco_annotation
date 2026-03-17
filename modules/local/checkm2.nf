@@ -41,7 +41,7 @@ process CHECKM2 {
 
     output_dir="checkm2_gcode${translation_table}"
 
-    max_attempts="${params.task_attempts}"
+    max_attempts="${params.soft_fail_attempts}"
     if [[ "\${max_attempts}" -lt 1 ]]; then
         max_attempts=1
     fi
@@ -51,6 +51,7 @@ process CHECKM2 {
     : > checkm2.log
     while (( attempt <= max_attempts )); do
         printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> checkm2.log
+        rm -rf "\${output_dir}"
         set +e
         checkm2 predict \
             --extension fasta \
@@ -70,12 +71,12 @@ process CHECKM2 {
         if (( attempt == max_attempts )); then
             break
         fi
-        printf 'retrying_checkm2_predict=%s\n' "\${attempt}" >> checkm2.log
+        printf 'retrying_checkm2=%s\n' "\${attempt}" >> checkm2.log
         (( attempt += 1 ))
     done
 
     mkdir -p "\${output_dir}"
-    if [[ -f "\${output_dir}/quality_report.tsv" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -f "\${output_dir}/quality_report.tsv" ]]; then
         cp "\${output_dir}/quality_report.tsv" quality_report.tsv
     else
         : > quality_report.tsv

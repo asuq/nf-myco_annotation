@@ -30,7 +30,7 @@ process BUSCO {
     mkdir -p "\$(dirname "\${staged_lineage_dir}")"
     ln -s "\${dataset_source}" "\${staged_lineage_dir}"
 
-    max_attempts="${params.task_attempts}"
+    max_attempts="${params.soft_fail_attempts}"
     if [[ "\${max_attempts}" -lt 1 ]]; then
         max_attempts=1
     fi
@@ -67,7 +67,7 @@ process BUSCO {
 
     mkdir -p "\${output_dir}"
     summary_json=\$(find "\${output_dir}" -type f \\( -name 'short_summary*.json' -o -name 'short_summary.json' \\) | head -n 1 || true)
-    if [[ -n "\${summary_json}" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -n "\${summary_json}" ]]; then
         cp "\${summary_json}" short_summary.json
     else
         : > short_summary.json

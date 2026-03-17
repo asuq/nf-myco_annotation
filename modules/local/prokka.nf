@@ -29,30 +29,51 @@ process PROKKA {
         locustag = "L${locustag}".take(20)
     }
     """
-    set +e
-    prokka "${genome}" \
-        --outdir prokka \
-        --prefix "${internalId}" \
-        --locustag "${locustag}" \
-        --compliant \
-        --gcode "${gcode}" \
-        --cpus ${task.cpus} \
-        --rfam \
-        > prokka.log 2>&1
-    exit_code=\$?
-    set -e
+    max_attempts="${params.soft_fail_attempts}"
+    if [[ "\${max_attempts}" -lt 1 ]]; then
+        max_attempts=1
+    fi
+
+    attempt=1
+    exit_code=1
+    : > prokka.log
+    while (( attempt <= max_attempts )); do
+        printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> prokka.log
+        rm -rf prokka
+        set +e
+        prokka "${genome}" \
+            --outdir prokka \
+            --prefix "${internalId}" \
+            --locustag "${locustag}" \
+            --compliant \
+            --gcode "${gcode}" \
+            --cpus ${task.cpus} \
+            --rfam \
+            >> prokka.log 2>&1
+        exit_code=\$?
+        set -e
+
+        if [[ "\${exit_code}" -eq 0 ]]; then
+            break
+        fi
+        if (( attempt == max_attempts )); then
+            break
+        fi
+        printf 'retrying_prokka=%s\n' "\${attempt}" >> prokka.log
+        (( attempt += 1 ))
+    done
 
     mkdir -p prokka
 
     prokka_gff=\$(find prokka -maxdepth 1 -type f -name '*.gff' | head -n 1 || true)
-    if [[ -n "\${prokka_gff}" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -n "\${prokka_gff}" ]]; then
         cp "\${prokka_gff}" prokka.gff
     else
         : > prokka.gff
     fi
 
     prokka_faa=\$(find prokka -maxdepth 1 -type f -name '*.faa' | head -n 1 || true)
-    if [[ -n "\${prokka_faa}" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -n "\${prokka_faa}" ]]; then
         cp "\${prokka_faa}" prokka.faa
     else
         : > prokka.faa

@@ -32,13 +32,33 @@ process PADLOC {
 
     cp "${faa}" padloc_input.faa
 
-    mkdir -p padloc
+    max_attempts="${params.soft_fail_attempts}"
+    if [[ "\${max_attempts}" -lt 1 ]]; then
+        max_attempts=1
+    fi
 
-    set +e
-    padloc --faa padloc_input.faa --gff padloc_input.gff --cpu ${task.cpus} --outdir "\$PWD/padloc" ${extraArgs} \
-        > padloc.log 2>&1
-    exit_code=\$?
-    set -e
+    attempt=1
+    exit_code=1
+    : > padloc.log
+    while (( attempt <= max_attempts )); do
+        printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> padloc.log
+        rm -rf padloc
+        mkdir -p padloc
+        set +e
+        padloc --faa padloc_input.faa --gff padloc_input.gff --cpu ${task.cpus} --outdir "\$PWD/padloc" ${extraArgs} \
+            >> padloc.log 2>&1
+        exit_code=\$?
+        set -e
+
+        if [[ "\${exit_code}" -eq 0 ]]; then
+            break
+        fi
+        if (( attempt == max_attempts )); then
+            break
+        fi
+        printf 'retrying_padloc=%s\n' "\${attempt}" >> padloc.log
+        (( attempt += 1 ))
+    done
 
     printf 'exit_code=%s\n' "\$exit_code" >> padloc.log
 

@@ -61,35 +61,59 @@ process CCFINDER {
         }
     ' "\${genome_path}"
 
-    pushd "\${run_root}" >/dev/null
-    cp "\${genome_path}" "\${genome_name}"
-    : > index.html
-    set +e
-    perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "\${genome_name}" \
-        -outdir "\${tool_output_root}" \
-        -soFile "\${ccfinder_root}/sel392v2.so" \
-        -DBcrispr "\${ccfinder_root}/supplementary_files/CRISPR_crisprdb.csv" \
-        -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
-        -DIRrepeat "\${ccfinder_root}/supplementary_files/repeatDirection.tsv" \
-        -cpuMacSyFinder ${task.cpus} -cpuProkka ${task.cpus} \
-        -log -html -levelMin 3 \
-        -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \
-        ${extraArgs}
-    exit_code=\$?
-    set -e
-    popd >/dev/null
+    max_attempts="${params.soft_fail_attempts}"
+    if [[ "\${max_attempts}" -lt 1 ]]; then
+        max_attempts=1
+    fi
+
+    attempt=1
+    exit_code=1
+    wrapper_log="ccfinder_wrapper.log"
+    : > "\${wrapper_log}"
+    while (( attempt <= max_attempts )); do
+        printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> "\${wrapper_log}"
+        rm -rf "\${run_root}" "\${tool_output_root}"
+        mkdir -p "\${run_root}"
+        pushd "\${run_root}" >/dev/null
+        cp "\${genome_path}" "\${genome_name}"
+        : > index.html
+        set +e
+        perl "\${ccfinder_root}/CRISPRCasFinder.pl" -in "\${genome_name}" \
+            -outdir "\${tool_output_root}" \
+            -soFile "\${ccfinder_root}/sel392v2.so" \
+            -DBcrispr "\${ccfinder_root}/supplementary_files/CRISPR_crisprdb.csv" \
+            -repeats "\${ccfinder_root}/supplementary_files/Repeat_List.csv" \
+            -DIRrepeat "\${ccfinder_root}/supplementary_files/repeatDirection.tsv" \
+            -cpuMacSyFinder ${task.cpus} -cpuProkka ${task.cpus} \
+            -log -html -levelMin 3 \
+            -cas -ccvRep -getSummaryCasfinder -gcode "${gcode}" \
+            ${extraArgs} \
+            >> "\${task_root}/\${wrapper_log}" 2>&1
+        exit_code=\$?
+        set -e
+        popd >/dev/null
+
+        if [[ "\${exit_code}" -eq 0 ]]; then
+            break
+        fi
+        if (( attempt == max_attempts )); then
+            break
+        fi
+        printf 'retrying_ccfinder=%s\n' "\${attempt}" >> "\${wrapper_log}"
+        (( attempt += 1 ))
+    done
 
     mkdir -p ccfinder
     result_json_path=\$(find "\${tool_output_root}" "\${run_root}" -type f -name 'result.json' | head -n 1 || true)
     internal_log_path=\$(find "\${tool_output_root}" "\${run_root}" -type f \\( -name 'ccfinder.log' -o -name 'logFile_*' \\) | head -n 1 || true)
-    if [[ -n "\${result_json_path}" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -n "\${result_json_path}" ]]; then
         perl -0pi -e 's/:\\s*(?=,|\\}|\\])/: null/g' "\${result_json_path}"
     fi
     if [[ -d "\${tool_output_root}" ]]; then
         cp -R "\${tool_output_root}/". ccfinder/
     fi
 
-    if [[ -n "\${result_json_path}" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -n "\${result_json_path}" ]]; then
         cp "\${result_json_path}" result.json
     else
         : > result.json
@@ -100,6 +124,7 @@ process CCFINDER {
     else
         : > ccfinder.log
     fi
+    cat "\${wrapper_log}" >> ccfinder.log
     printf 'exit_code=%s\n' "\$exit_code" >> ccfinder.log
 
     ccfinder_version="\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | sed -n 's/.*version \\([^,[:space:]]*\\).*/\\1/p' | head -n 1 || true)"

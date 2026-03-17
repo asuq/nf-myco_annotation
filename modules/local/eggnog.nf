@@ -29,28 +29,48 @@ process EGGNOG {
         { print }
     ' "${faa}" > clean_input.faa
 
-    tmp_dir="\$PWD/eggnog_tmp"
-    mkdir -p eggnog "\${tmp_dir}"
+    max_attempts="${params.soft_fail_attempts}"
+    if [[ "\${max_attempts}" -lt 1 ]]; then
+        max_attempts=1
+    fi
 
-    set +e
-    emapper.py \
-        -i clean_input.faa \
-        -m diamond \
-        --cpu ${task.cpus} \
-        --output_dir eggnog \
-        -o "${prefix}" \
-        --temp_dir "\${tmp_dir}" \
-        --report_orthologs \
-        --data_dir "${eggnog_db}" \
-        --sensmode ultra-sensitive \
-        --override \
-        ${extraArgs} \
-        > eggnog.log 2>&1
-    exit_code=\$?
-    set -e
+    attempt=1
+    exit_code=1
+    tmp_dir="\$PWD/eggnog_tmp"
+    : > eggnog.log
+    while (( attempt <= max_attempts )); do
+        printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> eggnog.log
+        rm -rf eggnog "\${tmp_dir}"
+        mkdir -p eggnog "\${tmp_dir}"
+        set +e
+        emapper.py \
+            -i clean_input.faa \
+            -m diamond \
+            --cpu ${task.cpus} \
+            --output_dir eggnog \
+            -o "${prefix}" \
+            --temp_dir "\${tmp_dir}" \
+            --report_orthologs \
+            --data_dir "${eggnog_db}" \
+            --sensmode ultra-sensitive \
+            --override \
+            ${extraArgs} \
+            >> eggnog.log 2>&1
+        exit_code=\$?
+        set -e
+
+        if [[ "\${exit_code}" -eq 0 ]]; then
+            break
+        fi
+        if (( attempt == max_attempts )); then
+            break
+        fi
+        printf 'retrying_eggnog=%s\n' "\${attempt}" >> eggnog.log
+        (( attempt += 1 ))
+    done
 
     ann="eggnog/${prefix}.emapper.annotations"
-    if [[ -f "\${ann}" ]]; then
+    if [[ "\${exit_code}" -eq 0 && -f "\${ann}" ]]; then
         grep -v '^##' "\${ann}" | sed -e '1s/^#//' > eggnog_annotations.tsv
     else
         : > eggnog_annotations.tsv
