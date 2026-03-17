@@ -94,7 +94,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('ln -s "\\${dataset_dir}" "${lineage}"', module_text)
 
     def test_busco_stages_offline_datasets_under_download_root(self) -> None:
-        """Require BUSCO offline runs to stage lineage datasets in BUSCO's expected layout."""
+        """Require BUSCO offline runs to stage lineage datasets and retry transient failures."""
         module_path = MODULES_DIR / "busco.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
@@ -104,6 +104,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('ln -s "\\${dataset_source}" "\\${staged_lineage_dir}"', module_text)
         self.assertIn('--download_path "\\${busco_download_root}"', module_text)
         self.assertIn('--lineage_dataset "${lineage}"', module_text)
+        self.assertIn('max_attempts="${params.task_attempts}"', module_text)
+        self.assertIn('while (( attempt <= max_attempts ))', module_text)
+        self.assertIn('retrying_busco', module_text)
 
     def test_busco_consumers_stage_unique_summary_names(self) -> None:
         """Require BUSCO summary consumers to stage input files uniquely."""
