@@ -144,9 +144,7 @@ ensure_medium_inputs() {
 
     MEDIUM_SAMPLE_CSV="${MEDIUM_ROOT}/generated/sample_sheet.csv"
     MEDIUM_METADATA="${MEDIUM_ROOT}/generated/metadata.tsv"
-    if [[ "${DRY_RUN}" == "true" || ! -f "${MEDIUM_SAMPLE_CSV}" || ! -f "${MEDIUM_METADATA}" ]]; then
-        run_medium_prepare
-    fi
+    run_medium_prepare
 }
 
 run_medium_prepare() {
