@@ -12,7 +12,7 @@ MYCO_NEGATIVE_1	GCA_000027325.1	false	true	NA	crispr_negative_candidate;gcode4_c
 GCF_000009045.1_MED1	GCF_000009045.1	false	true	NA	gcode11_candidate
 GCF_000006885.1_MED1	GCF_000006885.1	false	true	NA	gcode11_candidate
 BACI-PAIR	GCF_000009045.1	false	true	NA	ani_cluster_candidate;collision_candidate;gcode11_candidate
-BACI PAIR	GCF_000006885.1	false	true	NA	ani_cluster_candidate;collision_candidate;gcode11_candidate
+BACI PAIR	GCF_000009045.1	false	true	NA	ani_cluster_candidate;collision_candidate;gcode11_candidate
 BACI_FILLER_1	GCF_000009045.1	false	true	NA	filler
 BACI_FILLER_2	GCF_000009045.1	false	true	NA	filler
 STREP_FILLER_1	GCF_000006885.1	false	true	NA	filler
