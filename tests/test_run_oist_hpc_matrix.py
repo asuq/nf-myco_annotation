@@ -186,7 +186,7 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         self.assertIn("--gcode_rule delta_then_11", result.stdout)
 
     def test_p2_auto_prepares_medium_inputs(self) -> None:
-        """Generate the fixed medium cohort automatically when inputs are missing."""
+        """Refresh the fixed medium cohort inputs before each p2 run."""
         result = self.run_wrapper(
             "--dry-run",
             "--hpc-root",
@@ -223,6 +223,16 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             "--source-catalog /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/testdata/medium/source_catalog.tsv",
             result.stdout,
         )
+
+    def test_fixed_medium_inputs_are_not_reused_implicitly(self) -> None:
+        """Refresh the tracked medium cohort instead of trusting stale generated files."""
+        script_text = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn('MEDIUM_SAMPLE_CSV="${MEDIUM_ROOT}/generated/sample_sheet.csv"', script_text)
+        self.assertIn('MEDIUM_METADATA="${MEDIUM_ROOT}/generated/metadata.tsv"', script_text)
+        self.assertIn("run_medium_prepare", script_text)
+        self.assertNotIn('! -f "${MEDIUM_SAMPLE_CSV}"', script_text)
+        self.assertNotIn('! -f "${MEDIUM_METADATA}"', script_text)
 
     def test_p2_override_inputs_keep_looser_validator_contract(self) -> None:
         """Do not force fixed-cohort validation arguments for custom medium inputs."""
