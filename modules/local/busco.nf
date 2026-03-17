@@ -30,19 +30,40 @@ process BUSCO {
     mkdir -p "\$(dirname "\${staged_lineage_dir}")"
     ln -s "\${dataset_source}" "\${staged_lineage_dir}"
 
-    set +e
-    busco \
-        --in "${genome}" \
-        --download_path "\${busco_download_root}" \
-        --lineage_dataset "${lineage}" \
-        --mode genome \
-        --offline \
-        --cpu ${task.cpus} \
-        --out "\${output_dir}" \
-        --out_path . \
-        > busco.log 2>&1
-    exit_code=\$?
-    set -e
+    max_attempts="${params.task_attempts}"
+    if [[ "\${max_attempts}" -lt 1 ]]; then
+        max_attempts=1
+    fi
+
+    attempt=1
+    exit_code=1
+    : > busco.log
+    while (( attempt <= max_attempts )); do
+        printf 'attempt=%s/%s\n' "\${attempt}" "\${max_attempts}" >> busco.log
+        rm -rf "\${output_dir}"
+        set +e
+        busco \
+            --in "${genome}" \
+            --download_path "\${busco_download_root}" \
+            --lineage_dataset "${lineage}" \
+            --mode genome \
+            --offline \
+            --cpu ${task.cpus} \
+            --out "\${output_dir}" \
+            --out_path . \
+            >> busco.log 2>&1
+        exit_code=\$?
+        set -e
+
+        if [[ "\${exit_code}" -eq 0 ]]; then
+            break
+        fi
+        if (( attempt == max_attempts )); then
+            break
+        fi
+        printf 'retrying_busco=%s\n' "\${attempt}" >> busco.log
+        (( attempt += 1 ))
+    done
 
     mkdir -p "\${output_dir}"
     summary_json=\$(find "\${output_dir}" -type f \\( -name 'short_summary*.json' -o -name 'short_summary.json' \\) | head -n 1 || true)
