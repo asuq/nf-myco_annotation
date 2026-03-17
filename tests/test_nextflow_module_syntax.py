@@ -10,6 +10,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODULES_DIR = ROOT / "modules" / "local"
 RAW_COMMAND_SUBSTITUTION = re.compile(r'(?<!\\)\$\(')
+SOFT_FAIL_RETRY_MARKERS = {
+    "barrnap.nf": "retrying_barrnap",
+    "busco.nf": "retrying_busco",
+    "ccfinder.nf": "retrying_ccfinder",
+    "checkm2.nf": "retrying_checkm2",
+    "eggnog.nf": "retrying_eggnog",
+    "padloc.nf": "retrying_padloc",
+    "prokka.nf": "retrying_prokka",
+}
 
 
 def find_raw_command_substitutions(path: Path) -> list[str]:
@@ -49,9 +58,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('database_path="${checkm2_db}"', module_text)
         self.assertIn('dmnd_candidates=("\\${database_path}"/*.dmnd)', module_text)
         self.assertIn('--database_path "\\${database_path}"', module_text)
-        self.assertIn('max_attempts="${params.task_attempts}"', module_text)
+        self.assertIn('max_attempts="${params.soft_fail_attempts}"', module_text)
         self.assertIn('while (( attempt <= max_attempts ))', module_text)
-        self.assertIn("retrying_checkm2_predict", module_text)
+        self.assertIn("retrying_checkm2", module_text)
 
     def test_runtime_database_dirs_are_staged_into_checkm2_and_eggnog(self) -> None:
         """Require external database directories to enter containers as path inputs."""
@@ -104,9 +113,18 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('ln -s "\\${dataset_source}" "\\${staged_lineage_dir}"', module_text)
         self.assertIn('--download_path "\\${busco_download_root}"', module_text)
         self.assertIn('--lineage_dataset "${lineage}"', module_text)
-        self.assertIn('max_attempts="${params.task_attempts}"', module_text)
+        self.assertIn('max_attempts="${params.soft_fail_attempts}"', module_text)
         self.assertIn('while (( attempt <= max_attempts ))', module_text)
         self.assertIn('retrying_busco', module_text)
+
+    def test_soft_fail_modules_use_internal_retry_knob(self) -> None:
+        """Require soft-fail runtime modules to use the shared internal retry knob."""
+        for module_name, retry_marker in SOFT_FAIL_RETRY_MARKERS.items():
+            module_text = (MODULES_DIR / module_name).read_text(encoding="utf-8")
+
+            self.assertIn('max_attempts="${params.soft_fail_attempts}"', module_text, module_name)
+            self.assertIn('while (( attempt <= max_attempts ))', module_text, module_name)
+            self.assertIn(retry_marker, module_text, module_name)
 
     def test_busco_consumers_stage_unique_summary_names(self) -> None:
         """Require BUSCO summary consumers to stage input files uniquely."""

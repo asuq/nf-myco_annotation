@@ -33,6 +33,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("gcode_rule = 'strict_delta'", config_text)
         self.assertIn("runtime_db_scratch_root = null", config_text)
         self.assertIn("task_attempts = 3", config_text)
+        self.assertIn("soft_fail_attempts = 3", config_text)
         self.assertIn("taxdump_version = null", config_text)
         self.assertIn("db_download_attempts = 2", config_text)
         self.assertIn("eggnog_only_accessions = null", config_text)
@@ -152,6 +153,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             "params.standardMaxRetries = { Math.max((params.task_attempts as int) - 1, 0) }",
             config_text,
         )
+        self.assertNotIn("soft_fail_attempts", config_text)
         self.assertIn("errorStrategy = 'retry'", config_text)
         self.assertIn(
             "maxRetries = { params.standardMaxRetries instanceof Closure ? params.standardMaxRetries() : params.standardMaxRetries }",
