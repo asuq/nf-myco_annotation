@@ -663,6 +663,9 @@ run_p1() {
 }
 
 run_p2() {
+    local fixed_medium_sample_csv="${MEDIUM_ROOT}/generated/sample_sheet.csv"
+    local fixed_medium_metadata="${MEDIUM_ROOT}/generated/metadata.tsv"
+
     announce_test "p2" "medium Mycoplasmatota/Bacillota pipeline test"
     ensure_medium_inputs
     if [[ "${DRY_RUN}" != "true" ]]; then
@@ -673,6 +676,21 @@ run_p2() {
         "${RESULT_ROOT}/p2/out" \
         "${MEDIUM_SAMPLE_CSV}" \
         "${MEDIUM_METADATA}"
+
+    if [[ "${MEDIUM_SAMPLE_CSV}" == "${fixed_medium_sample_csv}" && "${MEDIUM_METADATA}" == "${fixed_medium_metadata}" ]]; then
+        run_or_print \
+            python3 "${VALIDATOR}" medium-run \
+            --outdir "${RESULT_ROOT}/p2/out" \
+            --db-root "${DB_ROOT}" \
+            --sample-count "${MEDIUM_SAMPLE_COUNT}" \
+            --allowed-phylum Mycoplasmatota \
+            --allowed-phylum Bacillota \
+            --metadata-tsv "${MEDIUM_METADATA}" \
+            --cohort-plan "${MEDIUM_COHORT_PLAN}" \
+            --source-catalog "${MEDIUM_SOURCE_CATALOG}"
+        return 0
+    fi
+
     run_or_print \
         python3 "${VALIDATOR}" medium-run \
         --outdir "${RESULT_ROOT}/p2/out" \

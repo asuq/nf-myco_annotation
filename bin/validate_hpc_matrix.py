@@ -23,6 +23,8 @@ from prepare_runtime_databases import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
 DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "source_catalog.tsv"
+DEFAULT_MEDIUM_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "medium" / "cohort_plan.tsv"
+DEFAULT_MEDIUM_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "medium" / "source_catalog.tsv"
 PIPELINE_INFO_OUTPUTS = ("trace.tsv", "report.html", "timeline.html", "dag.html")
 
 
@@ -132,6 +134,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="append",
         default=["Mycoplasmatota", "Bacillota"],
         help="Allowed phylum. May be supplied multiple times.",
+    )
+    medium_parser.add_argument(
+        "--metadata-tsv",
+        type=Path,
+        default=None,
+        help="Optional metadata TSV used for the fixed medium cohort run.",
+    )
+    medium_parser.add_argument(
+        "--cohort-plan",
+        type=Path,
+        default=DEFAULT_MEDIUM_COHORT_PLAN,
+        help="Optional fixed medium cohort plan TSV.",
+    )
+    medium_parser.add_argument(
+        "--source-catalog",
+        type=Path,
+        default=DEFAULT_MEDIUM_SOURCE_CATALOG,
+        help="Optional fixed medium source catalog TSV.",
     )
 
     return parser.parse_args(argv)
@@ -317,6 +337,60 @@ def load_tracked_plan(
     return run_acceptance_tests.load_cohort_plan(cohort_plan_path, catalog)
 
 
+def find_missing_metadata_case_accessions(
+    plan: Sequence[run_acceptance_tests.CohortRecord],
+) -> set[str]:
+    """Return accessions tagged as deliberate missing-metadata cases."""
+    return {
+        record.accession
+        for record in plan
+        if "missing_metadata_case" in record.role_tags
+    }
+
+
+def assert_medium_phyla_allowed(
+    master_rows: dict[str, dict[str, str]],
+    *,
+    allowed_phyla: set[str],
+    missing_metadata_case_accessions: set[str] | None = None,
+) -> None:
+    """Assert that medium-run phylum values match the intended contract."""
+    missing_metadata_case_accessions = missing_metadata_case_accessions or set()
+
+    bad_phyla = sorted(
+        phylum
+        for phylum in {row["phylum"] for row in master_rows.values()}
+        if phylum not in allowed_phyla and phylum != "NA"
+    )
+    if bad_phyla:
+        raise ValidateHpcMatrixError(
+            "Observed disallowed phyla in medium run: " + ", ".join(bad_phyla)
+        )
+
+    bad_na_accessions = sorted(
+        accession
+        for accession, row in master_rows.items()
+        if row["phylum"] == "NA"
+        and accession not in missing_metadata_case_accessions
+    )
+    if bad_na_accessions:
+        raise ValidateHpcMatrixError(
+            "Observed unexpected phylum=NA rows in medium run: "
+            + ", ".join(bad_na_accessions)
+        )
+
+    observed_allowed = {
+        row["phylum"]
+        for row in master_rows.values()
+        if row["phylum"] in allowed_phyla
+    }
+    missing_allowed = sorted(phylum for phylum in allowed_phyla if phylum not in observed_allowed)
+    if missing_allowed:
+        raise ValidateHpcMatrixError(
+            "Medium run is missing allowed phyla: " + ", ".join(missing_allowed)
+        )
+
+
 def validate_tracked_run(args: argparse.Namespace) -> None:
     """Validate the tracked 9-sample run outputs."""
     require_pipeline_info(args.outdir.resolve())
@@ -350,17 +424,22 @@ def validate_medium_run(args: argparse.Namespace) -> None:
         )
 
     allowed = {value.strip() for value in args.allowed_phylum if value.strip()}
-    observed = {row["phylum"] for row in master_rows.values()}
-    bad_phyla = sorted(phylum for phylum in observed if phylum not in allowed)
-    if bad_phyla:
-        raise ValidateHpcMatrixError(
-            "Observed disallowed phyla in medium run: " + ", ".join(bad_phyla)
+    if args.metadata_tsv is not None:
+        plan = load_tracked_plan(args.source_catalog, args.cohort_plan)
+        run_acceptance_tests.assert_run_outputs(
+            args.outdir.resolve(),
+            plan,
+            args.metadata_tsv.resolve(),
         )
-    missing_allowed = sorted(phylum for phylum in allowed if phylum not in observed)
-    if missing_allowed:
-        raise ValidateHpcMatrixError(
-            "Medium run is missing allowed phyla: " + ", ".join(missing_allowed)
-        )
+        missing_metadata_case_accessions = find_missing_metadata_case_accessions(plan)
+    else:
+        missing_metadata_case_accessions = set()
+
+    assert_medium_phyla_allowed(
+        master_rows,
+        allowed_phyla=allowed,
+        missing_metadata_case_accessions=missing_metadata_case_accessions,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
