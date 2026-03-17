@@ -211,6 +211,38 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             "--metadata /tmp/hpc/medium/generated/metadata.tsv",
             result.stdout,
         )
+        self.assertIn(
+            "--metadata-tsv /tmp/hpc/medium/generated/metadata.tsv",
+            result.stdout,
+        )
+        self.assertIn(
+            "--cohort-plan /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/testdata/medium/cohort_plan.tsv",
+            result.stdout,
+        )
+        self.assertIn(
+            "--source-catalog /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/testdata/medium/source_catalog.tsv",
+            result.stdout,
+        )
+
+    def test_p2_override_inputs_keep_looser_validator_contract(self) -> None:
+        """Do not force fixed-cohort validation arguments for custom medium inputs."""
+        result = self.run_wrapper(
+            "--dry-run",
+            "--hpc-root",
+            "/tmp/hpc",
+            "p2",
+            "--medium-sample-csv",
+            "/tmp/medium_sample_sheet.csv",
+            "--medium-metadata",
+            "/tmp/medium_metadata.tsv",
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("--sample_csv /tmp/medium_sample_sheet.csv", result.stdout)
+        self.assertIn("--metadata /tmp/medium_metadata.tsv", result.stdout)
+        self.assertNotIn("--metadata-tsv /tmp/medium_metadata.tsv", result.stdout)
+        self.assertNotIn("--cohort-plan", result.stdout)
+        self.assertNotIn("--source-catalog", result.stdout)
 
     def test_all_auto_prepares_medium_inputs(self) -> None:
         """Run the medium prepare step automatically during the full campaign."""

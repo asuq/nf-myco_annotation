@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +12,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "bin" / "validate_hpc_matrix.py"
+sys.path.insert(0, str(ROOT / "bin"))
+SPEC = importlib.util.spec_from_file_location("validate_hpc_matrix", SCRIPT)
+assert SPEC is not None
+assert SPEC.loader is not None
+validate_hpc_matrix = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(validate_hpc_matrix)
 
 
 def write_text(path: Path, text: str) -> None:
@@ -113,6 +121,37 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+    def test_medium_phylum_helper_allows_missing_metadata_case_na(self) -> None:
+        """Allow `phylum=NA` only for the deliberate missing-metadata case."""
+        master_rows = {
+            "MYCO_NEW_1": {"phylum": "NA"},
+            "ACC1": {"phylum": "Mycoplasmatota"},
+            "ACC2": {"phylum": "Bacillota"},
+        }
+
+        validate_hpc_matrix.assert_medium_phyla_allowed(
+            master_rows,
+            allowed_phyla={"Mycoplasmatota", "Bacillota"},
+            missing_metadata_case_accessions={"MYCO_NEW_1"},
+        )
+
+    def test_medium_phylum_helper_rejects_unexpected_na(self) -> None:
+        """Reject `phylum=NA` for accessions outside the missing-metadata role."""
+        master_rows = {
+            "ACC_BAD": {"phylum": "NA"},
+            "ACC1": {"phylum": "Mycoplasmatota"},
+            "ACC2": {"phylum": "Bacillota"},
+        }
+
+        with self.assertRaises(validate_hpc_matrix.ValidateHpcMatrixError) as context:
+            validate_hpc_matrix.assert_medium_phyla_allowed(
+                master_rows,
+                allowed_phyla={"Mycoplasmatota", "Bacillota"},
+                missing_metadata_case_accessions=set(),
+            )
+
+        self.assertIn("Observed unexpected phylum=NA rows in medium run: ACC_BAD", str(context.exception))
 
 
 if __name__ == "__main__":

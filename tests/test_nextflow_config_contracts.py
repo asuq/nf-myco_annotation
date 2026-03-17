@@ -148,9 +148,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
-        self.assertIn("def standardMaxRetries = Math.max((params.task_attempts as int) - 1, 0)", config_text)
+        self.assertIn(
+            "params.standardMaxRetries = { Math.max((params.task_attempts as int) - 1, 0) }",
+            config_text,
+        )
         self.assertIn("errorStrategy = 'retry'", config_text)
-        self.assertIn("maxRetries = standardMaxRetries", config_text)
+        self.assertIn(
+            "maxRetries = { params.standardMaxRetries instanceof Closure ? params.standardMaxRetries() : params.standardMaxRetries }",
+            config_text,
+        )
         self.assertIn("withName: CLUSTER_ANI {\n        container = params.python_container", config_text)
         self.assertIn("withName: SELECT_ANI_REPRESENTATIVES {\n        container = params.python_container", config_text)
         self.assertIn("withName: WRITE_SAMPLE_STATUS {\n        container = params.python_container", config_text)
@@ -167,11 +173,11 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
-            "def dbDownloadMaxRetries = Math.max((params.db_download_attempts as int) - 1, 0)",
+            "params.dbDownloadMaxRetries = { Math.max((params.db_download_attempts as int) - 1, 0) }",
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
         self.assertIn(
@@ -183,15 +189,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             config_text,
         )
         self.assertIn(
-            "withLabel: download_checkm2_database {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = params.checkm2_container",
+            "withLabel: download_checkm2_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.checkm2_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_busco_databases {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = params.busco_container",
+            "withLabel: download_busco_databases {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.busco_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_eggnog_database {\n        errorStrategy = 'retry'\n        maxRetries = dbDownloadMaxRetries\n        container = params.eggnog_container",
+            "withLabel: download_eggnog_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.eggnog_container",
             config_text,
         )
         self.assertNotIn("withName: PREP_TAXDUMP_DATABASE", config_text)
