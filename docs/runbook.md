@@ -13,6 +13,78 @@ The pipeline requires:
 - `--busco_db` or `--prepare_busco_datasets true`
 - `--eggnog_db` for real eggNOG runs
 
+### Preparing metadata.tsv
+
+`accessions.txt` should contain one accession per line. `datasets` and
+`dataformat` must be installed and available on `PATH`. This prepares only
+`metadata.tsv`; the sample manifest still needs to be prepared separately.
+
+```bash
+datasets summary genome accession \
+  --inputfile accessions.txt \
+  --assembly-source GenBank \
+  --assembly-version latest \
+  --as-json-lines | \
+  dataformat tsv genome \
+    --fields accession,assminfo-name,organism-name,assminfo-atypicalwarnings,assminfo-notes,assmstats-total-sequence-len,type_material-label,organism-tax-id,assminfo-level,assminfo-release-date,assminfo-sequencing-tech,assminfo-assembly-method,assmstats-number-of-contigs,assmstats-number-of-scaffolds,assmstats-scaffold-n50,assmstats-genome-coverage,source_database,assminfo-bioproject,assminfo-biosample-accession,assminfo-submitter \
+  > metadata.raw.tsv
+```
+
+```bash
+python3 - <<'PY'
+import csv
+from pathlib import Path
+
+input_path = Path("metadata.raw.tsv")
+output_path = Path("metadata.tsv")
+
+column_map = [
+    ("accession", "accession"),
+    ("assminfo-name", "Assembly_Name"),
+    ("organism-name", "Organism_Name"),
+    ("assminfo-atypicalwarnings", "Atypical_Warnings"),
+    ("assminfo-notes", "Notes"),
+    ("assmstats-total-sequence-len", "Genome_Size"),
+    ("type_material-label", "Type_Material"),
+    ("organism-tax-id", "Tax_ID"),
+    ("assminfo-level", "Assembly_Level"),
+    ("assminfo-release-date", "Release_Date"),
+    ("assminfo-sequencing-tech", "Sequencing_Tech"),
+    ("assminfo-assembly-method", "Assembly_Method"),
+    ("assmstats-number-of-contigs", "Contigs"),
+    ("assmstats-number-of-scaffolds", "Scaffolds"),
+    ("assmstats-scaffold-n50", "N50"),
+    ("assmstats-genome-coverage", "Genome_Coverage"),
+    ("source_database", "Source_Database"),
+    ("assminfo-bioproject", "BioProject"),
+    ("assminfo-biosample-accession", "BioSample"),
+    ("assminfo-submitter", "Submitter"),
+]
+
+with input_path.open("r", encoding="utf-8", newline="") as handle:
+    reader = csv.DictReader(handle, delimiter="\t")
+    missing = [source for source, _target in column_map if source not in reader.fieldnames]
+    if missing:
+        raise SystemExit(
+            "metadata.raw.tsv is missing expected column(s): " + ", ".join(missing)
+        )
+
+    with output_path.open("w", encoding="utf-8", newline="") as out_handle:
+        writer = csv.DictWriter(
+            out_handle,
+            fieldnames=[target for _source, target in column_map],
+            delimiter="\t",
+        )
+        writer.writeheader()
+        for row in reader:
+            writer.writerow({target: row[source] for source, target in column_map})
+PY
+```
+
+The rename step matters because downstream consumers currently look for
+headers such as `Tax_ID`, `Organism_Name`, `Assembly_Level`,
+`Atypical_Warnings`, `Notes`, `Genome_Size`, `Scaffolds`, and `N50`.
+
 Optional labels used only in `tool_and_db_versions.tsv`:
 
 - `--taxdump_label`
