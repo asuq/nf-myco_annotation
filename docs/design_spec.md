@@ -133,7 +133,25 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
 - Use the exact staged genome FASTA as input.
 - If a suitable BioContainers image does not exist, create a Dockerfile under `docker/` and let the user build/upload it later.
 
-### 2.10 PADLOC policy
+### 2.10 Codetta policy
+
+- Run Codetta on **all** samples, independent of CheckM2 gcode assignment.
+- Use a prepared Codetta database directory rooted at `Pfam-A_enone.hmm`.
+- Support Codetta database preparation in the separate runtime-database prep workflow.
+- Publish all Codetta-generated artefacts for each sample under `samples/<original_accession>/codetta/`.
+- Report Codetta publicly as version `v2.0`, while pinning the custom runtime image build to the latest verified upstream `main` commit and recording that source commit in `tool_and_db_versions.tsv`.
+- Keep Codetta soft-failing per sample: if Codetta fails, continue the cohort run, write failure status into `sample_status.tsv`, and emit `NA` in the Codetta master-table fields.
+- Add two Codetta-derived columns to the master table immediately after `Gcode`:
+  - `Codetta_Genetic_Code`
+  - `Codetta_NCBI_Table_Candidates`
+- Add `codetta_status` to `sample_status.tsv`.
+- Codetta table matching must compare the inferred 64-character code against NCBI translation tables while:
+  - ignoring `?` positions
+  - treating amino-acid versus stop mismatches as incompatible
+  - collecting **all** compatible table IDs in ascending order
+- If no NCBI table matches, write `unassigned`.
+
+### 2.11 PADLOC policy
 
 - Do not add PADLOC results to the master table.
 - Emit a clear warning at pipeline start that PADLOC outputs are produced but not merged into the master table.
@@ -141,13 +159,13 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
   - removing `gnl|Prokka|` from feature IDs;
   - removing the FASTA tail from the GFF.
 
-### 2.11 eggNOG policy
+### 2.12 eggNOG policy
 
 - Do not add eggNOG results to the master table.
 - Keep all final eggNOG outputs except the temporary directory.
 - Pre-process FAA headers by replacing whitespace with underscores only on FASTA header lines.
 
-### 2.12 ANI clustering policy
+### 2.13 ANI clustering policy
 
 - Use the existing `cluster_ani.py` logic as the starting point.
 - Default ANI threshold is **0.95**.
@@ -158,9 +176,10 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
 - Exception: **unverified source organisms** among atypical genomes must still be included in ANI clustering.
 - The BUSCO lineage prioritised for ANI representative scoring is the **first lineage in the configured list**.
 
-### 2.13 Final reporting policy
+### 2.14 Final reporting policy
 
 - Produce `sample_status.tsv`.
+- Add Codetta summary values to the final reporting layer.
 - Produce a final plain-text versions report.
 - Prefer BioContainers images.
 - If BioContainers do not cover a tool, create a module-specific Dockerfile in `docker/`.
@@ -278,6 +297,8 @@ This is an implementation convenience, not a scientific rule.
 │   ├── download_busco_dataset.nf
 │   ├── busco.nf
 │   ├── summarise_busco.nf
+│   ├── codetta.nf
+│   ├── summarise_codetta.nf
 │   ├── prokka.nf
 │   ├── prepare_padloc_inputs.nf
 │   ├── ccfinder.nf
@@ -302,6 +323,7 @@ This is an implementation convenience, not a scientific rule.
 │   ├── summarise_16s.py
 │   ├── summarise_checkm2.py
 │   ├── summarise_busco.py
+│   ├── summarise_codetta.py
 │   ├── summarise_ccfinder.py
 │   ├── build_master_table.py
 │   ├── build_sample_status.py
@@ -334,6 +356,7 @@ per-sample branch (all samples):
   assign_gcode_and_qc
   busco_bacillota
   busco_mycoplasmatota
+  codetta
 
 per-sample gated branch (only if gcode = 4 or 11):
   prokka
@@ -410,6 +433,7 @@ Mandatory runtime resources:
 
 - pinned NCBI taxdump directory
 - CheckM2 database path
+- Codetta profile database path rooted at `Pfam-A_enone.hmm`
 - BUSCO datasets or ability to run the BUSCO prep workflow
 - eggNOG database path
 - PADLOC database/resources required by the chosen PADLOC image
@@ -966,6 +990,8 @@ Append after the metadata block:
 ### Gcode / QC block
 
 - `Gcode`
+- `Codetta_Genetic_Code`
+- `Codetta_NCBI_Table_Candidates`
 - `Low_quality`
 - `16S`
 
@@ -992,6 +1018,8 @@ If more BUSCO lineages are ever configured, append `BUSCO_<lineage>` columns in 
 ## 9.4 Value conventions
 
 - `Gcode` values: `4`, `11`, `NA`
+- `Codetta_Genetic_Code`: 64-character Codetta code string or `NA`
+- `Codetta_NCBI_Table_Candidates`: one table ID, multiple IDs joined by `;`, `unassigned`, or `NA`
 - `Low_quality` values: `true`, `false`, `NA`
 - `16S` values: `Yes`, `partial`, `No`
 - `Is_Representative` values: `yes`, `no`, `NA`
@@ -1046,6 +1074,7 @@ Continue the pipeline but record failure in `sample_status.tsv` for per-sample p
 - Barrnap
 - CheckM2
 - BUSCO
+- Codetta
 - Prokka
 - CRISPRCasFinder
 - PADLOC
@@ -1075,6 +1104,7 @@ results/
 │       ├── busco/
 │       │   ├── bacillota_odb12/
 │       │   └── mycoplasmatota_odb12/
+│       ├── codetta/
 │       ├── prokka/
 │       ├── ccfinder/
 │       ├── padloc/
@@ -1113,6 +1143,7 @@ Recommended params include:
 - `params.metadata`
 - `params.taxdump`
 - `params.checkm2_db`
+- `params.codetta_db`
 - `params.busco_lineages`
 - `params.busco_db`
 - `params.eggnog_db`
@@ -1145,6 +1176,7 @@ Acceptance criteria:
 - metadata block is preserved exactly
 - append columns are present in the locked order
 - samples with `Gcode = NA` skip Prokka/CRISPR/PADLOC/eggNOG
+- Codetta runs even when `Gcode = NA`
 - ANI inclusion/exclusion reasons match the rules
 - `tool_and_db_versions.tsv` is populated
 - `sample_status.tsv` explains all warnings and skips
