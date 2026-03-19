@@ -100,6 +100,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--checkm2-source", type=Path, help="CheckM2 database source path.")
     parser.add_argument("--checkm2-dest", type=Path, help="Final CheckM2 destination.")
     parser.add_argument("--checkm2-version", default=None, help="Pinned remote CheckM2 version.")
+    parser.add_argument("--codetta-source", type=Path, help="Codetta profile database source path.")
+    parser.add_argument("--codetta-dest", type=Path, help="Final Codetta profile database destination.")
+    parser.add_argument("--codetta-version", default=None, help="Pinned remote Codetta profile database version.")
     parser.add_argument(
         "--busco-lineage-source",
         action="append",
@@ -339,6 +342,26 @@ def validate_eggnog(path: Path) -> ValidationResult:
             f"eggNOG destination is missing required files in {path}: {', '.join(missing)}"
         )
     return ValidationResult(required_paths=required, details={"files": str(len(required))})
+
+
+def validate_codetta(path: Path) -> ValidationResult:
+    """Validate one Codetta profile database directory."""
+    required = (
+        "Pfam-A_enone.hmm",
+        "Pfam-A_enone.hmm.h3f",
+        "Pfam-A_enone.hmm.h3i",
+        "Pfam-A_enone.hmm.h3m",
+        "Pfam-A_enone.hmm.h3p",
+    )
+    missing = [name for name in required if not (path / name).is_file()]
+    if missing:
+        raise PrepareRuntimeDatabasesError(
+            f"Codetta destination is missing required files in {path}: {', '.join(missing)}"
+        )
+    return ValidationResult(
+        required_paths=required,
+        details={"profile": "Pfam-A_enone.hmm", "files": str(len(required))},
+    )
 
 
 def validate_padloc(path: Path) -> ValidationResult:
@@ -1206,6 +1229,10 @@ def build_component_records(args: argparse.Namespace) -> list[PreparationRecord]
         raise PrepareRuntimeDatabasesError("CheckM2 source requires --checkm2-dest.")
     if args.checkm2_version and not args.checkm2_dest:
         raise PrepareRuntimeDatabasesError("CheckM2 version requires --checkm2-dest.")
+    if args.codetta_source and not args.codetta_dest:
+        raise PrepareRuntimeDatabasesError("Codetta source requires --codetta-dest.")
+    if args.codetta_version and not args.codetta_dest:
+        raise PrepareRuntimeDatabasesError("Codetta version requires --codetta-dest.")
     if args.eggnog_source and not args.eggnog_dest:
         raise PrepareRuntimeDatabasesError("eggNOG source requires --eggnog-dest.")
     if args.eggnog_version and not args.eggnog_dest:
@@ -1274,6 +1301,22 @@ def build_component_records(args: argparse.Namespace) -> list[PreparationRecord]
                 manifest=manifest,
             )
         )
+    if args.codetta_dest:
+        records.append(
+            prepare_component(
+                component="codetta",
+                remote_component="codetta",
+                source=args.codetta_source,
+                destination=args.codetta_dest,
+                validator=validate_codetta,
+                link_mode=args.link_mode,
+                scratch_root=args.scratch_root,
+                force=args.force,
+                download=args.download,
+                version=args.codetta_version,
+                manifest=manifest,
+            )
+        )
     if args.eggnog_dest:
         records.append(
             prepare_component(
@@ -1332,6 +1375,8 @@ def build_nextflow_arguments(records: Sequence[PreparationRecord]) -> list[tuple
             mapping["--taxdump"] = str(record.destination)
         elif record.component == "checkm2":
             mapping["--checkm2_db"] = str(record.destination)
+        elif record.component == "codetta":
+            mapping["--codetta_db"] = str(record.destination)
         elif record.component == "busco_root":
             mapping["--busco_db"] = str(record.destination)
         elif record.component == "eggnog":

@@ -56,8 +56,9 @@ def component_sort_key(row: dict[str, str]) -> tuple[int, str]:
     ordering = {
         "taxdump": 0,
         "checkm2": 1,
-        "busco_root": 2,
-        "eggnog": 3,
+        "codetta": 2,
+        "busco_root": 3,
+        "eggnog": 4,
     }
     return (ordering.get(row["component"], 99), row["component"])
 
@@ -85,6 +86,7 @@ def build_nextflow_args(rows: Sequence[dict[str, str]]) -> str:
     flag_map = {
         "taxdump": "--taxdump",
         "checkm2": "--checkm2_db",
+        "codetta": "--codetta_db",
         "busco_root": "--busco_db",
         "eggnog": "--eggnog_db",
     }

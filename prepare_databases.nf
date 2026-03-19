@@ -39,6 +39,7 @@ workflow {
         taxdump   : normaliseDestination.call(params.taxdump),
         checkm2   : normaliseDestination.call(params.checkm2_db),
         busco_root: normaliseDestination.call(params.busco_db),
+        codetta   : normaliseDestination.call(params.codetta_db),
         eggnog    : normaliseDestination.call(params.eggnog_db),
     ]
     if (!destinations.values().any { it != null }) {
@@ -75,6 +76,16 @@ workflow {
             )
         )
         : Channel.empty()
+    codettaRequest = destinations.codetta
+        ? Channel.of(
+            tuple(
+                destinations.codetta,
+                downloadEnabled,
+                scratchRoot,
+                forceRebuild,
+            )
+        )
+        : Channel.empty()
     eggnogRequest = destinations.eggnog
         ? Channel.of(tuple(destinations.eggnog, downloadEnabled, forceRebuild))
         : Channel.empty()
@@ -82,6 +93,7 @@ workflow {
         taxdumpRequest,
         checkm2Request,
         buscoRequest,
+        codettaRequest,
         eggnogRequest,
     )
 }

@@ -24,6 +24,9 @@ workflow {
     if (!params.checkm2_db) {
         error "params.checkm2_db is required."
     }
+    if (!params.codetta_db) {
+        error "params.codetta_db is required."
+    }
     if (!params.eggnog_db) {
         error "params.eggnog_db is required."
     }
@@ -37,6 +40,7 @@ workflow {
     metadata = Channel.fromPath(params.metadata, checkIfExists: true)
     taxdump = Channel.fromPath(params.taxdump, checkIfExists: true)
     checkm2Db = Channel.fromPath(params.checkm2_db, checkIfExists: true)
+    codettaDb = Channel.fromPath(params.codetta_db, checkIfExists: true)
     eggnogDb = Channel.fromPath(params.eggnog_db, checkIfExists: true)
     sampleStatusColumns = Channel.value(file("${projectDir}/assets/sample_status_columns.txt"))
     buscoLineages = Channel.fromList(params.busco_lineages as List<String>)
@@ -53,6 +57,7 @@ workflow {
     PER_SAMPLE_ANNOTATION(
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
         PER_SAMPLE_QC.out.gcode_qc,
+        codettaDb,
         eggnogDb,
     )
     COHORT_ANI(
@@ -71,6 +76,7 @@ workflow {
         PER_SAMPLE_QC.out.gcode_qc,
         COHORT_16S.out.sample_summaries,
         COHORT_ANI.out.parsed_busco,
+        PER_SAMPLE_ANNOTATION.out.codetta_summary,
         PER_SAMPLE_ANNOTATION.out.ccfinder_summary,
         PER_SAMPLE_ANNOTATION.out.prokka,
         PER_SAMPLE_ANNOTATION.out.padloc,

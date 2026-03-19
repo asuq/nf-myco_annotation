@@ -1,5 +1,7 @@
 include { PROKKA } from '../../modules/local/prokka'
 include { CCFINDER } from '../../modules/local/ccfinder'
+include { CODETTA } from '../../modules/local/codetta'
+include { SUMMARISE_CODETTA } from '../../modules/local/summarise_codetta'
 include { SUMMARISE_CCFINDER } from '../../modules/local/summarise_ccfinder'
 include { PADLOC } from '../../modules/local/padloc'
 include { EGGNOG } from '../../modules/local/eggnog'
@@ -12,6 +14,7 @@ workflow PER_SAMPLE_ANNOTATION {
     take:
     sample_genomes
     gcode_summaries
+    codetta_db
     eggnog_db
 
     main:
@@ -45,6 +48,9 @@ workflow PER_SAMPLE_ANNOTATION {
             tuple(meta, genome, gcode.toString())
         }
 
+    CODETTA(sample_genomes.combine(codetta_db))
+    SUMMARISE_CODETTA(CODETTA.out.summary_input)
+
     PROKKA(annotation_candidates)
     CCFINDER(annotation_candidates)
     SUMMARISE_CCFINDER(CCFINDER.out.result_json)
@@ -60,12 +66,16 @@ workflow PER_SAMPLE_ANNOTATION {
     EGGNOG(eggnog_inputs.combine(eggnog_db))
 
     versions = PROKKA.out.versions
+        .mix(CODETTA.out.versions)
+        .mix(SUMMARISE_CODETTA.out.versions)
         .mix(CCFINDER.out.versions)
         .mix(SUMMARISE_CCFINDER.out.versions)
         .mix(PADLOC.out.versions)
         .mix(EGGNOG.out.versions)
 
     emit:
+    codetta = CODETTA.out.results
+    codetta_summary = SUMMARISE_CODETTA.out.summary
     prokka = PROKKA.out.results
     ccfinder = CCFINDER.out.results
     ccfinder_summary = SUMMARISE_CCFINDER.out.summaries

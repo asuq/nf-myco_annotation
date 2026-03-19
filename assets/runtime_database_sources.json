@@ -28,6 +28,16 @@
       }
     }
   },
+  "codetta": {
+    "default_version": "Pfam35_Shulgina21",
+    "versions": {
+      "Pfam35_Shulgina21": {
+        "kind": "archive",
+        "url": "http://eddylab.org/publications/Shulgina21/Pfam-A_enone.tar.gz",
+        "archive_name": "Pfam-A_enone.tar.gz"
+      }
+    }
+  },
   "busco": {
     "default_version": "2025-05-14",
     "versions": {

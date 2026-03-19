@@ -54,6 +54,9 @@ process FINALISE_RUNTIME_DATABASE {
         checkm2)
             details='required_paths=CheckM2_database.dmnd;dmnd=CheckM2_database.dmnd'
             ;;
+        codetta)
+            details='required_paths=Pfam-A_enone.hmm,Pfam-A_enone.hmm.h3f,Pfam-A_enone.hmm.h3i,Pfam-A_enone.hmm.h3m,Pfam-A_enone.hmm.h3p;profile=Pfam-A_enone.hmm'
+            ;;
         busco_root)
             required_paths=()
             while IFS= read -r lineage; do

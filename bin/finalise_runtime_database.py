@@ -17,6 +17,7 @@ from prepare_runtime_databases import (
     describe_validation,
     normalise_path,
     validate_checkm2,
+    validate_codetta,
     validate_eggnog,
     validate_padloc,
     write_marker,
@@ -37,7 +38,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--component",
-        choices=("checkm2", "busco_root", "eggnog", "padloc"),
+        choices=("checkm2", "busco_root", "codetta", "eggnog", "padloc"),
         required=True,
         help="Database component to validate.",
     )
@@ -88,6 +89,8 @@ def build_validator(component: str, busco_lineages: Sequence[str]):
                 "BUSCO finalisation requires at least one --busco-lineage value."
             )
         return build_busco_validator(busco_lineages)
+    if component == "codetta":
+        return validate_codetta
     if component == "eggnog":
         return validate_eggnog
     if component == "padloc":
