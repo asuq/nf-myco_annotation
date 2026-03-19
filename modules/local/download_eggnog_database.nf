@@ -17,6 +17,7 @@ process DOWNLOAD_EGGNOG_DATABASE {
     script:
     """
     destination_path="${destination_parent}/${destination_name}"
+    retry_marker="${destination_parent}/.nf_myco_eggnog_download_in_progress"
     mode="prepared"
     expected_files=("eggnog.db" "eggnog_proteins.dmnd")
 
@@ -35,13 +36,15 @@ process DOWNLOAD_EGGNOG_DATABASE {
     fi
 
     if [[ -d "\${destination_path}" && -f "\${destination_path}/.nf_myco_ready.json" ]] && has_expected_files "\${destination_path}"; then
+        rm -f "\${retry_marker}"
         mode="reuse"
     else
         if [[ -d "\${destination_path}" ]] && has_expected_files "\${destination_path}"; then
+            rm -f "\${retry_marker}"
             mode="prepared"
         else
             if [[ -d "\${destination_path}" ]]; then
-                if [[ "${force}" != "true" ]]; then
+                if [[ "${force}" != "true" && ! -f "\${retry_marker}" ]]; then
                     echo "eggNOG destination exists but is not ready: \${destination_path}" >&2
                     exit 1
                 fi
@@ -53,6 +56,7 @@ process DOWNLOAD_EGGNOG_DATABASE {
                 exit 1
             fi
 
+            : > "\${retry_marker}"
             mkdir -p "\${destination_path}"
 
             script_path="\$(command -v download_eggnog_data.py)"
@@ -63,6 +67,7 @@ process DOWNLOAD_EGGNOG_DATABASE {
                 find "\${destination_path}" -maxdepth 2 -type f | sort >&2
                 exit 1
             fi
+            rm -f "\${retry_marker}"
         fi
     fi
 

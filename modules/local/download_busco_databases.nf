@@ -20,6 +20,7 @@ process DOWNLOAD_BUSCO_DATABASES {
     }.join(' ')
     """
     destination_path="${destination_parent}/${destination_name}"
+    retry_marker="${destination_parent}/.nf_myco_busco_download_in_progress"
     mode="prepared"
     lineages=(${renderedLineagesShell})
 
@@ -49,12 +50,14 @@ process DOWNLOAD_BUSCO_DATABASES {
     fi
 
     if [[ "\${is_ready}" == "true" ]]; then
+        rm -f "\${retry_marker}"
         mode="reuse"
     elif [[ "\${has_all_lineages}" == "true" ]]; then
+        rm -f "\${retry_marker}"
         mode="prepared"
     else
         if [[ -d "\${destination_path}" ]]; then
-            if [[ "${force}" != "true" ]]; then
+            if [[ "${force}" != "true" && ! -f "\${retry_marker}" ]]; then
                 echo "BUSCO destination exists but is not ready: \${destination_path}" >&2
                 exit 1
             fi
@@ -66,6 +69,7 @@ process DOWNLOAD_BUSCO_DATABASES {
             exit 1
         fi
 
+        : > "\${retry_marker}"
         mkdir -p "\${destination_path}"
         while IFS= read -r lineage; do
             [[ -z "\${lineage}" ]] && continue
@@ -74,6 +78,7 @@ process DOWNLOAD_BUSCO_DATABASES {
                 mv "\${destination_path}/lineages/\${lineage}" "\${destination_path}/\${lineage}"
             fi
         done < lineages.txt
+        rm -f "\${retry_marker}"
     fi
 
     printf '%s\n' "\${mode}" > prep_mode.txt

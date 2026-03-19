@@ -17,6 +17,7 @@ process DOWNLOAD_CHECKM2_DATABASE {
     script:
     """
     destination_path="${destination_parent}/${destination_name}"
+    retry_marker="${destination_parent}/.nf_myco_checkm2_download_in_progress"
     mode="prepared"
 
     count_top_level_dmnd() {
@@ -69,13 +70,15 @@ process DOWNLOAD_CHECKM2_DATABASE {
     fi
 
     if [[ "\${is_ready}" == "true" ]]; then
+        rm -f "\${retry_marker}"
         mode="reuse"
     else
         if [[ -d "\${destination_path}" && "\$(count_top_level_dmnd "\${destination_path}")" == "1" ]]; then
+            rm -f "\${retry_marker}"
             mode="prepared"
         else
             if [[ -d "\${destination_path}" ]]; then
-                if [[ "${force}" != "true" ]]; then
+                if [[ "${force}" != "true" && ! -f "\${retry_marker}" ]]; then
                     echo "CheckM2 destination exists but is not ready: \${destination_path}" >&2
                     exit 1
                 fi
@@ -87,9 +90,11 @@ process DOWNLOAD_CHECKM2_DATABASE {
                 exit 1
             fi
 
+            : > "\${retry_marker}"
             mkdir -p "\${destination_path}"
             checkm2 database --download --path "\${destination_path}" --no_write_json_db
             normalise_download_layout "\${destination_path}"
+            rm -f "\${retry_marker}"
         fi
     fi
 
