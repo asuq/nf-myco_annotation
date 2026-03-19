@@ -25,6 +25,10 @@ it is wrong for retryable download failures created by the same workflow run.
 
 ### Patch
 
+- Implementation commits:
+  - `444a6dc` `fix(dbprep): recover native downloads on retry`
+  - `5217115` `test(dbprep): cover native download retry markers`
+  - `0253b29` `docs(debug): record native download retry recovery`
 - Added per-component retry markers for:
   - CheckM2
   - BUSCO
