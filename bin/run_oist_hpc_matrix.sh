@@ -11,6 +11,7 @@ readonly MEDIUM_COHORT_PLAN="${REPO_ROOT}/assets/testdata/medium/cohort_plan.tsv
 readonly MEDIUM_SAMPLE_COUNT="20"
 readonly DB_READY_MARKER=".nf_myco_ready.json"
 readonly VALID_MODES="prepare medium-prepare db-full db-reuse db-matrix p1 p2 all"
+readonly MINIMUM_HOST_PYTHON="3.12"
 
 show_usage() {
     cat <<'EOF'
@@ -44,6 +45,7 @@ Modes:
 
 Notes:
   - Resource settings come from the coded OIST profile and process defaults.
+  - Host python3 must be >= 3.12 for the harness and matrix validators.
   - Runtime database gates cover taxdump, CheckM2, Codetta, BUSCO, and eggNOG.
   - PADLOC is not part of runtime database prep because its fixed image bundles the DB.
 EOF
@@ -63,6 +65,20 @@ print_command() {
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
     exit 1
+}
+
+preflight_host_python() {
+    local version_text
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        fail "python3 was not found on PATH. Load Python ${MINIMUM_HOST_PYTHON} or adjust PATH before running the HPC wrapper."
+    fi
+
+    version_text="$(python3 --version 2>&1 | tr -d '\n')"
+    if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+        fail \
+            "Host python3 must be >= ${MINIMUM_HOST_PYTHON} for the acceptance harness and matrix validators. Current interpreter: ${version_text}. Load Python ${MINIMUM_HOST_PYTHON} or adjust PATH before rerunning."
+    fi
 }
 
 announce_test() {
@@ -864,6 +880,8 @@ main() {
                 ;;
         esac
     fi
+
+    preflight_host_python
 
     MODE="${mode}"
     ACCEPT_ROOT="${HPC_ROOT}/acceptance"

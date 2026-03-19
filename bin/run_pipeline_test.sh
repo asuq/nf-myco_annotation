@@ -8,6 +8,7 @@ readonly VALID_MODES="prepare unit stub local slurm dbprep-slurm all"
 readonly BASE_CONFIG="${REPO_ROOT}/conf/base.config"
 readonly CURRENT_RUNTIME_DB_HELPER_IMAGE="quay.io/asuq1617/nf-myco_db:0.3"
 readonly STALE_RUNTIME_DB_HELPER_IMAGE="quay.io/asuq1617/nf-myco_db:0.2"
+readonly MINIMUM_HOST_PYTHON="3.12"
 
 show_usage() {
     cat <<'EOF'
@@ -23,6 +24,7 @@ Wrapper options:
 Notes:
   - Arguments after the mode are forwarded unchanged to bin/run_acceptance_tests.py.
   - Use "<mode> --help" to see the delegated harness help for that mode.
+  - Host python3 must be >= 3.12 for the acceptance harness and validators.
   - Real-data modes still use params.ccfinder_container from pipeline config.
   - dbprep-slurm and all depend on the current runtime-db helper image and Codetta-aware helper CLIs.
 EOF
@@ -55,6 +57,25 @@ preflight_runtime_db_helper_image() {
     if grep -Fq "${STALE_RUNTIME_DB_HELPER_IMAGE}" "${BASE_CONFIG}"; then
         printf '%s\n' \
             "Error: ${BASE_CONFIG} still pins stale runtime-db helper image ${STALE_RUNTIME_DB_HELPER_IMAGE}. Update it to ${CURRENT_RUNTIME_DB_HELPER_IMAGE} before running dbprep-slurm or all." \
+            >&2
+        return 1
+    fi
+}
+
+preflight_host_python() {
+    local version_text
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' \
+            "Error: python3 was not found on PATH. Load Python ${MINIMUM_HOST_PYTHON} or adjust PATH before running ${RUNNER}." \
+            >&2
+        return 1
+    fi
+
+    version_text="$(python3 --version 2>&1 | tr -d '\n')"
+    if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+        printf '%s\n' \
+            "Error: host python3 must be >= ${MINIMUM_HOST_PYTHON} for ${RUNNER} and the acceptance validators. Current interpreter: ${version_text}. Load Python ${MINIMUM_HOST_PYTHON} or adjust PATH before rerunning." \
             >&2
         return 1
     fi
@@ -101,6 +122,10 @@ main() {
     if ! is_valid_mode "${mode}"; then
         printf 'Error: unsupported mode %s. Expected one of: %s\n' "${mode}" "${VALID_MODES}" >&2
         return 1
+    fi
+
+    if [[ "${dry_run}" != "true" ]]; then
+        preflight_host_python
     fi
 
     case "${mode}" in
