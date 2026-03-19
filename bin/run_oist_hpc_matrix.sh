@@ -342,17 +342,16 @@ run_db_matrix() {
         --expected-status prepared \
         --expected-arg=--checkm2_db
     announce_test "db-matrix" "db3_valid_without_marker/codetta"
-    run_partial_prepare_case \
-        "${valid_root}/work_codetta" \
-        "${valid_root}/results_codetta" \
+    fail_log="${valid_root}/codetta_missing_marker.log"
+    run_expect_failure \
+        "Destination is valid but incomplete for codetta" \
+        "${fail_log}" \
+        nextflow run prepare_databases.nf -profile oist \
+        -work-dir "${valid_root}/work_codetta" \
         --codetta_db "${valid_root}/codetta" \
-        --download_missing_databases true
-    run_or_print python3 "${VALIDATOR}" dbprep \
-        --results-dir "${valid_root}/results_codetta" \
-        --codetta-db "${valid_root}/codetta" \
-        --expected-component codetta \
-        --expected-status prepared \
-        --expected-arg=--codetta_db
+        --download_missing_databases true \
+        --outdir "${valid_root}/results_codetta" \
+        --singularity_cache_dir "${SINGULARITY_CACHE}"
     announce_test "db-matrix" "db3_valid_without_marker/busco"
     run_partial_prepare_case \
         "${valid_root}/work_busco" \
