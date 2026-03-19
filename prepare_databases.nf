@@ -70,12 +70,15 @@ workflow {
         ? new File(params.runtime_db_scratch_root.toString()).canonicalFile.absolutePath
         : null
     def buildMountedScratchRoot = { destinationParent ->
-        if (scratchRoot != null) {
+        def destinationParentPath = new File(destinationParent.toString()).canonicalFile.absolutePath
+        if (scratchRoot != null && scratchRoot != destinationParentPath) {
             def scratchFile = new File(scratchRoot)
             scratchFile.mkdirs()
             return file(scratchFile.absolutePath)
         }
-        return destinationParent
+        def scratchFile = new File(destinationParentPath, '.nf_myco_runtime_db_scratch')
+        scratchFile.mkdirs()
+        return file(scratchFile.absolutePath)
     }
 
     taxdumpRequest = destinations.taxdump
