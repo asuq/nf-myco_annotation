@@ -36,6 +36,7 @@ process COLLECT_VERSIONS {
         'busco'   : params.busco_container ?: 'NA',
         'prokka'  : params.prokka_container ?: 'NA',
         'ccfinder': params.ccfinder_container ?: 'NA',
+        'codetta' : params.codetta_container ?: 'NA',
         'padloc'  : params.padloc_container ?: 'NA',
         'eggnog'  : params.eggnog_container ?: 'NA',
         'fastani' : params.fastani_container ?: 'NA',
@@ -55,6 +56,8 @@ process COLLECT_VERSIONS {
         --checkm2-db-label "${params.checkm2_db_label ?: 'NA'}" \
         --taxdump "${params.taxdump ?: 'NA'}" \
         --taxdump-label "${params.taxdump_label ?: 'NA'}" \
+        --codetta-db "${params.codetta_db ?: 'NA'}" \
+        --codetta-db-label "${params.codetta_db_label ?: 'NA'}" \
         ${lineageArgs} \
         --busco-db "${params.busco_db ?: 'NA'}" \
         --eggnog-db "${params.eggnog_db ?: 'NA'}" \
@@ -64,11 +67,15 @@ process COLLECT_VERSIONS {
     """
 
     stub:
-    '''
+    """
     cat <<'EOF' > tool_and_db_versions.tsv
     component	kind	version	image_or_path	notes
     nextflow	runtime	stub	NA	workflow
     python	runtime	stub	NA	reported by VALIDATE_INPUTS
+    codetta	tool	v2.0	NA	reported by CODETTA
+    codetta_source_commit	tool	863359ed326276602d44e48227b6003ac6ffd266	NA	reported by CODETTA
+    codetta	container	NA	${params.codetta_container ?: 'NA'}	params container reference
+    codetta_db	database	${params.codetta_db_label ?: 'NA'}	${params.codetta_db ?: 'NA'}	Codetta profile database
     EOF
-    '''
+    """
 }

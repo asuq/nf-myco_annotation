@@ -89,6 +89,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Optional pinned taxdump label.",
     )
     parser.add_argument(
+        "--codetta-db",
+        default="NA",
+        help="Codetta profile database path.",
+    )
+    parser.add_argument(
+        "--codetta-db-label",
+        default="NA",
+        help="Optional Codetta profile database label.",
+    )
+    parser.add_argument(
         "--busco-db",
         default="NA",
         help="BUSCO dataset root path.",
@@ -259,6 +269,13 @@ def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             "CheckM2 database",
         ),
         build_row("taxdump", "database", args.taxdump_label, args.taxdump, "Pinned taxdump"),
+        build_row(
+            "codetta_db",
+            "database",
+            args.codetta_db_label,
+            args.codetta_db,
+            "Codetta profile database",
+        ),
         build_row(
             "busco_datasets",
             "database",

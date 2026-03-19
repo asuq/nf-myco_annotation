@@ -16,6 +16,7 @@ workflow FINAL_OUTPUTS {
     checkm2_summaries
     sixteen_s_summaries
     busco_summaries
+    codetta_summaries
     ccfinder_summaries
     prokka_results
     padloc_results
@@ -33,6 +34,7 @@ workflow FINAL_OUTPUTS {
     main:
     checkm2_seed = Channel.value(file("${projectDir}/assets/testdata/headers/checkm2_summary.tsv"))
     sixteen_s_seed = Channel.value(file("${projectDir}/assets/testdata/headers/16s_status.tsv"))
+    codetta_seed = Channel.value(file("${projectDir}/assets/testdata/headers/codetta_summary.tsv"))
     ccfinder_seed = Channel.value(file("${projectDir}/assets/testdata/headers/ccfinder_strains.tsv"))
     append_columns = Channel.value(file("${projectDir}/assets/master_table_append_columns.txt"))
     sample_status_columns = Channel.value(file("${projectDir}/assets/sample_status_columns.txt"))
@@ -106,6 +108,15 @@ workflow FINAL_OUTPUTS {
             newLine: true,
         )
 
+    combined_codetta = codetta_seed
+        .mix(codetta_summaries.map { meta, summary -> summary })
+        .collectFile(
+            name: 'codetta_summary.tsv',
+            keepHeader: true,
+            skip: 1,
+            newLine: true,
+        )
+
     collected_busco = busco_summaries
 
     prokkaManifest = Channel
@@ -171,6 +182,7 @@ workflow FINAL_OUTPUTS {
         combined_checkm2,
         combined_16s,
         collected_busco,
+        combined_codetta,
         combined_ccfinder,
         SELECT_ANI_REPRESENTATIVES.out.ani_summary,
         assembly_stats,
@@ -185,6 +197,7 @@ workflow FINAL_OUTPUTS {
         combined_checkm2,
         combined_16s,
         collected_busco,
+        combined_codetta,
         combined_ccfinder,
         prokkaManifest,
         padlocManifest,

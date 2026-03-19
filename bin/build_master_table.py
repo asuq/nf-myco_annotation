@@ -26,6 +26,7 @@ VALIDATED_SAMPLE_REQUIRED_COLUMNS = (
 )
 TAXONOMY_COLUMNS = tuple(master_table_contract.TAXONOMY_COLUMNS)
 CHECKM2_COLUMNS = tuple(master_table_contract.CHECKM2_COLUMNS) + ("Gcode", "Low_quality")
+CODETTA_COLUMNS = tuple(master_table_contract.CODETTA_COLUMNS)
 SIXTEEN_S_COLUMNS = ("16S",)
 CRISPR_COLUMNS = tuple(master_table_contract.CRISPR_COLUMNS)
 ANI_COLUMNS = tuple(master_table_contract.ANI_COLUMNS)
@@ -97,6 +98,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=[],
         type=Path,
         help="Optional per-lineage BUSCO summary TSV. May be supplied multiple times.",
+    )
+    parser.add_argument(
+        "--codetta-summary",
+        dest="codetta_summary",
+        type=Path,
+        help="Optional per-sample Codetta summary TSV.",
     )
     parser.add_argument(
         "--ccfinder-strains",
@@ -514,6 +521,7 @@ def build_master_row(
     checkm2_index: dict[str, dict[str, str]],
     sixteen_s_index: dict[str, dict[str, str]],
     busco_index: dict[str, dict[str, BuscoLineageSummary]],
+    codetta_index: dict[str, dict[str, str]],
     ccfinder_index: dict[str, dict[str, str]],
     ani_index: dict[str, dict[str, str]],
     append_columns: Sequence[str],
@@ -544,6 +552,10 @@ def build_master_row(
         for column, summary in busco_index[accession].items():
             if column in derived_values:
                 derived_values[column] = summary.value or "NA"
+
+    for column in CODETTA_COLUMNS:
+        if accession in codetta_index and column in codetta_index[accession]:
+            derived_values[column] = codetta_index[accession][column] or "NA"
 
     for column in CRISPR_COLUMNS:
         if accession in ccfinder_index and column in ccfinder_index[accession]:
@@ -594,6 +606,12 @@ def run_build(args: argparse.Namespace) -> None:
         "16S status table",
         validated_accessions,
     )
+    codetta_index = load_optional_accession_index(
+        args.codetta_summary,
+        CODETTA_COLUMNS,
+        "Codetta summary table",
+        validated_accessions,
+    )
     ccfinder_index = load_optional_accession_index(
         args.ccfinder_strains,
         CRISPR_COLUMNS,
@@ -620,6 +638,7 @@ def run_build(args: argparse.Namespace) -> None:
             checkm2_index=checkm2_index,
             sixteen_s_index=sixteen_s_index,
             busco_index=busco_index,
+            codetta_index=codetta_index,
             ccfinder_index=ccfinder_index,
             ani_index=ani_index,
             append_columns=append_columns,

@@ -11,6 +11,7 @@ gcode
 low_quality
 busco_bacillota_odb12_status
 busco_mycoplasmatota_odb12_status
+codetta_status
 prokka_status
 ccfinder_status
 padloc_status

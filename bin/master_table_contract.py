@@ -28,7 +28,8 @@ CHECKM2_COLUMNS = (
     "Total_Coding_Sequences_gcode4",
     "Total_Coding_Sequences_gcode11",
 )
-GCODE_QC_COLUMNS = ("Gcode", "Low_quality", "16S")
+CODETTA_COLUMNS = ("Codetta_Genetic_Code", "Codetta_NCBI_Table_Candidates")
+GCODE_QC_COLUMNS = ("Gcode", *CODETTA_COLUMNS, "Low_quality", "16S")
 CRISPR_COLUMNS = ("CRISPRS", "SPACERS_SUM", "CRISPR_FRAC")
 ANI_COLUMNS = ("Cluster_ID", "Is_Representative", "ANI_to_Representative", "Score")
 DEFAULT_APPEND_COLUMNS_ASSET = (

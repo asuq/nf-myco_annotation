@@ -18,6 +18,12 @@ LOGGER = logging.getLogger(__name__)
 PROKKA_MANIFEST_COLUMNS = ("exit_code", "gff_size", "faa_size")
 PADLOC_MANIFEST_COLUMNS = ("exit_code", "result_file_count")
 EGGNOG_MANIFEST_COLUMNS = ("status", "warnings", "exit_code", "annotations_size", "result_file_count")
+CODETTA_SUMMARY_COLUMNS = (
+    "Codetta_Genetic_Code",
+    "Codetta_NCBI_Table_Candidates",
+    "codetta_status",
+    "warnings",
+)
 STATUS_COLUMNS_WITH_NA_DEFAULT = {"gcode", "low_quality"}
 
 
@@ -79,6 +85,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=[],
         type=Path,
         help="Optional per-lineage BUSCO summary TSV. May be supplied multiple times.",
+    )
+    parser.add_argument(
+        "--codetta-summary",
+        dest="codetta_summary",
+        type=Path,
+        help="Optional per-sample Codetta summary TSV.",
     )
     parser.add_argument(
         "--ccfinder-strains",
@@ -368,6 +380,22 @@ def derive_ccfinder_status(
     return "failed", ["missing_ccfinder_summary"]
 
 
+def derive_codetta_status(
+    accession: str,
+    codetta_index: dict[str, dict[str, str]],
+    codetta_requested: bool,
+) -> tuple[str, list[str]]:
+    """Return Codetta status and warning tokens for one sample."""
+    row = codetta_index.get(accession)
+    if row is not None:
+        warnings = table_helpers.split_tokens(row.get("warnings", ""))
+        status = row.get("codetta_status", "") or "done"
+        return status, warnings
+    if not codetta_requested:
+        return "na", []
+    return "failed", ["missing_codetta_summary"]
+
+
 def detect_atypical_flags(metadata_row: dict[str, str]) -> tuple[bool, bool]:
     """Return the atypical and unverified-source-exception flags."""
     atypical_column = table_helpers.find_column_by_normalised_name(
@@ -573,6 +601,8 @@ def build_status_row(
     sixteen_s_requested: bool,
     busco_index: dict[str, dict[str, table_helpers.BuscoLineageSummary]],
     provided_busco_columns: set[str],
+    codetta_index: dict[str, dict[str, str]],
+    codetta_requested: bool,
     ccfinder_index: dict[str, dict[str, str]],
     ccfinder_requested: bool,
     prokka_index: dict[str, dict[str, str]],
@@ -644,6 +674,14 @@ def build_status_row(
     )
     row.update(busco_status_values)
     warnings.extend(busco_warnings)
+
+    codetta_status, codetta_warnings = derive_codetta_status(
+        accession=accession,
+        codetta_index=codetta_index,
+        codetta_requested=codetta_requested,
+    )
+    row["codetta_status"] = codetta_status
+    warnings.extend(codetta_warnings)
 
     ccfinder_status, ccfinder_warnings = derive_ccfinder_status(
         accession=accession,
@@ -761,6 +799,12 @@ def run_build(args: argparse.Namespace) -> None:
             "16S status table",
             validated_accessions,
         )
+        codetta_index = table_helpers.load_optional_accession_index(
+            args.codetta_summary,
+            CODETTA_SUMMARY_COLUMNS,
+            "Codetta summary table",
+            validated_accessions,
+        )
         ccfinder_index = table_helpers.load_optional_accession_index(
             args.ccfinder_strains,
             table_helpers.CRISPR_COLUMNS,
@@ -824,6 +868,8 @@ def run_build(args: argparse.Namespace) -> None:
                 sixteen_s_requested=args.sixteen_s_status is not None,
                 busco_index=busco_index,
                 provided_busco_columns=provided_busco_columns,
+                codetta_index=codetta_index,
+                codetta_requested=args.codetta_summary is not None,
                 ccfinder_index=ccfinder_index,
                 ccfinder_requested=args.ccfinder_strains is not None,
                 prokka_index=prokka_index,

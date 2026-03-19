@@ -24,6 +24,7 @@ process BUILD_MASTER_TABLE {
     path checkm2
     path sixteen_s_status
     path busco_tables, name: 'busco_tables/busco_table??.tsv'
+    path codetta_summary
     path ccfinder_strains
     path ani_summary
     path assembly_stats
@@ -44,6 +45,7 @@ process BUILD_MASTER_TABLE {
         --checkm2 "${checkm2}" \
         --16s-status "${sixteen_s_status}" \
         ${buscoArgs} \
+        --codetta-summary "${codetta_summary}" \
         --ccfinder-strains "${ccfinder_strains}" \
         --ani "${ani_summary}" \
         --assembly-stats "${assembly_stats}" \
@@ -59,8 +61,8 @@ process BUILD_MASTER_TABLE {
     stub:
     '''
     cat <<'EOF' > master_table.tsv
-    Accession	Tax_ID	16S	Gcode	Low_quality	Cluster_ID
-    sample_a	123	Yes	4	false	cluster_1
+    Accession	Tax_ID	16S	Gcode	Codetta_Genetic_Code	Codetta_NCBI_Table_Candidates	Low_quality	Cluster_ID
+    sample_a	123	Yes	4	FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG	1;11	false	cluster_1
     EOF
     cat <<'EOF' > versions.yml
     "${task.process}":
