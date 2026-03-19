@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -34,6 +36,10 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout,
         )
         self.assertIn("Manual wrapper around bin/run_acceptance_tests.py.", result.stdout)
+        self.assertIn(
+            "Host python3 must be >= 3.12 for the acceptance harness and validators.",
+            result.stdout,
+        )
         self.assertIn(
             "dbprep-slurm and all depend on the current runtime-db helper image and Codetta-aware helper CLIs.",
             result.stdout,
@@ -148,9 +154,44 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         script_text = SCRIPT.read_text(encoding="utf-8")
 
         self.assertIn("preflight_runtime_db_helper_image()", script_text)
+        self.assertIn("preflight_host_python()", script_text)
+        self.assertIn('readonly MINIMUM_HOST_PYTHON="3.12"', script_text)
         self.assertIn("quay.io/asuq1617/nf-myco_db:0.3", script_text)
         self.assertIn("quay.io/asuq1617/nf-myco_db:0.2", script_text)
         self.assertIn("dbprep-slurm | all)", script_text)
+
+    def test_wrapper_rejects_old_host_python_before_running_the_harness(self) -> None:
+        """Fail fast with a clear message when python3 on PATH is too old."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_python = Path(tmpdir) / "python3"
+            fake_python.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [[ \"$1\" == \"--version\" ]]; then\n"
+                "  printf 'Python 3.6.8\\n'\n"
+                "  exit 0\n"
+                "fi\n"
+                "if [[ \"$1\" == \"-c\" ]]; then\n"
+                "  exit 1\n"
+                "fi\n"
+                "exit 99\n",
+                encoding="ascii",
+            )
+            fake_python.chmod(0o755)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{tmpdir}{os.pathsep}{env['PATH']}"
+            result = subprocess.run(
+                ["bash", str(SCRIPT), "prepare"],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=env,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("host python3 must be >= 3.12", result.stderr)
+            self.assertIn("Python 3.6.8", result.stderr)
 
     def test_wrapper_dry_run_dbprep_slurm_preserves_runtime_arguments(self) -> None:
         """Forward dbprep-slurm arguments unchanged during dry-run output."""
