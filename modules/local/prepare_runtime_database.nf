@@ -5,9 +5,10 @@ process PREP_TAXDUMP_DATABASE {
     tag "taxdump"
     label 'process_medium'
     label 'prep_taxdump_database'
+    stageInMode 'symlink'
 
     input:
-    tuple val(destination), val(download_enabled), val(version), val(scratch_root), val(force)
+    tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(version), path(scratch_root_path), val(force)
 
     output:
     path('taxdump_report.tsv'), emit: report
@@ -15,11 +16,13 @@ process PREP_TAXDUMP_DATABASE {
 
     script:
     """
-    script_path="/usr/local/bin/prepare_runtime_databases.py"
+    destination_path="${destination_parent}/${destination_name}"
+    script_path="\$(command -v prepare_runtime_databases.py)"
+    python_path="\$(command -v python3)"
 
     helper_args=(
         --taxdump-dest
-        "${destination}"
+        "\${destination_path}"
         --report
         taxdump_report.tsv
     )
@@ -36,13 +39,11 @@ process PREP_TAXDUMP_DATABASE {
         helper_args+=(--taxdump-version "${version}")
     fi
 
-    if [[ -n "${scratch_root ?: ''}" ]]; then
-        helper_args+=(--scratch-root "${scratch_root}")
-    fi
+    helper_args+=(--scratch-root "${scratch_root_path}")
 
-    /usr/local/bin/python3 "\${script_path}" "\${helper_args[@]}"
+    "\${python_path}" "\${script_path}" "\${helper_args[@]}"
 
-    python_version="\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
+    python_version="\$("\${python_path}" --version 2>&1 | sed 's/^Python //')"
     printf '%s\n' \
         '"${task.process}":' \
         "  python: \"\${python_version}\"" \
@@ -76,9 +77,10 @@ process PREP_CODETTA_DATABASE {
     tag "codetta"
     label 'process_medium'
     label 'prep_codetta_database'
+    stageInMode 'symlink'
 
     input:
-    tuple val(destination), val(download_enabled), val(scratch_root), val(force)
+    tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), path(scratch_root_path), val(force)
 
     output:
     path('codetta_report.tsv'), emit: report
@@ -86,11 +88,13 @@ process PREP_CODETTA_DATABASE {
 
     script:
     """
-    script_path="/usr/local/bin/prepare_runtime_databases.py"
+    destination_path="${destination_parent}/${destination_name}"
+    script_path="\$(command -v prepare_runtime_databases.py)"
+    python_path="\$(command -v python3)"
 
     helper_args=(
         --codetta-dest
-        "${destination}"
+        "\${destination_path}"
         --report
         codetta_report.tsv
     )
@@ -103,13 +107,11 @@ process PREP_CODETTA_DATABASE {
         helper_args+=(--force)
     fi
 
-    if [[ -n "${scratch_root ?: ''}" ]]; then
-        helper_args+=(--scratch-root "${scratch_root}")
-    fi
+    helper_args+=(--scratch-root "${scratch_root_path}")
 
-    /usr/local/bin/python3 "\${script_path}" "\${helper_args[@]}"
+    "\${python_path}" "\${script_path}" "\${helper_args[@]}"
 
-    python_version="\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
+    python_version="\$("\${python_path}" --version 2>&1 | sed 's/^Python //')"
     printf '%s\n' \
         '"${task.process}":' \
         "  python: \"\${python_version}\"" \

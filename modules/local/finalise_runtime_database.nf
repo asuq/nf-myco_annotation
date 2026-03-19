@@ -5,9 +5,10 @@ process FINALISE_RUNTIME_DATABASE {
     tag "${component}"
     label 'process_single'
     label 'finalise_runtime_database'
+    stageInMode 'symlink'
 
     input:
-    tuple val(component), val(destination), path(mode_file), val(source_label), path(lineages_file)
+    tuple val(component), val(destination), path(destination_parent), val(destination_name), path(mode_file), val(source_label), path(lineages_file)
 
     output:
     path("${component}_report.tsv"), emit: report
@@ -15,14 +16,16 @@ process FINALISE_RUNTIME_DATABASE {
 
     script:
     """
-    script_path="/usr/local/bin/finalise_runtime_database.py"
+    destination_path="${destination_parent}/${destination_name}"
+    script_path="\$(command -v finalise_runtime_database.py)"
+    python_path="\$(command -v python3)"
     mode="\$(tr -d '\n' < "${mode_file}")"
 
     helper_args=(
         --component
         "${component}"
         --destination
-        "${destination}"
+        "\${destination_path}"
         --report
         "${component}_report.tsv"
         --mode
@@ -36,9 +39,9 @@ process FINALISE_RUNTIME_DATABASE {
         helper_args+=(--busco-lineage "\${lineage}")
     done < "${lineages_file}"
 
-    /usr/local/bin/python3 "\${script_path}" "\${helper_args[@]}"
+    "\${python_path}" "\${script_path}" "\${helper_args[@]}"
 
-    python_version="\$(/usr/local/bin/python3 --version 2>&1 | sed 's/^Python //')"
+    python_version="\$("\${python_path}" --version 2>&1 | sed 's/^Python //')"
     {
         printf '"%s":\n' "${task.process}"
         printf '  python: "%s"\n' "\${python_version}"

@@ -5,12 +5,13 @@ process DOWNLOAD_BUSCO_DATABASES {
     tag "busco"
     label 'process_medium'
     label 'download_busco_databases'
+    stageInMode 'symlink'
 
     input:
-    tuple val(destination), val(download_enabled), val(lineages), val(force)
+    tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(lineages), val(force)
 
     output:
-    tuple val('busco_root'), val(destination), path('prep_mode.txt'), val('native_download'), path('lineages.txt'), emit: finalise_input
+    tuple val('busco_root'), val(destination), path(destination_parent), val(destination_name), path('prep_mode.txt'), val('native_download'), path('lineages.txt'), emit: finalise_input
     path 'versions.yml', emit: versions
 
     script:
@@ -18,7 +19,7 @@ process DOWNLOAD_BUSCO_DATABASES {
         "'${value.replace("'", "'\"'\"'")}'"
     }.join(' ')
     """
-    destination_path="${destination}"
+    destination_path="${destination_parent}/${destination_name}"
     mode="prepared"
     lineages=(${renderedLineagesShell})
 

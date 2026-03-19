@@ -32,9 +32,24 @@ workflow {
     }
 
     def normaliseDestination = { rawValue ->
-        rawValue ? new File(rawValue.toString()).absolutePath : null
+        rawValue ? new File(rawValue.toString()).canonicalFile.absolutePath : null
     }
-
+    def buildMountedDestination = { destination ->
+        if (!destination) {
+            return null
+        }
+        def destinationFile = new File(destination)
+        def parentFile = destinationFile.getParentFile()
+        if (parentFile == null) {
+            error "Runtime database destination must have a parent directory: ${destination}"
+        }
+        parentFile.mkdirs()
+        return [
+            destination,
+            file(parentFile.absolutePath),
+            destinationFile.getName(),
+        ]
+    }
     def destinations = [
         taxdump   : normaliseDestination.call(params.taxdump),
         checkm2   : normaliseDestination.call(params.checkm2_db),
@@ -42,6 +57,9 @@ workflow {
         codetta   : normaliseDestination.call(params.codetta_db),
         eggnog    : normaliseDestination.call(params.eggnog_db),
     ]
+    def mountedDestinations = destinations.collectEntries { component, destination ->
+        [(component): buildMountedDestination.call(destination)]
+    }
     if (!destinations.values().any { it != null }) {
         error "At least one database destination must be set for prepare_databases.nf."
     }
@@ -49,27 +67,47 @@ workflow {
     def downloadEnabled = parseBoolean.call(params.download_missing_databases)
     def forceRebuild = parseBoolean.call(params.force_runtime_database_rebuild)
     def scratchRoot = params.runtime_db_scratch_root
-        ? new File(params.runtime_db_scratch_root.toString()).absolutePath
+        ? new File(params.runtime_db_scratch_root.toString()).canonicalFile.absolutePath
         : null
+    def buildMountedScratchRoot = { destinationParent ->
+        if (scratchRoot != null) {
+            def scratchFile = new File(scratchRoot)
+            scratchFile.mkdirs()
+            return file(scratchFile.absolutePath)
+        }
+        return destinationParent
+    }
 
     taxdumpRequest = destinations.taxdump
         ? Channel.of(
             tuple(
-                destinations.taxdump,
+                mountedDestinations.taxdump[0],
+                mountedDestinations.taxdump[1],
+                mountedDestinations.taxdump[2],
                 downloadEnabled,
                 params.taxdump_version,
-                scratchRoot,
+                buildMountedScratchRoot.call(mountedDestinations.taxdump[1]),
                 forceRebuild,
             )
         )
         : Channel.empty()
     checkm2Request = destinations.checkm2
-        ? Channel.of(tuple(destinations.checkm2, downloadEnabled, forceRebuild))
+        ? Channel.of(
+            tuple(
+                mountedDestinations.checkm2[0],
+                mountedDestinations.checkm2[1],
+                mountedDestinations.checkm2[2],
+                downloadEnabled,
+                forceRebuild,
+            )
+        )
         : Channel.empty()
     buscoRequest = destinations.busco_root
         ? Channel.of(
             tuple(
-                destinations.busco_root,
+                mountedDestinations.busco_root[0],
+                mountedDestinations.busco_root[1],
+                mountedDestinations.busco_root[2],
                 downloadEnabled,
                 params.busco_lineages as List<String>,
                 forceRebuild,
@@ -79,15 +117,25 @@ workflow {
     codettaRequest = destinations.codetta
         ? Channel.of(
             tuple(
-                destinations.codetta,
+                mountedDestinations.codetta[0],
+                mountedDestinations.codetta[1],
+                mountedDestinations.codetta[2],
                 downloadEnabled,
-                scratchRoot,
+                buildMountedScratchRoot.call(mountedDestinations.codetta[1]),
                 forceRebuild,
             )
         )
         : Channel.empty()
     eggnogRequest = destinations.eggnog
-        ? Channel.of(tuple(destinations.eggnog, downloadEnabled, forceRebuild))
+        ? Channel.of(
+            tuple(
+                mountedDestinations.eggnog[0],
+                mountedDestinations.eggnog[1],
+                mountedDestinations.eggnog[2],
+                downloadEnabled,
+                forceRebuild,
+            )
+        )
         : Channel.empty()
     RUNTIME_DATABASE_PREP(
         taxdumpRequest,

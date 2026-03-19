@@ -5,17 +5,18 @@ process DOWNLOAD_EGGNOG_DATABASE {
     tag "eggnog"
     label 'process_high'
     label 'download_eggnog_database'
+    stageInMode 'symlink'
 
     input:
-    tuple val(destination), val(download_enabled), val(force)
+    tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(force)
 
     output:
-    tuple val('eggnog'), val(destination), path('prep_mode.txt'), val('native_download'), path('lineages.txt'), emit: finalise_input
+    tuple val('eggnog'), val(destination), path(destination_parent), val(destination_name), path('prep_mode.txt'), val('native_download'), path('lineages.txt'), emit: finalise_input
     path 'versions.yml', emit: versions
 
     script:
     """
-    destination_path="${destination}"
+    destination_path="${destination_parent}/${destination_name}"
     mode="prepared"
     expected_files=("eggnog.db" "eggnog_proteins.dmnd")
 
