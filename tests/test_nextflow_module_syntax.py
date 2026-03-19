@@ -599,6 +599,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             checkm2_module_text,
         )
         self.assertIn('destination_path="${destination_parent}/${destination_name}"', checkm2_module_text)
+        self.assertIn('retry_marker="${destination_parent}/.nf_myco_checkm2_download_in_progress"', checkm2_module_text)
+        self.assertIn('if [[ "${force}" != "true" && ! -f "\\${retry_marker}" ]]; then', checkm2_module_text)
+        self.assertIn(': > "\\${retry_marker}"', checkm2_module_text)
+        self.assertIn('rm -f "\\${retry_marker}"', checkm2_module_text)
         self.assertIn('normalise_download_layout() {', checkm2_module_text)
         self.assertIn('nested_root="\\$1/CheckM2_database"', checkm2_module_text)
         self.assertIn("stageInMode 'symlink'", busco_module_text)
@@ -607,6 +611,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             busco_module_text,
         )
         self.assertIn('destination_path="${destination_parent}/${destination_name}"', busco_module_text)
+        self.assertIn('retry_marker="${destination_parent}/.nf_myco_busco_download_in_progress"', busco_module_text)
+        self.assertIn('if [[ "${force}" != "true" && ! -f "\\${retry_marker}" ]]; then', busco_module_text)
+        self.assertIn(': > "\\${retry_marker}"', busco_module_text)
+        self.assertIn('rm -f "\\${retry_marker}"', busco_module_text)
         self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
         self.assertIn("stageInMode 'symlink'", eggnog_module_text)
         self.assertIn(
@@ -614,6 +622,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             eggnog_module_text,
         )
         self.assertIn('destination_path="${destination_parent}/${destination_name}"', eggnog_module_text)
+        self.assertIn('retry_marker="${destination_parent}/.nf_myco_eggnog_download_in_progress"', eggnog_module_text)
+        self.assertIn('if [[ "${force}" != "true" && ! -f "\\${retry_marker}" ]]; then', eggnog_module_text)
+        self.assertIn(': > "\\${retry_marker}"', eggnog_module_text)
+        self.assertIn('rm -f "\\${retry_marker}"', eggnog_module_text)
         self.assertIn('script_path="\\$(command -v download_eggnog_data.py)"', eggnog_module_text)
         self.assertIn('python "\\${script_path}" --data_dir "\\${destination_path}" -y', eggnog_module_text)
         self.assertNotIn('download_eggnog_data.py.patched', eggnog_module_text)
