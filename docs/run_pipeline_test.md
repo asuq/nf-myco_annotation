@@ -12,6 +12,11 @@ The wrapper does not re-implement pipeline logic. It forwards work to the
 acceptance harness, which remains the single source of truth for validation,
 Nextflow command construction, and output checks.
 
+The wrapper now preflights the host `python3` interpreter before it calls the
+acceptance harness. If `python3` on the login node is older than `3.12`, the
+wrapper stops immediately with a direct operator message instead of failing
+later with a raw Python `SyntaxError`.
+
 For runtime database preparation on HPC, prefer the wrapper's `dbprep-slurm`
 mode. The wrapper's `prepare` mode only prepares the tracked acceptance cohort
 and its cached source genomes.
@@ -33,6 +38,10 @@ For OIST or any other full-eggNOG HPC validation, use this sequence:
 1. `bin/run_pipeline_test.sh prepare` on the login node
 2. `bin/run_pipeline_test.sh dbprep-slurm` on SLURM
 3. raw `nextflow run . -profile oist` for the real pipeline run
+
+Do not start with `all` on a fresh HPC environment. First make `prepare`,
+then `dbprep-slurm`, then the tracked real pipeline run pass. Only use `all`
+after those stages succeed.
 
 For the broader OIST campaign through the medium real-data case, use the
 dedicated wrapper:
@@ -88,7 +97,7 @@ bin/run_pipeline_test.sh <mode> --help
 Always required:
 
 - `bash`
-- `python3`
+- `python3 >= 3.12`
 
 Required by pipeline-running modes:
 
@@ -110,6 +119,19 @@ The wrapper does not prepare runtime databases such as taxdump, CheckM2,
 Codetta, BUSCO, or eggNOG. Prepare those separately before real-data runs when
 they are not already available. PADLOC uses the fixed database bundled in the
 default PADLOC image.
+
+If an HPC login node still exposes an older interpreter such as `Python 3.6.8`,
+load a newer module or move a Python `3.12` installation to the front of
+`PATH` before using the wrapper:
+
+```bash
+which python3
+python3 --version
+module avail python
+module load python/3.12
+hash -r
+python3 --version
+```
 
 Acceptance-backed `local`, `slurm`, and `all` runs now use the composable
 `debug` profile by default. That profile restricts eggNOG to the tracked smoke

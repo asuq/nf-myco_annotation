@@ -430,12 +430,29 @@ mkdir -p "$ACCEPT_ROOT" "$DB_ROOT" "$RESULT_ROOT" "$SINGULARITY_CACHE"
 3. Run preflight checks.
 
 ```bash
+which python3
 python3 --version
 nextflow -version
 singularity --version
 sbatch --version
 nextflow config -profile oist >/dev/null
 ```
+
+The host-side wrappers and validators require `python3 >= 3.12`. If the login
+node still exposes an older interpreter such as `Python 3.6.8`, load a newer
+module or adjust `PATH` before you use the wrappers:
+
+```bash
+module avail python
+module load python/3.12
+hash -r
+which python3
+python3 --version
+```
+
+If the login node cannot provide `python3 >= 3.12`, skip the wrappers and run
+raw Nextflow directly instead. In that fallback path you lose the wrapper-level
+acceptance checks, but the actual pipeline tasks still run inside containers.
 
 4. Prepare the tracked 9-sample cohort on the HPC login node.
 
@@ -464,6 +481,7 @@ Set the explicit HPC destination directories first:
 ```bash
 export TAXDUMP_DIR=$DB_ROOT/ncbi_taxdump_20240914
 export CHECKM2_DIR=$DB_ROOT/checkm2/CheckM2_database
+export CODETTA_DIR=$DB_ROOT/codetta/Pfam-A_enone
 export BUSCO_DIR=$DB_ROOT/busco
 export EGGNOG_DIR=$DB_ROOT/Eggnog_db/Eggnog_Diamond_db
 ```
@@ -474,6 +492,7 @@ bin/run_pipeline_test.sh dbprep-slurm \
   --work-root "$ACCEPT_ROOT" \
   --taxdump "$TAXDUMP_DIR" \
   --checkm2-db "$CHECKM2_DIR" \
+  --codetta-db "$CODETTA_DIR" \
   --busco-db "$BUSCO_DIR" \
   --eggnog-db "$EGGNOG_DIR" \
   --singularity-cache-dir "$SINGULARITY_CACHE"
@@ -495,6 +514,12 @@ Validate the prepared DB directories:
   - `$TAXDUMP_DIR/nodes.dmp`
 - CheckM2:
   - exactly one top-level `*.dmnd` in `$CHECKM2_DIR`
+- Codetta:
+  - `$CODETTA_DIR/Pfam-A_enone.hmm`
+  - `$CODETTA_DIR/Pfam-A_enone.hmm.h3f`
+  - `$CODETTA_DIR/Pfam-A_enone.hmm.h3i`
+  - `$CODETTA_DIR/Pfam-A_enone.hmm.h3m`
+  - `$CODETTA_DIR/Pfam-A_enone.hmm.h3p`
 - BUSCO:
   - `$BUSCO_DIR/bacillota_odb12/dataset.cfg`
   - `$BUSCO_DIR/mycoplasmatota_odb12/dataset.cfg`
@@ -511,6 +536,24 @@ If this step fails, bring back:
 - `.nextflow.log`
 - `.command.sh`, `.command.out`, `.command.err`, and `.exitcode` from the failed task
 
+Fallback when host Python cannot be fixed:
+
+```bash
+nextflow run prepare_databases.nf -profile oist \
+  --taxdump "$TAXDUMP_DIR" \
+  --checkm2_db "$CHECKM2_DIR" \
+  --codetta_db "$CODETTA_DIR" \
+  --busco_db "$BUSCO_DIR" \
+  --eggnog_db "$EGGNOG_DIR" \
+  --download_missing_databases true \
+  --runtime_db_scratch_root "$DB_ROOT/.scratch" \
+  --singularity_cache_dir "$SINGULARITY_CACHE" \
+  --outdir "$ACCEPT_ROOT/dbprep_manual"
+```
+
+That path still prepares the databases, but it skips the wrapper-level
+acceptance validation.
+
 6. Run one optional structural smoke test.
 
 ```bash
@@ -519,6 +562,9 @@ nextflow run . -profile test -stub-run --outdir "$RESULT_ROOT/stub"
 
 7. Run the tracked 9-sample cohort on OIST with full eggNOG.
 
+Do not jump straight to `all` on a new HPC setup. Make this tracked run pass
+first, then move on to the full scripted campaign.
+
 ```bash
 nextflow run . -profile oist \
   -work-dir "$RESULT_ROOT/p1/work" \
@@ -526,6 +572,7 @@ nextflow run . -profile oist \
   --metadata "$ACCEPT_ROOT/generated/metadata.tsv" \
   --taxdump "$TAXDUMP_DIR" \
   --checkm2_db "$CHECKM2_DIR" \
+  --codetta_db "$CODETTA_DIR" \
   --busco_db "$BUSCO_DIR" \
   --eggnog_db "$EGGNOG_DIR" \
   --singularity_cache_dir "$SINGULARITY_CACHE" \
@@ -581,6 +628,13 @@ Then run the medium case with:
 
 ```bash
 bin/run_oist_hpc_matrix.sh --hpc-root "$HPC_ROOT" p2
+```
+
+Only after `prepare`, `dbprep-slurm`, and the tracked `p1` run succeed should
+you launch the full scripted campaign:
+
+```bash
+bin/run_oist_hpc_matrix.sh --hpc-root "$HPC_ROOT" all
 ```
 
 9. If a run fails, download the useful artefacts back to local.
