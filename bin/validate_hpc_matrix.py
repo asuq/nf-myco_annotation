@@ -15,6 +15,7 @@ from prepare_runtime_databases import (
     PrepareRuntimeDatabasesError,
     build_busco_validator,
     validate_checkm2,
+    validate_codetta,
     validate_eggnog,
     validate_taxdump,
 )
@@ -51,6 +52,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     dbprep_parser.add_argument("--taxdump", type=Path, default=None)
     dbprep_parser.add_argument("--checkm2-db", type=Path, default=None)
+    dbprep_parser.add_argument("--codetta-db", type=Path, default=None)
     dbprep_parser.add_argument("--busco-db", type=Path, default=None)
     dbprep_parser.add_argument("--eggnog-db", type=Path, default=None)
     dbprep_parser.add_argument(
@@ -229,7 +231,7 @@ def assert_expected_args(args_path: Path, expected_args: Sequence[str]) -> None:
     if not expected_args:
         return
     contents = args_path.read_text(encoding="utf-8")
-    db_flags = {"--taxdump", "--checkm2_db", "--busco_db", "--eggnog_db"}
+    db_flags = {"--taxdump", "--checkm2_db", "--codetta_db", "--busco_db", "--eggnog_db"}
     for flag in expected_args:
         if flag not in contents:
             raise ValidateHpcMatrixError(f"Missing expected flag {flag} in {args_path}")
@@ -256,6 +258,9 @@ def validate_dbprep_component(
     if component == "checkm2":
         validate_checkm2(destination)
         return
+    if component == "codetta":
+        validate_codetta(destination)
+        return
     if component == "busco_root":
         validator = build_busco_validator(
             run_acceptance_tests.DEFAULT_DBPREP_BUSCO_LINEAGES
@@ -279,6 +284,7 @@ def validate_dbprep(args: argparse.Namespace) -> None:
     destinations = {
         "taxdump": args.taxdump,
         "checkm2": args.checkm2_db,
+        "codetta": args.codetta_db,
         "busco_root": args.busco_db,
         "eggnog": args.eggnog_db,
     }

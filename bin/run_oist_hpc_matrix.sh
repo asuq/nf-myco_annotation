@@ -44,6 +44,7 @@ Modes:
 
 Notes:
   - Resource settings come from the coded OIST profile and process defaults.
+  - Runtime database gates cover taxdump, CheckM2, Codetta, BUSCO, and eggNOG.
   - PADLOC is not part of runtime database prep because its fixed image bundles the DB.
 EOF
 }
@@ -167,6 +168,7 @@ require_path() {
 require_golden_db_tree() {
     require_path "${TAXDUMP_DIR}/${DB_READY_MARKER}" "taxdump ready marker"
     require_path "${CHECKM2_DIR}/${DB_READY_MARKER}" "CheckM2 ready marker"
+    require_path "${CODETTA_DIR}/${DB_READY_MARKER}" "Codetta ready marker"
     require_path "${BUSCO_DIR}/${DB_READY_MARKER}" "BUSCO ready marker"
     require_path "${EGGNOG_DIR}/${DB_READY_MARKER}" "eggNOG ready marker"
 }
@@ -188,6 +190,7 @@ set_dbfull_expected_status() {
     local -a db_roots=(
         "taxdump:${TAXDUMP_DIR}"
         "checkm2:${CHECKM2_DIR}"
+        "codetta:${CODETTA_DIR}"
         "busco_root:${BUSCO_DIR}"
         "eggnog:${EGGNOG_DIR}"
     )
@@ -236,6 +239,7 @@ run_dbprep_wrapper() {
         --work-root "${ACCEPT_ROOT}" \
         --taxdump "${TAXDUMP_DIR}" \
         --checkm2-db "${CHECKM2_DIR}" \
+        --codetta-db "${CODETTA_DIR}" \
         --busco-db "${BUSCO_DIR}" \
         --eggnog-db "${EGGNOG_DIR}" \
         --singularity-cache-dir "${SINGULARITY_CACHE}"
@@ -245,15 +249,18 @@ run_dbprep_wrapper() {
         --results-dir "${ACCEPT_ROOT}/runs/dbprep-slurm/results" \
         --taxdump "${TAXDUMP_DIR}" \
         --checkm2-db "${CHECKM2_DIR}" \
+        --codetta-db "${CODETTA_DIR}" \
         --busco-db "${BUSCO_DIR}" \
         --eggnog-db "${EGGNOG_DIR}" \
         --expected-component taxdump \
         --expected-component checkm2 \
+        --expected-component codetta \
         --expected-component busco_root \
         --expected-component eggnog \
         --expected-status "${expected_status}" \
         --expected-arg=--taxdump \
         --expected-arg=--checkm2_db \
+        --expected-arg=--codetta_db \
         --expected-arg=--busco_db \
         --expected-arg=--eggnog_db
 }
@@ -279,10 +286,15 @@ seed_valid_without_marker_cases() {
     local root="$1"
 
     run_or_print mkdir -p "${root}/checkm2" "${root}/busco/bacillota_odb12" \
-        "${root}/busco/mycoplasmatota_odb12" "${root}/eggnog"
+        "${root}/busco/mycoplasmatota_odb12" "${root}/codetta" "${root}/eggnog"
     run_or_print cp "${CHECKM2_DIR}/"*.dmnd "${root}/checkm2/"
     run_or_print cp "${BUSCO_DIR}/bacillota_odb12/dataset.cfg" "${root}/busco/bacillota_odb12/"
     run_or_print cp "${BUSCO_DIR}/mycoplasmatota_odb12/dataset.cfg" "${root}/busco/mycoplasmatota_odb12/"
+    run_or_print cp "${CODETTA_DIR}/Pfam-A_enone.hmm" "${root}/codetta/"
+    run_or_print cp "${CODETTA_DIR}/Pfam-A_enone.hmm.h3f" "${root}/codetta/"
+    run_or_print cp "${CODETTA_DIR}/Pfam-A_enone.hmm.h3i" "${root}/codetta/"
+    run_or_print cp "${CODETTA_DIR}/Pfam-A_enone.hmm.h3m" "${root}/codetta/"
+    run_or_print cp "${CODETTA_DIR}/Pfam-A_enone.hmm.h3p" "${root}/codetta/"
     run_or_print cp "${EGGNOG_DIR}/eggnog.db" "${root}/eggnog/"
     run_or_print cp "${EGGNOG_DIR}/eggnog_proteins.dmnd" "${root}/eggnog/"
 }
@@ -313,6 +325,18 @@ run_db_matrix() {
         --expected-component checkm2 \
         --expected-status prepared \
         --expected-arg=--checkm2_db
+    announce_test "db-matrix" "db3_valid_without_marker/codetta"
+    run_partial_prepare_case \
+        "${valid_root}/work_codetta" \
+        "${valid_root}/results_codetta" \
+        --codetta_db "${valid_root}/codetta" \
+        --download_missing_databases true
+    run_or_print python3 "${VALIDATOR}" dbprep \
+        --results-dir "${valid_root}/results_codetta" \
+        --codetta-db "${valid_root}/codetta" \
+        --expected-component codetta \
+        --expected-status prepared \
+        --expected-arg=--codetta_db
     announce_test "db-matrix" "db3_valid_without_marker/busco"
     run_partial_prepare_case \
         "${valid_root}/work_busco" \
@@ -362,6 +386,18 @@ run_db_matrix() {
         --expected-component checkm2 \
         --expected-status prepared \
         --expected-arg=--checkm2_db
+    announce_test "db-matrix" "db4_codetta_missing_with_download"
+    run_partial_prepare_case \
+        "${case_root}/db4_codetta/work" \
+        "${case_root}/db4_codetta/results" \
+        --codetta_db "${case_root}/db4_codetta/db/codetta/Pfam-A_enone" \
+        --download_missing_databases true
+    run_or_print python3 "${VALIDATOR}" dbprep \
+        --results-dir "${case_root}/db4_codetta/results" \
+        --codetta-db "${case_root}/db4_codetta/db/codetta/Pfam-A_enone" \
+        --expected-component codetta \
+        --expected-status prepared \
+        --expected-arg=--codetta_db
     announce_test "db-matrix" "db4_busco_missing_with_download"
     run_partial_prepare_case \
         "${case_root}/db4_busco/work" \
@@ -407,6 +443,16 @@ run_db_matrix() {
         --checkm2_db "${case_root}/db5_checkm2/db/checkm2/CheckM2_database" \
         --outdir "${case_root}/db5_checkm2/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db5_codetta_missing_no_download"
+    fail_log="${case_root}/db5_codetta_missing_no_download.log"
+    run_expect_failure \
+        "No local source was supplied for codetta, and remote download is disabled." \
+        "${fail_log}" \
+        nextflow run prepare_databases.nf -profile oist \
+        -work-dir "${case_root}/db5_codetta/work" \
+        --codetta_db "${case_root}/db5_codetta/db/codetta/Pfam-A_enone" \
+        --outdir "${case_root}/db5_codetta/results" \
+        --singularity_cache_dir "${SINGULARITY_CACHE}"
     announce_test "db-matrix" "db5_busco_missing_no_download"
     fail_log="${case_root}/db5_busco_missing_no_download.log"
     run_expect_failure \
@@ -429,9 +475,10 @@ run_db_matrix() {
         --singularity_cache_dir "${SINGULARITY_CACHE}"
 
     run_or_print mkdir -p "${case_root}/db6_taxdump/db" "${case_root}/db6_checkm2/db/checkm2" \
-        "${case_root}/db6_busco/db" "${case_root}/db6_eggnog/db/Eggnog_db"
+        "${case_root}/db6_codetta/db/codetta" "${case_root}/db6_busco/db" "${case_root}/db6_eggnog/db/Eggnog_db"
     run_or_print touch "${case_root}/db6_taxdump/db/ncbi_taxdump_20240914"
     run_or_print touch "${case_root}/db6_checkm2/db/checkm2/CheckM2_database"
+    run_or_print touch "${case_root}/db6_codetta/db/codetta/Pfam-A_enone"
     run_or_print touch "${case_root}/db6_busco/db/busco"
     run_or_print touch "${case_root}/db6_eggnog/db/Eggnog_db/Eggnog_Diamond_db"
     announce_test "db-matrix" "db6_taxdump_file_not_directory"
@@ -455,6 +502,17 @@ run_db_matrix() {
         --checkm2_db "${case_root}/db6_checkm2/db/checkm2/CheckM2_database" \
         --download_missing_databases true \
         --outdir "${case_root}/db6_checkm2/results" \
+        --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db6_codetta_file_not_directory"
+    fail_log="${case_root}/db6_codetta_file.log"
+    run_expect_failure \
+        "Destination must be a directory for codetta" \
+        "${fail_log}" \
+        nextflow run prepare_databases.nf -profile oist \
+        -work-dir "${case_root}/db6_codetta/work" \
+        --codetta_db "${case_root}/db6_codetta/db/codetta/Pfam-A_enone" \
+        --download_missing_databases true \
+        --outdir "${case_root}/db6_codetta/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
     announce_test "db-matrix" "db6_busco_file_not_directory"
     fail_log="${case_root}/db6_busco_file.log"
@@ -480,9 +538,11 @@ run_db_matrix() {
         --singularity_cache_dir "${SINGULARITY_CACHE}"
 
     run_or_print mkdir -p "${case_root}/db7_checkm2/db/checkm2/CheckM2_database"
+    run_or_print mkdir -p "${case_root}/db7_codetta/db/codetta/Pfam-A_enone"
     run_or_print mkdir -p "${case_root}/db7_busco/db/busco/bacillota_odb12"
     run_or_print mkdir -p "${case_root}/db7_eggnog/db/Eggnog_db/Eggnog_Diamond_db"
     run_or_print touch "${case_root}/db7_checkm2/db/checkm2/CheckM2_database/broken.txt"
+    run_or_print touch "${case_root}/db7_codetta/db/codetta/Pfam-A_enone/broken.txt"
     run_or_print touch "${case_root}/db7_busco/db/busco/bacillota_odb12/dataset.cfg"
     run_or_print touch "${case_root}/db7_eggnog/db/Eggnog_db/Eggnog_Diamond_db/broken.txt"
     announce_test "db-matrix" "db7_checkm2_invalid_no_force"
@@ -495,6 +555,17 @@ run_db_matrix() {
         --checkm2_db "${case_root}/db7_checkm2/db/checkm2/CheckM2_database" \
         --download_missing_databases true \
         --outdir "${case_root}/db7_checkm2/results" \
+        --singularity_cache_dir "${SINGULARITY_CACHE}"
+    announce_test "db-matrix" "db7_codetta_invalid_no_force"
+    fail_log="${case_root}/db7_codetta_invalid.log"
+    run_expect_failure \
+        "Destination is invalid or partially prepared for codetta" \
+        "${fail_log}" \
+        nextflow run prepare_databases.nf -profile oist \
+        -work-dir "${case_root}/db7_codetta/work" \
+        --codetta_db "${case_root}/db7_codetta/db/codetta/Pfam-A_enone" \
+        --download_missing_databases true \
+        --outdir "${case_root}/db7_codetta/results" \
         --singularity_cache_dir "${SINGULARITY_CACHE}"
     announce_test "db-matrix" "db7_busco_invalid_no_force"
     fail_log="${case_root}/db7_busco_invalid.log"
@@ -532,6 +603,19 @@ run_db_matrix() {
         --expected-component checkm2 \
         --expected-status prepared \
         --expected-arg=--checkm2_db
+    announce_test "db-matrix" "db8_codetta_invalid_with_force"
+    run_partial_prepare_case \
+        "${case_root}/db7_codetta/work_force" \
+        "${case_root}/db7_codetta/results_force" \
+        --codetta_db "${case_root}/db7_codetta/db/codetta/Pfam-A_enone" \
+        --download_missing_databases true \
+        --force_runtime_database_rebuild true
+    run_or_print python3 "${VALIDATOR}" dbprep \
+        --results-dir "${case_root}/db7_codetta/results_force" \
+        --codetta-db "${case_root}/db7_codetta/db/codetta/Pfam-A_enone" \
+        --expected-component codetta \
+        --expected-status prepared \
+        --expected-arg=--codetta_db
     announce_test "db-matrix" "db8_busco_invalid_with_force"
     run_partial_prepare_case \
         "${case_root}/db7_busco/work_force" \
@@ -635,6 +719,7 @@ run_real_case() {
         --metadata "${metadata_tsv}" \
         --taxdump "${TAXDUMP_DIR}" \
         --checkm2_db "${CHECKM2_DIR}" \
+        --codetta_db "${CODETTA_DIR}" \
         --busco_db "${BUSCO_DIR}" \
         --eggnog_db "${EGGNOG_DIR}" \
         "${gcode_args[@]}" \
@@ -791,6 +876,7 @@ main() {
     fi
     TAXDUMP_DIR="${DB_ROOT}/ncbi_taxdump_20240914"
     CHECKM2_DIR="${DB_ROOT}/checkm2/CheckM2_database"
+    CODETTA_DIR="${DB_ROOT}/codetta/Pfam-A_enone"
     BUSCO_DIR="${DB_ROOT}/busco"
     EGGNOG_DIR="${DB_ROOT}/Eggnog_db/Eggnog_Diamond_db"
 

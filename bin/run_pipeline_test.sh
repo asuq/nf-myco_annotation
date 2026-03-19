@@ -5,6 +5,9 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly RUNNER="bin/run_acceptance_tests.py"
 readonly VALID_MODES="prepare unit stub local slurm dbprep-slurm all"
+readonly BASE_CONFIG="${REPO_ROOT}/conf/base.config"
+readonly CURRENT_RUNTIME_DB_HELPER_IMAGE="quay.io/asuq1617/nf-myco_db:0.3"
+readonly STALE_RUNTIME_DB_HELPER_IMAGE="quay.io/asuq1617/nf-myco_db:0.2"
 
 show_usage() {
     cat <<'EOF'
@@ -21,6 +24,7 @@ Notes:
   - Arguments after the mode are forwarded unchanged to bin/run_acceptance_tests.py.
   - Use "<mode> --help" to see the delegated harness help for that mode.
   - Real-data modes still use params.ccfinder_container from pipeline config.
+  - dbprep-slurm and all depend on the current runtime-db helper image and Codetta-aware helper CLIs.
 EOF
 }
 
@@ -45,6 +49,15 @@ print_command() {
         parts+=("${escaped}")
     done
     printf '%s\n' "${parts[*]}"
+}
+
+preflight_runtime_db_helper_image() {
+    if grep -Fq "${STALE_RUNTIME_DB_HELPER_IMAGE}" "${BASE_CONFIG}"; then
+        printf '%s\n' \
+            "Error: ${BASE_CONFIG} still pins stale runtime-db helper image ${STALE_RUNTIME_DB_HELPER_IMAGE}. Update it to ${CURRENT_RUNTIME_DB_HELPER_IMAGE} before running dbprep-slurm or all." \
+            >&2
+        return 1
+    fi
 }
 
 main() {
@@ -89,6 +102,12 @@ main() {
         printf 'Error: unsupported mode %s. Expected one of: %s\n' "${mode}" "${VALID_MODES}" >&2
         return 1
     fi
+
+    case "${mode}" in
+        dbprep-slurm | all)
+            preflight_runtime_db_helper_image
+            ;;
+    esac
 
     command=("python3" "${RUNNER}" "${mode}" "$@")
 
