@@ -23,6 +23,10 @@ for Nextflow process input staging under Singularity.
 
 ### Patch
 
+- Implementation commits:
+  - `b111dea` `fix(dbprep): avoid codetta input name collisions`
+  - `78fff8e` `test(dbprep): cover singularity scratch staging layout`
+  - `6c3ffe1` `docs(debug): record codetta singularity collision fix`
 - The default helper scratch root now lives under the destination parent as:
   `.nf_myco_runtime_db_scratch`
 - If an explicit `runtime_db_scratch_root` resolves to the same directory as
