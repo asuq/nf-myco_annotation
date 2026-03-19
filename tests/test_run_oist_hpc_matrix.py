@@ -292,6 +292,19 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             script_text,
         )
 
+    def test_db_matrix_uses_codetta_missing_marker_failure_text(self) -> None:
+        """Keep the Codetta marker-less case aligned with the helper contract."""
+        script_text = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'fail_log="${valid_root}/codetta_missing_marker.log"',
+            script_text,
+        )
+        self.assertIn(
+            "Destination is valid but incomplete for codetta",
+            script_text,
+        )
+
     def test_db_matrix_dry_run_resets_disposable_case_root(self) -> None:
         """Reset only the disposable db_cases tree before seeding matrix cases."""
         result = self.run_wrapper(
@@ -311,6 +324,14 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
         )
         self.assertIn(
             "INFO: [db-matrix] Running db3_valid_without_marker/codetta",
+            result.stdout,
+        )
+        self.assertIn(
+            "--codetta_db /tmp/hpc/db_cases/db3_valid_without_marker/codetta",
+            result.stdout,
+        )
+        self.assertNotIn(
+            "--results-dir /tmp/hpc/db_cases/db3_valid_without_marker/results_codetta",
             result.stdout,
         )
         self.assertIn(

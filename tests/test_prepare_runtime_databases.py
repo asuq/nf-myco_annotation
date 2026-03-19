@@ -446,6 +446,50 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn(prepare_runtime_databases.MARKER_FILE_NAME, stderr)
 
+    def test_codetta_destination_without_ready_marker_is_incomplete(self) -> None:
+        """Reject one valid Codetta directory that lacks the ready marker."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source = self.create_codetta_dir(tmpdir / "sources" / "codetta")
+            destination = self.create_codetta_dir(tmpdir / "prepared" / "codetta")
+
+            exit_code, _stdout, stderr = self.run_cli(
+                [
+                    "--codetta-source",
+                    str(source),
+                    "--codetta-dest",
+                    str(destination),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("Destination is valid but incomplete for codetta", stderr)
+            self.assertIn(prepare_runtime_databases.MARKER_FILE_NAME, stderr)
+
+    def test_codetta_force_rebuilds_destination_missing_ready_marker(self) -> None:
+        """Rebuild one valid-but-incomplete Codetta destination when forced."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source = self.create_codetta_dir(tmpdir / "sources" / "codetta")
+            destination = self.create_codetta_dir(tmpdir / "prepared" / "codetta")
+            report_path = tmpdir / "report.tsv"
+
+            exit_code, _stdout, _stderr = self.run_cli(
+                [
+                    "--codetta-source",
+                    str(source),
+                    "--codetta-dest",
+                    str(destination),
+                    "--force",
+                    "--report",
+                    str(report_path),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(self.read_marker(destination)["component"], "codetta")
+            self.assertEqual(read_tsv(report_path)[0]["status"], "prepared")
+
     def test_main_fails_on_invalid_existing_destination_without_force(self) -> None:
         """Fail cleanly when one destination exists but does not validate."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
