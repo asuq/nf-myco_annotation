@@ -1,5 +1,9 @@
 # nf-myco_annotation
 
+[![Nextflow](https://img.shields.io/badge/version-25.04.8-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)
+[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
+[![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
+
 `nf-myco_annotation` is a Nextflow DSL2 pipeline for cohort-scale genome
 annotation, QC, taxonomy expansion, and ANI-based reporting.
 
@@ -18,6 +22,19 @@ full operator detail, acceptance workflows, and troubleshooting, see
 [`docs/runbook.md`](docs/runbook.md). For the implemented architecture and
 reporting contracts, see
 [`docs/implemented_pipeline.md`](docs/implemented_pipeline.md).
+
+## Table of contents
+
+- [Project summary](#project-summary)
+- [Entrypoints](#entrypoints)
+- [Prerequisites](#prerequisites)
+- [Required inputs and databases](#required-inputs-and-databases)
+- [Quick-start workflow](#quick-start-workflow)
+- [Main run examples](#main-run-examples)
+- [Output summary](#output-summary)
+- [Profiles](#profiles)
+- [Documentation map](#documentation-map)
+
 
 ## Project summary
 
