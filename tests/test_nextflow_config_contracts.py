@@ -28,6 +28,9 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
         self.assertIn("ani_score_profile = 'default'", config_text)
         self.assertIn("busco_db = null", config_text)
+        self.assertIn("codetta_db = null", config_text)
+        self.assertIn("codetta_db_label = null", config_text)
+        self.assertIn("codetta_extra_args = ''", config_text)
         self.assertIn("download_missing_databases = false", config_text)
         self.assertIn("force_runtime_database_rebuild = false", config_text)
         self.assertIn("gcode_rule = 'strict_delta'", config_text)
@@ -145,6 +148,12 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             config_text,
         )
 
+    def test_codetta_container_points_at_the_fixed_runtime_tag(self) -> None:
+        """Use the fixed Codetta image tag by default."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn("codetta_container = 'quay.io/asuq1617/codetta:2.0'", config_text)
+
     def test_python_helper_processes_are_pinned_explicitly(self) -> None:
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
@@ -183,6 +192,10 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             config_text,
         )
         self.assertIn(
+            "withLabel: prep_codetta_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            config_text,
+        )
+        self.assertIn(
             "withLabel: finalise_runtime_database {\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
             config_text,
         )
@@ -209,6 +222,16 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertNotIn("withName: DOWNLOAD_PADLOC_DATABASE", config_text)
         self.assertNotIn("withName: FINALISE_RUNTIME_DATABASE", config_text)
         self.assertNotIn("withName: MERGE_RUNTIME_DATABASE_REPORTS", config_text)
+
+    def test_main_and_prep_workflows_require_codetta_runtime_path(self) -> None:
+        """Keep the Codetta runtime database wired into both workflow entrypoints."""
+        main_text = MAIN_WORKFLOW.read_text(encoding="utf-8")
+        prep_text = PREP_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("if (!params.codetta_db) {", main_text)
+        self.assertIn("error \"params.codetta_db is required.\"", main_text)
+        self.assertIn("destinations.codetta", prep_text)
+        self.assertIn("codettaRequest", prep_text)
 
     def test_docker_profile_forces_amd64_ccfinder_on_arm_hosts(self) -> None:
         """Allow Apple Silicon Docker runs to pull the pinned CCFINDER image."""

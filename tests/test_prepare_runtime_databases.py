@@ -88,6 +88,15 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
         self.write_text_file(path / "eggnog_proteins.dmnd", "diamond-placeholder\n")
         return path
 
+    def create_codetta_dir(self, path: Path) -> Path:
+        """Create one valid Codetta source directory."""
+        self.write_text_file(path / "Pfam-A_enone.hmm", "profile-placeholder\n")
+        self.write_text_file(path / "Pfam-A_enone.hmm.h3f", "index-placeholder\n")
+        self.write_text_file(path / "Pfam-A_enone.hmm.h3i", "index-placeholder\n")
+        self.write_text_file(path / "Pfam-A_enone.hmm.h3m", "index-placeholder\n")
+        self.write_text_file(path / "Pfam-A_enone.hmm.h3p", "index-placeholder\n")
+        return path
+
     def create_padloc_dir(self, path: Path) -> Path:
         """Create one valid PADLOC source directory."""
         self.write_text_file(path / "hmm" / "padlocdb.hmm", "hmm-placeholder\n")
@@ -134,6 +143,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
         taxdump_url: str,
         checkm2_url: str,
         busco_template: str,
+        codetta_url: str | None = None,
         eggnog_db_url: str,
         eggnog_dmnd_url: str,
         padloc_url: str,
@@ -178,6 +188,16 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                             "type": "md5",
                             "value": checkm2_checksum_value,
                         },
+                    }
+                },
+            },
+            "codetta": {
+                "default_version": "current",
+                "versions": {
+                    "current": {
+                        "kind": "archive",
+                        "url": codetta_url or "https://example.invalid/codetta.tar.gz",
+                        "archive_name": "Pfam-A_enone.tar.gz",
                     }
                 },
             },
@@ -270,6 +290,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             myco_source = self.create_busco_lineage_dir(
                 tmpdir / "sources" / "busco" / "mycoplasmatota_odb12"
             )
+            codetta_source = self.create_codetta_dir(tmpdir / "sources" / "codetta")
             eggnog_source = self.create_eggnog_dir(tmpdir / "sources" / "eggnog")
             padloc_source = self.create_padloc_dir(tmpdir / "sources" / "padloc")
             report_path = tmpdir / "report.tsv"
@@ -290,6 +311,10 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                     f"mycoplasmatota_odb12={myco_source}",
                     "--busco-dest-root",
                     str(tmpdir / "prepared" / "busco"),
+                    "--codetta-source",
+                    str(codetta_source),
+                    "--codetta-dest",
+                    str(tmpdir / "prepared" / "codetta"),
                     "--eggnog-source",
                     str(eggnog_source),
                     "--eggnog-dest",
@@ -306,15 +331,17 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("--taxdump", stdout)
             self.assertIn("--checkm2_db", stdout)
+            self.assertIn("--codetta_db", stdout)
             self.assertIn("--busco_db", stdout)
             self.assertIn("--eggnog_db", stdout)
             self.assertNotIn("--padloc_db", stdout)
 
             rows = read_tsv(report_path)
-            self.assertEqual(len(rows), 7)
+            self.assertEqual(len(rows), 8)
             row_map = {row["component"]: row for row in rows}
             self.assertEqual(row_map["taxdump"]["status"], "prepared")
             self.assertEqual(row_map["checkm2"]["status"], "prepared")
+            self.assertEqual(row_map["codetta"]["status"], "prepared")
             self.assertEqual(row_map["busco:bacillota_odb12"]["status"], "prepared")
             self.assertEqual(row_map["busco:mycoplasmatota_odb12"]["status"], "prepared")
             self.assertEqual(
@@ -326,6 +353,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             checkm2_dest = tmpdir / "prepared" / "checkm2"
             bacillota_dest = tmpdir / "prepared" / "busco" / "bacillota_odb12"
             myco_dest = tmpdir / "prepared" / "busco" / "mycoplasmatota_odb12"
+            codetta_dest = tmpdir / "prepared" / "codetta"
             eggnog_dest = tmpdir / "prepared" / "eggnog"
             padloc_dest = tmpdir / "prepared" / "padloc"
 
@@ -333,6 +361,8 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertTrue((checkm2_dest / "CheckM2_database.dmnd").is_file())
             self.assertTrue((bacillota_dest / "dataset.cfg").is_file())
             self.assertTrue((myco_dest / "dataset.cfg").is_file())
+            self.assertTrue((codetta_dest / "Pfam-A_enone.hmm").is_file())
+            self.assertTrue((codetta_dest / "Pfam-A_enone.hmm.h3f").is_file())
             self.assertTrue((eggnog_dest / "eggnog.db").is_file())
             self.assertTrue((padloc_dest / "hmm" / "padlocdb.hmm").is_file())
 
@@ -342,6 +372,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                 self.read_marker(bacillota_dest)["component"],
                 "busco:bacillota_odb12",
             )
+            self.assertEqual(self.read_marker(codetta_dest)["component"], "codetta")
             self.assertEqual(self.read_marker(eggnog_dest)["component"], "eggnog")
             self.assertEqual(self.read_marker(padloc_dest)["component"], "padloc")
 
@@ -565,6 +596,11 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                 tmpdir / "fixtures" / "mycoplasmatota_odb12.tar.gz",
                 "myco_payload",
             )
+            codetta_archive = self.create_tar_archive(
+                self.create_codetta_dir(tmpdir / "fixtures" / "codetta"),
+                tmpdir / "fixtures" / "codetta.tar.gz",
+                "codetta_payload",
+            )
             eggnog_db = self.create_gzip_file(
                 tmpdir / "fixtures" / "eggnog.db.gz",
                 "sqlite-placeholder\n",
@@ -584,6 +620,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                     taxdump_url="https://example.invalid/taxdump.zip",
                     checkm2_url="https://example.invalid/checkm2.tar.gz",
                     busco_template="https://example.invalid/{lineage}.tar.gz",
+                    codetta_url="https://example.invalid/codetta.tar.gz",
                     eggnog_db_url="https://example.invalid/eggnog.db.gz",
                     eggnog_dmnd_url="https://example.invalid/eggnog_proteins.dmnd.gz",
                     padloc_url="https://example.invalid/padloc.zip",
@@ -597,6 +634,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                 "https://example.invalid/checkm2.tar.gz": checkm2_archive,
                 "https://example.invalid/bacillota_odb12.tar.gz": bacillota_archive,
                 "https://example.invalid/mycoplasmatota_odb12.tar.gz": myco_archive,
+                "https://example.invalid/codetta.tar.gz": codetta_archive,
                 "https://example.invalid/eggnog.db.gz": eggnog_db,
                 "https://example.invalid/eggnog_proteins.dmnd.gz": eggnog_dmnd,
                 "https://example.invalid/padloc.zip": padloc_archive,
@@ -619,6 +657,8 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
                         str(tmpdir / "prepared" / "checkm2"),
                         "--busco-dest-root",
                         str(tmpdir / "prepared" / "busco"),
+                        "--codetta-dest",
+                        str(tmpdir / "prepared" / "codetta"),
                         "--eggnog-dest",
                         str(tmpdir / "prepared" / "eggnog"),
                         "--padloc-dest",
@@ -642,6 +682,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             self.assertTrue(
                 (tmpdir / "prepared" / "busco" / "mycoplasmatota_odb12" / "dataset.cfg").is_file()
             )
+            self.assertTrue((tmpdir / "prepared" / "codetta" / "Pfam-A_enone.hmm").is_file())
             self.assertTrue((tmpdir / "prepared" / "eggnog" / "eggnog.db").is_file())
             self.assertTrue(
                 (tmpdir / "prepared" / "padloc" / "hmm" / "padlocdb.hmm").is_file()
@@ -659,6 +700,7 @@ class PrepareRuntimeDatabasesTestCase(unittest.TestCase):
             row_map = {row["component"]: row for row in rows}
             self.assertIn("transport=aria2", row_map["taxdump"]["details"])
             self.assertIn("source_mode=remote", row_map["taxdump"]["details"])
+            self.assertEqual(row_map["codetta"]["status"], "prepared")
 
             first_call = recorded_calls[0]
             self.assertIn("--allow-overwrite=true", first_call)

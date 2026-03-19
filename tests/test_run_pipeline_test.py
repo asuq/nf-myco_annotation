@@ -55,6 +55,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/taxdump",
             "--checkm2-db",
             "/tmp/checkm2",
+            "--codetta-db",
+            "/tmp/codetta",
             "--busco-db",
             "/tmp/busco",
             "--eggnog-db",
@@ -65,7 +67,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py local --taxdump /tmp/taxdump "
-            "--checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
+            "--checkm2-db /tmp/checkm2 --codetta-db /tmp/codetta --busco-db /tmp/busco "
             "--eggnog-db /tmp/eggnog",
         )
         self.assertEqual(result.stderr, "")
@@ -85,6 +87,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("Run the real-data local acceptance cohort.", result.stdout)
         self.assertIn("--checkm2-db CHECKM2_DB", result.stdout)
+        self.assertIn("--codetta-db CODETTA_DB", result.stdout)
 
     def test_wrapper_slurm_help_shows_singularity_runtime_flags(self) -> None:
         """Expose renamed Singularity runtime flags through delegated help."""
@@ -132,6 +135,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("This mode runs prepare_databases.nf on SLURM", result.stdout)
         self.assertIn("--dbprep-profile DBPREP_PROFILE", result.stdout)
+        self.assertIn("--codetta-db CODETTA_DB", result.stdout)
         self.assertIn("--busco-db BUSCO_DB", result.stdout)
         self.assertIn("--force-runtime-database-rebuild", result.stdout)
 
@@ -146,6 +150,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/taxdump",
             "--checkm2-db",
             "/tmp/checkm2",
+            "--codetta-db",
+            "/tmp/codetta",
             "--busco-db",
             "/tmp/busco",
             "--eggnog-db",
@@ -161,7 +167,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "python3 bin/run_acceptance_tests.py dbprep-slurm --dbprep-profile oist "
-            "--taxdump /tmp/taxdump --checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
+            "--taxdump /tmp/taxdump --checkm2-db /tmp/checkm2 --codetta-db /tmp/codetta --busco-db /tmp/busco "
             "--eggnog-db /tmp/eggnog "
             "--force-runtime-database-rebuild --slurm-queue short "
             "--singularity-cache-dir /tmp/singularity-cache",

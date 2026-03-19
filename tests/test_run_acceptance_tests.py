@@ -42,6 +42,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         defaults = {
             "taxdump": Path("/tmp/taxdump"),
             "checkm2_db": Path("/tmp/checkm2"),
+            "codetta_db": Path("/tmp/codetta"),
             "eggnog_db": Path("/tmp/eggnog"),
             "resume": False,
             "prepare_busco_datasets": False,
@@ -62,6 +63,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "dbprep_profile": "slurm,singularity",
             "taxdump": Path("/tmp/taxdump"),
             "checkm2_db": Path("/tmp/checkm2"),
+            "codetta_db": Path("/tmp/codetta"),
             "busco_db": Path("/tmp/busco"),
             "eggnog_db": Path("/tmp/eggnog"),
             "force_runtime_database_rebuild": False,
@@ -637,6 +639,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertNotIn("--ccfinder_container", command)
         self.assertNotIn("--padloc_db", command)
         self.assertNotIn("--eggnog_only_accessions", command)
+        self.assertIn("--codetta_db", command)
+        self.assertIn(str(Path("/tmp/codetta").resolve()), command)
 
     def test_build_nextflow_command_forwards_singularity_runtime_arguments(self) -> None:
         """Forward renamed Singularity runtime arguments to Nextflow."""
@@ -699,6 +703,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             dbprep_profile="oist",
             taxdump=Path("/tmp/taxdump"),
             checkm2_db=Path("/tmp/checkm2"),
+            codetta_db=Path("/tmp/codetta"),
             busco_db=Path("/tmp/busco"),
             eggnog_db=Path("/tmp/eggnog"),
             force_runtime_database_rebuild=True,
@@ -717,6 +722,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertIn("oist", command)
         self.assertIn("--taxdump", command)
         self.assertIn(str(Path("/tmp/taxdump").resolve()), command)
+        self.assertIn("--codetta_db", command)
+        self.assertIn(str(Path("/tmp/codetta").resolve()), command)
         self.assertIn("--busco_db", command)
         self.assertIn(str(Path("/tmp/busco").resolve()), command)
         self.assertIn("--download_missing_databases", command)
@@ -733,10 +740,12 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             tmpdir = Path(tmpdir_name)
             taxdump_dir = tmpdir / "taxdump"
             checkm2_dir = tmpdir / "checkm2"
+            codetta_dir = tmpdir / "codetta"
             busco_dir = tmpdir / "busco"
             eggnog_dir = tmpdir / "eggnog"
             taxdump_dir.mkdir()
             checkm2_dir.mkdir()
+            codetta_dir.mkdir()
             (busco_dir / "bacillota_odb12").mkdir(parents=True)
             (busco_dir / "mycoplasmatota_odb12").mkdir(parents=True)
             eggnog_dir.mkdir()
@@ -745,12 +754,18 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 taxdump_dir / "names.dmp",
                 taxdump_dir / "nodes.dmp",
                 checkm2_dir / "CheckM2_database.dmnd",
+                codetta_dir / "Pfam-A_enone.hmm",
+                codetta_dir / "Pfam-A_enone.hmm.h3f",
+                codetta_dir / "Pfam-A_enone.hmm.h3i",
+                codetta_dir / "Pfam-A_enone.hmm.h3m",
+                codetta_dir / "Pfam-A_enone.hmm.h3p",
                 busco_dir / "bacillota_odb12" / "dataset.cfg",
                 busco_dir / "mycoplasmatota_odb12" / "dataset.cfg",
                 eggnog_dir / "eggnog.db",
                 eggnog_dir / "eggnog_proteins.dmnd",
                 taxdump_dir / ".nf_myco_ready.json",
                 checkm2_dir / ".nf_myco_ready.json",
+                codetta_dir / ".nf_myco_ready.json",
                 busco_dir / ".nf_myco_ready.json",
                 eggnog_dir / ".nf_myco_ready.json",
             ):
@@ -759,6 +774,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             run_acceptance_tests.assert_dbprep_database_tree(
                 taxdump_dir,
                 checkm2_dir,
+                codetta_dir,
                 busco_dir,
                 eggnog_dir,
             )
@@ -773,6 +789,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 [
                     {"component": "taxdump", "status": "prepared", "source": "stub", "destination": "/db/taxdump", "details": "ok"},
                     {"component": "checkm2", "status": "prepared", "source": "stub", "destination": "/db/checkm2", "details": "ok"},
+                    {"component": "codetta", "status": "prepared", "source": "stub", "destination": "/db/codetta", "details": "ok"},
                     {"component": "busco_root", "status": "prepared", "source": "derived", "destination": "/db/busco", "details": "ok"},
                 ],
             )
@@ -833,6 +850,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "/tmp/taxdump",
                 "--checkm2-db",
                 "/tmp/checkm2",
+                "--codetta-db",
+                "/tmp/codetta",
                 "--busco-db",
                 "/tmp/busco",
                 "--eggnog-db",
@@ -844,6 +863,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
         self.assertEqual(args.command, "dbprep-slurm")
         self.assertEqual(args.dbprep_profile, "oist")
+        self.assertEqual(args.codetta_db, Path("/tmp/codetta"))
         self.assertEqual(args.busco_db, Path("/tmp/busco"))
         self.assertEqual(args.singularity_cache_dir, "/tmp/singularity-cache")
 
@@ -856,6 +876,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "/tmp/taxdump",
                 "--checkm2-db",
                 "/tmp/checkm2",
+                "--codetta-db",
+                "/tmp/codetta",
                 "--busco-db",
                 "/tmp/busco",
                 "--eggnog-db",

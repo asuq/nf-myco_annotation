@@ -15,6 +15,7 @@ SOFT_FAIL_RETRY_MARKERS = {
     "busco.nf": "retrying_busco",
     "ccfinder.nf": "retrying_ccfinder",
     "checkm2.nf": "retrying_checkm2",
+    "codetta.nf": "retrying_codetta",
     "eggnog.nf": "retrying_eggnog",
     "padloc.nf": "retrying_padloc",
     "prokka.nf": "retrying_prokka",
@@ -62,8 +63,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('while (( attempt <= max_attempts ))', module_text)
         self.assertIn("retrying_checkm2", module_text)
 
-    def test_runtime_database_dirs_are_staged_into_checkm2_and_eggnog(self) -> None:
-        """Require external database directories to enter containers as path inputs."""
+    def test_runtime_database_dirs_are_staged_into_checkm2_codetta_and_eggnog(self) -> None:
+        """Require external database directories to enter runtime modules as path inputs."""
         main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
         per_sample_qc_text = (
             ROOT / "subworkflows" / "local" / "per_sample_qc.nf"
@@ -71,18 +72,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         per_sample_annotation_text = (
             ROOT / "subworkflows" / "local" / "per_sample_annotation.nf"
         ).read_text(encoding="utf-8")
+        codetta_text = (MODULES_DIR / "codetta.nf").read_text(encoding="utf-8")
         eggnog_text = (MODULES_DIR / "eggnog.nf").read_text(encoding="utf-8")
 
         self.assertIn("checkm2Db = Channel.fromPath(params.checkm2_db, checkIfExists: true)", main_text)
+        self.assertIn("codettaDb = Channel.fromPath(params.codetta_db, checkIfExists: true)", main_text)
         self.assertIn("eggnogDb = Channel.fromPath(params.eggnog_db, checkIfExists: true)", main_text)
         self.assertIn("PER_SAMPLE_QC(", main_text)
         self.assertIn("checkm2Db,", main_text)
         self.assertIn("PER_SAMPLE_ANNOTATION(", main_text)
+        self.assertIn("codettaDb,", main_text)
         self.assertIn("eggnogDb,", main_text)
         self.assertIn("take:\n    sample_genomes\n    checkm2_db\n    busco_datasets", per_sample_qc_text)
         self.assertIn(".combine(checkm2_db)", per_sample_qc_text)
-        self.assertIn("take:\n    sample_genomes\n    gcode_summaries\n    eggnog_db", per_sample_annotation_text)
+        self.assertIn(
+            "take:\n    sample_genomes\n    gcode_summaries\n    codetta_db\n    eggnog_db",
+            per_sample_annotation_text,
+        )
+        self.assertIn("CODETTA(sample_genomes.combine(codetta_db))", per_sample_annotation_text)
+        self.assertIn("SUMMARISE_CODETTA(CODETTA.out.summary_input)", per_sample_annotation_text)
         self.assertIn("EGGNOG(eggnog_inputs.combine(eggnog_db))", per_sample_annotation_text)
+        self.assertIn("tuple val(meta), path(genome), path(codetta_db)", codetta_text)
+        self.assertIn('{ "${params.outdir}/samples/${meta.accession}" }', codetta_text)
+        self.assertIn('cp -R "${codetta_db}/". "\\${resource_directory}/"', codetta_text)
         self.assertIn("tuple val(meta), path(faa), path(eggnog_db)", eggnog_text)
         self.assertIn('--data_dir "${eggnog_db}"', eggnog_text)
 
@@ -182,6 +194,14 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('script_path="\\$(command -v collect_versions.py)"', module_text)
         self.assertIn('python3 "\\${script_path}"', module_text)
 
+    def test_summarise_codetta_runs_helper_via_python3(self) -> None:
+        """Require the Codetta helper summariser to resolve the staged script explicitly."""
+        module_path = MODULES_DIR / "summarise_codetta.nf"
+        module_text = module_path.read_text(encoding="utf-8")
+
+        self.assertIn('script_path="\\$(command -v summarise_codetta.py)"', module_text)
+        self.assertIn('python3 "\\${script_path}"', module_text)
+
     def test_validate_inputs_stages_sample_status_columns_asset(self) -> None:
         """Require input validation to stage the sample-status asset into the container."""
         module_text = (MODULES_DIR / "validate_inputs.nf").read_text(encoding="utf-8")
@@ -204,10 +224,12 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             "busco.nf",
             "calculate_assembly_stats.nf",
             "checkm2.nf",
+            "codetta.nf",
             "eggnog.nf",
             "padloc.nf",
             "prokka.nf",
             "stage_inputs.nf",
+            "summarise_codetta.nf",
         )
 
         for module_name in expected_modules:

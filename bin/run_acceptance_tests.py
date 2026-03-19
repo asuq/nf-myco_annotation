@@ -664,6 +664,8 @@ def validate_real_run_args(args: argparse.Namespace) -> None:
         missing.append("--taxdump")
     if not args.checkm2_db:
         missing.append("--checkm2-db")
+    if not args.codetta_db:
+        missing.append("--codetta-db")
     if not args.eggnog_db:
         missing.append("--eggnog-db")
     if not args.prepare_busco_datasets and not args.busco_db:
@@ -681,6 +683,8 @@ def validate_dbprep_run_args(args: argparse.Namespace) -> None:
         missing.append("--taxdump")
     if not args.checkm2_db:
         missing.append("--checkm2-db")
+    if not args.codetta_db:
+        missing.append("--codetta-db")
     if not args.busco_db:
         missing.append("--busco-db")
     if not args.eggnog_db:
@@ -716,6 +720,8 @@ def build_nextflow_command(
         str(Path(args.taxdump).resolve()),
         "--checkm2_db",
         str(Path(args.checkm2_db).resolve()),
+        "--codetta_db",
+        str(Path(args.codetta_db).resolve()),
         "--eggnog_db",
         str(Path(args.eggnog_db).resolve()),
         "--outdir",
@@ -755,6 +761,8 @@ def build_dbprep_command(
         str(Path(args.taxdump).resolve()),
         "--checkm2_db",
         str(Path(args.checkm2_db).resolve()),
+        "--codetta_db",
+        str(Path(args.codetta_db).resolve()),
         "--busco_db",
         str(Path(args.busco_db).resolve()),
         "--eggnog_db",
@@ -806,6 +814,7 @@ def require_dbprep_outputs(outdir: Path) -> dict[str, Path]:
 def assert_dbprep_database_tree(
     taxdump_dir: Path,
     checkm2_dir: Path,
+    codetta_dir: Path,
     busco_root: Path,
     eggnog_dir: Path,
 ) -> None:
@@ -817,6 +826,12 @@ def assert_dbprep_database_tree(
         eggnog_dir / "eggnog_proteins.dmnd",
         taxdump_dir / ".nf_myco_ready.json",
         checkm2_dir / ".nf_myco_ready.json",
+        codetta_dir / "Pfam-A_enone.hmm",
+        codetta_dir / "Pfam-A_enone.hmm.h3f",
+        codetta_dir / "Pfam-A_enone.hmm.h3i",
+        codetta_dir / "Pfam-A_enone.hmm.h3m",
+        codetta_dir / "Pfam-A_enone.hmm.h3p",
+        codetta_dir / ".nf_myco_ready.json",
         busco_root / ".nf_myco_ready.json",
         eggnog_dir / ".nf_myco_ready.json",
     )
@@ -842,6 +857,7 @@ def assert_dbprep_report_contract(report_path: Path) -> None:
     required_components = {
         "taxdump",
         "checkm2",
+        "codetta",
         "busco_root",
         "eggnog",
     }
@@ -1166,6 +1182,7 @@ def run_dbprep_slurm(args: argparse.Namespace) -> None:
     assert_dbprep_database_tree(
         Path(args.taxdump).resolve(),
         Path(args.checkm2_db).resolve(),
+        Path(args.codetta_db).resolve(),
         Path(args.busco_db).resolve(),
         Path(args.eggnog_db).resolve(),
     )
@@ -1211,6 +1228,12 @@ def build_real_run_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--taxdump", type=Path, default=None, help="Pinned taxdump directory.")
     parser.add_argument("--checkm2-db", type=Path, default=None, help="CheckM2 database path.")
+    parser.add_argument(
+        "--codetta-db",
+        type=Path,
+        default=None,
+        help="Codetta profile database path.",
+    )
     parser.add_argument(
         "--busco-db",
         type=Path,
@@ -1268,6 +1291,7 @@ def build_dbprep_run_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--taxdump", type=Path, default=None, help="Pinned taxdump directory.")
     parser.add_argument("--checkm2-db", type=Path, default=None, help="CheckM2 database path.")
+    parser.add_argument("--codetta-db", type=Path, default=None, help="Codetta profile database path.")
     parser.add_argument("--busco-db", type=Path, default=None, help="BUSCO database root.")
     parser.add_argument("--eggnog-db", type=Path, default=None, help="eggNOG database path.")
     parser.add_argument(

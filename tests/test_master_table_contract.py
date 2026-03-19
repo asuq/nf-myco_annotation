@@ -41,6 +41,16 @@ class MasterTableContractTestCase(unittest.TestCase):
         self.assertLess(columns.index("BUSCO_lineage_b"), columns.index("BUSCO_lineage_c"))
         self.assertEqual(columns[-4:], list(master_table_contract.ANI_COLUMNS))
 
+    def test_codetta_columns_follow_gcode_immediately(self) -> None:
+        """Keep the Codetta fields directly after the chosen gcode column."""
+        columns = master_table_contract.build_append_columns()
+
+        self.assertEqual(columns[columns.index("Gcode") + 1], "Codetta_Genetic_Code")
+        self.assertEqual(
+            columns[columns.index("Codetta_Genetic_Code") + 1],
+            "Codetta_NCBI_Table_Candidates",
+        )
+
     def test_normalise_busco_lineages_rejects_duplicates(self) -> None:
         """Fail when BUSCO lineage names repeat after normalisation."""
         with self.assertRaises(ValueError):

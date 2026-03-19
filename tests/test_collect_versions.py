@@ -57,6 +57,17 @@ class CollectVersionsTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
+            versions_c = self.write_text_file(
+                tmpdir / "codetta_versions.yml",
+                '\n'.join(
+                    [
+                        '"CODETTA":',
+                        '  codetta: "v2.0"',
+                        '  codetta_source_commit: "863359ed326276602d44e48227b6003ac6ffd266"',
+                    ]
+                )
+                + "\n",
+            )
             output = tmpdir / "tool_and_db_versions.tsv"
 
             exit_code = collect_versions.main(
@@ -65,6 +76,8 @@ class CollectVersionsTestCase(unittest.TestCase):
                     str(versions_a),
                     "--version-file",
                     str(versions_b),
+                    "--version-file",
+                    str(versions_c),
                     "--nextflow-version",
                     "25.04.8",
                     "--pipeline-version",
@@ -75,6 +88,10 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "singularity",
                     "--checkm2-db",
                     "/db/checkm2",
+                    "--codetta-db",
+                    "/db/codetta",
+                    "--codetta-db-label",
+                    "Pfam35_Shulgina21",
                     "--taxdump",
                     "/db/taxdump",
                     "--busco-lineage",
@@ -89,6 +106,8 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "python=python:3.12",
                     "--container-ref",
                     "checkm2=quay.io/biocontainers/checkm2:1.0.2",
+                    "--container-ref",
+                    "codetta=quay.io/asuq1617/codetta:2.0",
                     "--output",
                     str(output),
                 ]
@@ -123,6 +142,34 @@ class CollectVersionsTestCase(unittest.TestCase):
                     "image_or_path"
                 ],
                 "python:3.12",
+            )
+            self.assertEqual(
+                row_map[("codetta_db", "database", "Codetta profile database")]["version"],
+                "Pfam35_Shulgina21",
+            )
+            self.assertEqual(
+                row_map[("codetta_db", "database", "Codetta profile database")][
+                    "image_or_path"
+                ],
+                "/db/codetta",
+            )
+            self.assertEqual(
+                row_map[
+                    (
+                        "codetta_source_commit",
+                        "tool",
+                        "reported by CODETTA",
+                    )
+                ]["version"],
+                "863359ed326276602d44e48227b6003ac6ffd266",
+            )
+            self.assertEqual(
+                row_map[("codetta", "tool", "reported by CODETTA")]["version"],
+                "v2.0",
+            )
+            self.assertEqual(
+                row_map[("codetta", "container", "params container reference")]["image_or_path"],
+                "quay.io/asuq1617/codetta:2.0",
             )
             self.assertEqual(
                 row_map[("python", "runtime", "reported by VALIDATE_INPUTS")]["version"],

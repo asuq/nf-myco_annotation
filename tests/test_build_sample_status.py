@@ -204,6 +204,17 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
+            codetta_summary = self.write_text_file(
+                tmpdir / "codetta.tsv",
+                "\n".join(
+                    [
+                        "accession\tCodetta_Genetic_Code\tCodetta_NCBI_Table_Candidates\tcodetta_status\twarnings",
+                        "ACC1\tFFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG\t11\tdone\t",
+                        "ACC2\tNA\tNA\tfailed\tcodetta_failed",
+                    ]
+                )
+                + "\n",
+            )
             prokka_manifest = self.write_text_file(
                 tmpdir / "prokka_manifest.tsv",
                 "accession\texit_code\tgff_size\tfaa_size\nACC1\t0\t100\t50\n",
@@ -246,6 +257,8 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     str(busco_one),
                     "--busco",
                     str(busco_two),
+                    "--codetta-summary",
+                    str(codetta_summary),
                     "--ccfinder-strains",
                     str(ccfinder),
                     "--prokka-manifest",
@@ -285,6 +298,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             self.assertEqual(by_accession["ACC1"]["barrnap_status"], "done")
             self.assertEqual(by_accession["ACC1"]["checkm2_gcode4_status"], "done")
             self.assertEqual(by_accession["ACC1"]["gcode"], "4")
+            self.assertEqual(by_accession["ACC1"]["codetta_status"], "done")
             self.assertEqual(by_accession["ACC1"]["ccfinder_status"], "done")
             self.assertEqual(by_accession["ACC1"]["prokka_status"], "done")
             self.assertEqual(by_accession["ACC1"]["padloc_status"], "done")
@@ -297,6 +311,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
 
             self.assertEqual(by_accession["ACC2"]["gcode_status"], "failed")
             self.assertEqual(by_accession["ACC2"]["gcode"], "NA")
+            self.assertEqual(by_accession["ACC2"]["codetta_status"], "failed")
             self.assertEqual(by_accession["ACC2"]["prokka_status"], "skipped")
             self.assertEqual(by_accession["ACC2"]["padloc_status"], "skipped")
             self.assertEqual(by_accession["ACC2"]["eggnog_status"], "skipped")
@@ -308,7 +323,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             self.assertEqual(
                 by_accession["ACC2"]["warnings"],
-                "missing_metadata_for_new_sample;gcode_na;busco_summary_failed",
+                "missing_metadata_for_new_sample;gcode_na;busco_summary_failed;codetta_failed",
             )
             self.assertEqual(
                 by_accession["ACC2"]["notes"],

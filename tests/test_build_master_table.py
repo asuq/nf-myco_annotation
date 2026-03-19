@@ -124,6 +124,16 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 )
                 + "\n",
             )
+            codetta = self.write_text_file(
+                tmpdir / "codetta.tsv",
+                "\n".join(
+                    [
+                        "accession\tCodetta_Genetic_Code\tCodetta_NCBI_Table_Candidates\tcodetta_status\twarnings",
+                        "ACC1\tFFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG\t11\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
             ani = self.write_text_file(
                 tmpdir / "ani.tsv",
                 "\n".join(
@@ -154,6 +164,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(busco_one),
                     "--busco",
                     str(busco_two),
+                    "--codetta-summary",
+                    str(codetta),
                     "--ccfinder-strains",
                     str(ccfinder),
                     "--ani",
@@ -180,6 +192,11 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC1"]["Tax_ID"], "123")
             self.assertEqual(master_by_accession["ACC1"]["superkingdom"], "Bacteria")
             self.assertEqual(master_by_accession["ACC1"]["16S"], "Yes")
+            self.assertEqual(
+                master_by_accession["ACC1"]["Codetta_Genetic_Code"],
+                "FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
+            )
+            self.assertEqual(master_by_accession["ACC1"]["Codetta_NCBI_Table_Candidates"], "11")
             self.assertEqual(master_by_accession["ACC1"]["CRISPRS"], "2")
             self.assertEqual(master_by_accession["ACC1"]["Cluster_ID"], "cluster_1")
 
@@ -188,6 +205,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["Organism_Name"], "Candidate two")
             self.assertEqual(master_by_accession["ACC2"]["Atypical_Warnings"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["superkingdom"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["Codetta_Genetic_Code"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["Codetta_NCBI_Table_Candidates"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["CRISPRS"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "NA")
 
@@ -451,6 +470,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_rows[0]["Organism_Name"], "Novel isolate")
             self.assertEqual(master_rows[0]["Atypical_Warnings"], "NA")
             self.assertEqual(master_rows[0]["Gcode"], "NA")
+            self.assertEqual(master_rows[0]["Codetta_Genetic_Code"], "NA")
+            self.assertEqual(master_rows[0]["Codetta_NCBI_Table_Candidates"], "NA")
             self.assertEqual(master_rows[0]["BUSCO_bacillota_odb12"], "NA")
             self.assertEqual(master_rows[0]["CRISPRS"], "NA")
 
