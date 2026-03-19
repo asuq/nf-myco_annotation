@@ -78,6 +78,45 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
 
+    def test_dbprep_validation_accepts_codetta_component(self) -> None:
+        """Validate one minimal successful Codetta dbprep case."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            results_dir = root / "results"
+            codetta_dir = root / "db" / "codetta"
+            write_text(
+                results_dir / "runtime_database_report.tsv",
+                (
+                    "component\tstatus\tsource\tdestination\tdetails\n"
+                    f"codetta\tprepared\tnative_download\t{codetta_dir}\tfiles=5\n"
+                ),
+            )
+            write_text(
+                results_dir / "nextflow_args.txt",
+                f"--codetta_db {codetta_dir}\n",
+            )
+            for name in ("trace.tsv", "report.html", "timeline.html", "dag.html"):
+                write_text(results_dir / "pipeline_info" / name, "ok\n")
+
+            for suffix in ("", ".h3f", ".h3i", ".h3m", ".h3p"):
+                write_text(codetta_dir / f"Pfam-A_enone.hmm{suffix}", "stub\n")
+            write_text(codetta_dir / ".nf_myco_ready.json", "{}\n")
+
+            result = self.run_helper(
+                "dbprep",
+                "--results-dir",
+                str(results_dir),
+                "--codetta-db",
+                str(codetta_dir),
+                "--expected-component",
+                "codetta",
+                "--expected-status",
+                "prepared",
+                "--expected-arg=--codetta_db",
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
     def test_medium_run_validation_accepts_allowed_phyla(self) -> None:
         """Validate a minimal successful medium real-data run."""
         with tempfile.TemporaryDirectory() as tmpdir:

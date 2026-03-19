@@ -539,10 +539,17 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("taxdump   : normaliseDestination.call(params.taxdump)", workflow_text)
         self.assertIn("checkm2   : normaliseDestination.call(params.checkm2_db)", workflow_text)
         self.assertIn("busco_root: normaliseDestination.call(params.busco_db)", workflow_text)
+        self.assertIn("codetta   : normaliseDestination.call(params.codetta_db)", workflow_text)
         self.assertIn("eggnog    : normaliseDestination.call(params.eggnog_db)", workflow_text)
+        self.assertIn("canonicalFile.absolutePath", workflow_text)
+        self.assertIn("def buildMountedDestination = { destination ->", workflow_text)
+        self.assertIn("def buildMountedScratchRoot = { destinationParent ->", workflow_text)
+        self.assertIn("file(parentFile.absolutePath)", workflow_text)
+        self.assertIn("def mountedDestinations = destinations.collectEntries", workflow_text)
         self.assertIn("taxdumpRequest = destinations.taxdump", workflow_text)
         self.assertIn("checkm2Request = destinations.checkm2", workflow_text)
         self.assertIn("buscoRequest = destinations.busco_root", workflow_text)
+        self.assertIn("codettaRequest = destinations.codetta", workflow_text)
         self.assertIn("eggnogRequest = destinations.eggnog", workflow_text)
         self.assertNotIn("params.padloc_db", workflow_text)
         self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
@@ -570,18 +577,54 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn('script_path="/usr/local/bin/prepare_runtime_databases.py"', prepare_module_text)
+        self.assertIn("stageInMode 'symlink'", prepare_module_text)
+        self.assertIn(
+            "tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(version), path(scratch_root_path), val(force)",
+            prepare_module_text,
+        )
+        self.assertIn('script_path="\\$(command -v prepare_runtime_databases.py)"', prepare_module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', prepare_module_text)
+        self.assertIn('destination_path="${destination_parent}/${destination_name}"', prepare_module_text)
         self.assertIn("--taxdump-dest", prepare_module_text)
-        self.assertIn('/usr/local/bin/python3 "\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
+        self.assertIn("--codetta-dest", prepare_module_text)
+        self.assertIn('helper_args+=(--scratch-root "${scratch_root_path}")', prepare_module_text)
+        self.assertIn('python_version="\\$("\\${python_path}" --version 2>&1 | sed \'s/^Python //\')"', prepare_module_text)
+        self.assertIn('"\\${python_path}" "\\${script_path}" "\\${helper_args[@]}"', prepare_module_text)
+        self.assertIn("stageInMode 'symlink'", checkm2_module_text)
+        self.assertIn(
+            "tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(force)",
+            checkm2_module_text,
+        )
+        self.assertIn('destination_path="${destination_parent}/${destination_name}"', checkm2_module_text)
         self.assertIn('normalise_download_layout() {', checkm2_module_text)
         self.assertIn('nested_root="\\$1/CheckM2_database"', checkm2_module_text)
+        self.assertIn("stageInMode 'symlink'", busco_module_text)
+        self.assertIn(
+            "tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(lineages), val(force)",
+            busco_module_text,
+        )
+        self.assertIn('destination_path="${destination_parent}/${destination_name}"', busco_module_text)
         self.assertIn('busco --download_path "\\${destination_path}" --download "\\${lineage}"', busco_module_text)
+        self.assertIn("stageInMode 'symlink'", eggnog_module_text)
+        self.assertIn(
+            "tuple val(destination), path(destination_parent), val(destination_name), val(download_enabled), val(force)",
+            eggnog_module_text,
+        )
+        self.assertIn('destination_path="${destination_parent}/${destination_name}"', eggnog_module_text)
         self.assertIn('script_path="\\$(command -v download_eggnog_data.py)"', eggnog_module_text)
         self.assertIn('python "\\${script_path}" --data_dir "\\${destination_path}" -y', eggnog_module_text)
         self.assertNotIn('download_eggnog_data.py.patched', eggnog_module_text)
         self.assertNotIn('http://eggnog5.embl.de/download/emapperdb-', eggnog_module_text)
-        self.assertIn('script_path="/usr/local/bin/finalise_runtime_database.py"', finalise_module_text)
-        self.assertIn('/usr/local/bin/python3 "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
+        self.assertIn("stageInMode 'symlink'", finalise_module_text)
+        self.assertIn(
+            "tuple val(component), val(destination), path(destination_parent), val(destination_name), path(mode_file), val(source_label), path(lineages_file)",
+            finalise_module_text,
+        )
+        self.assertIn('script_path="\\$(command -v finalise_runtime_database.py)"', finalise_module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', finalise_module_text)
+        self.assertIn('destination_path="${destination_parent}/${destination_name}"', finalise_module_text)
+        self.assertIn('python_version="\\$("\\${python_path}" --version 2>&1 | sed \'s/^Python //\')"', finalise_module_text)
+        self.assertIn('"\\${python_path}" "\\${script_path}" "\\${helper_args[@]}"', finalise_module_text)
         self.assertIn('script_path="\\$(command -v merge_runtime_database_reports.py)"', merge_module_text)
         self.assertIn('python_path="\\$(command -v python3)"', merge_module_text)
         self.assertIn('"\\${python_path}" "\\${script_path}" \\', merge_module_text)

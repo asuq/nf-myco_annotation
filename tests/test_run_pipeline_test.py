@@ -34,6 +34,10 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             result.stdout,
         )
         self.assertIn("Manual wrapper around bin/run_acceptance_tests.py.", result.stdout)
+        self.assertIn(
+            "dbprep-slurm and all depend on the current runtime-db helper image and Codetta-aware helper CLIs.",
+            result.stdout,
+        )
 
     def test_wrapper_dry_run_stub_prints_delegated_command(self) -> None:
         """Print the delegated stub command without executing it."""
@@ -138,6 +142,15 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertIn("--codetta-db CODETTA_DB", result.stdout)
         self.assertIn("--busco-db BUSCO_DB", result.stdout)
         self.assertIn("--force-runtime-database-rebuild", result.stdout)
+
+    def test_wrapper_dbprep_modes_guard_against_the_stale_helper_tag(self) -> None:
+        """Keep the dbprep preflight tied to the refreshed helper image contract."""
+        script_text = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("preflight_runtime_db_helper_image()", script_text)
+        self.assertIn("quay.io/asuq1617/nf-myco_db:0.3", script_text)
+        self.assertIn("quay.io/asuq1617/nf-myco_db:0.2", script_text)
+        self.assertIn("dbprep-slurm | all)", script_text)
 
     def test_wrapper_dry_run_dbprep_slurm_preserves_runtime_arguments(self) -> None:
         """Forward dbprep-slurm arguments unchanged during dry-run output."""

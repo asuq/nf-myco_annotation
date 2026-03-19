@@ -188,21 +188,22 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_codetta_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: prep_codetta_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
             config_text,
         )
         self.assertIn(
-            "withLabel: finalise_runtime_database {\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: finalise_runtime_database {\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
             config_text,
         )
         self.assertIn(
-            "withLabel: merge_runtime_database_reports {\n        container = 'quay.io/asuq1617/nf-myco_db:0.2'",
+            "withLabel: merge_runtime_database_reports {\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
             config_text,
         )
+        self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.2", config_text)
         self.assertIn(
             "withLabel: download_checkm2_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.checkm2_container",
             config_text,

@@ -45,6 +45,9 @@ class RuntimeDbHelperContainerContractTestCase(unittest.TestCase):
         )
         helper_text = (ROOT / "bin" / "prepare_runtime_databases.py").read_text(encoding="utf-8")
         self.assertIn("NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST", helper_text)
+        self.assertIn("--codetta-source", helper_text)
+        self.assertIn("--codetta-dest", helper_text)
+        self.assertIn("--codetta-version", helper_text)
 
     @unittest.skipUnless(
         RUN_DOCKER_TESTS,
@@ -88,7 +91,11 @@ class RuntimeDbHelperContainerContractTestCase(unittest.TestCase):
                     "command -v prepare_runtime_databases.py >/dev/null; "
                     "command -v finalise_runtime_database.py >/dev/null; "
                     "command -v merge_runtime_database_reports.py >/dev/null; "
-                    "test -f /opt/nf-myco_annotation/runtime_database_sources.json"
+                    "prepare_runtime_databases.py --help 2>&1 | grep -F -- '--codetta-source' >/dev/null; "
+                    "prepare_runtime_databases.py --help 2>&1 | grep -F -- '--codetta-dest' >/dev/null; "
+                    "prepare_runtime_databases.py --help 2>&1 | grep -F -- '--codetta-version' >/dev/null; "
+                    "test -f /opt/nf-myco_annotation/runtime_database_sources.json; "
+                    "python3 -c \"import json; data = json.load(open('/opt/nf-myco_annotation/runtime_database_sources.json', encoding='utf-8')); assert 'codetta' in data\""
                 ),
             ]
         )
