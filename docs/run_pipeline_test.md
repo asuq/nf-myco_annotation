@@ -54,6 +54,9 @@ That wrapper keeps using the coded OIST resource defaults. It does not add
 `--max_cpus`, `--max_memory`, or `--max_time` overrides.
 It also accepts `--gcode-rule strict_delta|delta_then_11` when you need to
 override the pipeline's default gcode-resolution policy.
+Codetta remains helper-prepared in the HPC matrix, so a directory with
+`Pfam-A_enone.hmm` and the `.h3*` files but without `.nf_myco_ready.json` is
+an expected `db-matrix` failure unless force rebuild is used.
 
 The medium Mycoplasmatota/Bacillota cohort is now prepared in the same way as
 the tracked small cohort from repo-tracked `source_catalog.tsv` and

@@ -397,6 +397,10 @@ That wrapper:
 - runs the medium Mycoplasmatota/Bacillota real-data gate
 - writes the medium run `sample_sheet.csv`, `metadata.tsv`, and
   `source_stats.tsv` under `"$HPC_ROOT/medium/generated"`
+- keeps Codetta on the helper-prepared path rather than the native
+  `download -> finalise` path, so a Codetta directory with valid profile files
+  but without `.nf_myco_ready.json` is treated as incomplete in `db-matrix`
+  unless force rebuild is requested
 
 It intentionally uses the resource defaults already coded in the OIST profile
 and process configuration. It does not pass explicit `--max_cpus`,
@@ -528,6 +532,12 @@ Validate the prepared DB directories:
   - `$EGGNOG_DIR/eggnog_proteins.dmnd`
 - ready markers:
   - `.nf_myco_ready.json` in each prepared DB root
+
+For Codetta specifically, the ready marker is required for reuse. A directory
+that already contains `Pfam-A_enone.hmm` and the `.h3*` sidecars but lacks
+`.nf_myco_ready.json` is intentionally treated as incomplete by the helper and
+is an expected failure in the OIST `db-matrix` case until force rebuild is
+used.
 
 If this step fails, bring back:
 
