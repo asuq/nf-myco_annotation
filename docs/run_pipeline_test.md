@@ -19,6 +19,11 @@ and its cached source genomes.
 Use raw `nextflow run prepare_databases.nf` only when you need direct operator
 control outside the standard SLURM validation gate.
 
+The wrapper now preflights `dbprep-slurm` and `all` against
+`conf/base.config`. If the repo still pins the stale helper image
+`quay.io/asuq1617/nf-myco_db:0.2`, the wrapper stops before submitting work and
+asks you to move to `quay.io/asuq1617/nf-myco_db:0.3`.
+
 For a scripted SLURM validation of runtime database preparation itself, use the
 wrapper's `dbprep-slurm` mode. That mode runs `prepare_databases.nf`, downloads
 the curated runtime databases, and validates the prepared database tree.
@@ -94,6 +99,7 @@ Required by real-data modes:
 
 - `--taxdump`
 - `--checkm2-db`
+- `--codetta-db`
 - `--busco-db` or `--prepare-busco-datasets`
 - `--eggnog-db`
 
@@ -101,9 +107,9 @@ CRISPRCasFinder still uses `params.ccfinder_container` from `nextflow.config`.
 The wrapper does not accept a separate container override.
 
 The wrapper does not prepare runtime databases such as taxdump, CheckM2,
-BUSCO, or eggNOG. Prepare those separately before real-data runs when they are
-not already available. PADLOC uses the fixed database bundled in the default
-PADLOC image.
+Codetta, BUSCO, or eggNOG. Prepare those separately before real-data runs when
+they are not already available. PADLOC uses the fixed database bundled in the
+default PADLOC image.
 
 Acceptance-backed `local`, `slurm`, and `all` runs now use the composable
 `debug` profile by default. That profile restricts eggNOG to the tracked smoke
@@ -133,6 +139,7 @@ Preview a real local run without executing it:
 bin/run_pipeline_test.sh --dry-run local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
+  --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db
 ```
@@ -143,6 +150,7 @@ Run the local real-data acceptance cohort:
 bin/run_pipeline_test.sh local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
+  --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db
 ```
@@ -153,6 +161,7 @@ Run the SLURM real-data acceptance cohort:
 bin/run_pipeline_test.sh slurm \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
+  --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --slurm-queue short
@@ -166,6 +175,7 @@ bin/run_pipeline_test.sh dbprep-slurm \
   --work-root /path/to/work-root \
   --taxdump /path/to/db/ncbi_taxdump_20240914 \
   --checkm2-db /path/to/db/checkm2/CheckM2_database \
+  --codetta-db /path/to/db/codetta/Pfam-A_enone \
   --busco-db /path/to/db/busco \
   --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
   --slurm-queue short \
@@ -178,6 +188,7 @@ Run the full layered workflow:
 bin/run_pipeline_test.sh all \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
+  --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db
 ```
