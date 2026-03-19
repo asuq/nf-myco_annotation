@@ -9,9 +9,9 @@ annotation, QC, taxonomy expansion, and ANI-based reporting.
 
 The implemented workflow validates the input manifest and metadata, stages
 genomes to execution-safe internal IDs, runs Barrnap, paired CheckM2
-translation-table predictions, BUSCO, Prokka, CRISPRCasFinder, PADLOC,
-eggNOG, and FastANI-based clustering, then publishes three final reporting
-tables:
+translation-table predictions, BUSCO, Codetta, Prokka, CRISPRCasFinder,
+PADLOC, eggNOG, and FastANI-based clustering, then publishes three final
+reporting tables:
 
 - `master_table.tsv`
 - `sample_status.tsv`
@@ -44,13 +44,20 @@ The main analysis workflow is designed around these steps:
 - stage each genome under a sanitized internal ID for tool-safe execution
 - expand taxonomy from a pinned user-supplied taxdump
 - run per-sample QC with Barrnap, paired CheckM2 runs, and BUSCO
+- run Codetta for every sample and publish all Codetta artefacts under
+  `samples/<accession>/codetta/`
 - run gcode-gated annotation with Prokka, CRISPRCasFinder, PADLOC, and eggNOG
 - build ANI inputs, run all-vs-all FastANI, cluster genomes, and select
   representatives
 - publish final cohort tables and a combined versions report
 
 PADLOC and eggNOG outputs are retained in per-sample folders but are not
-merged into `master_table.tsv`.
+merged into `master_table.tsv`. Codetta is merged into the final reporting
+tables through `Codetta_Genetic_Code`, `Codetta_NCBI_Table_Candidates`, and
+`codetta_status`. In `tool_and_db_versions.tsv`, Codetta is reported as
+compatible with `v2.0`, the default container image is
+`quay.io/asuq1617/codetta:2.0`, and the pinned upstream `main` commit used for
+the image build is recorded explicitly.
 
 ## Entrypoints
 
@@ -66,9 +73,9 @@ datasets can be downloaded through the workflow if
 ### `prepare_databases.nf`
 
 Use `prepare_databases.nf` before analysis when one or more runtime databases
-are missing on the target machine. It prepares taxdump, CheckM2, BUSCO, and
-eggNOG resources in place and writes `runtime_database_report.tsv` plus
-`nextflow_args.txt` under its `--outdir`.
+are missing on the target machine. It prepares taxdump, CheckM2, Codetta,
+BUSCO, and eggNOG resources in place and writes
+`runtime_database_report.tsv` plus `nextflow_args.txt` under its `--outdir`.
 
 ## Prerequisites
 
@@ -77,6 +84,8 @@ eggNOG resources in place and writes `runtime_database_report.tsv` plus
 - access to the configured tool images
 - a pinned taxdump directory
 - a CheckM2 database directory
+- a Codetta profile directory containing `Pfam-A_enone.hmm` and its pressed
+  HMMER sidecars
 - BUSCO lineage datasets under `--busco_db`, or permission to let the workflow
   download them with `--prepare_busco_datasets true`
 - an eggNOG data directory for real eggNOG runs
@@ -97,6 +106,7 @@ The main workflow expects these inputs:
 | Metadata table | Delimited table with `Accession` or `accession` as the join key |
 | Taxdump | Directory containing at least `names.dmp` and `nodes.dmp` |
 | CheckM2 database | Directory containing exactly one top-level `.dmnd` file |
+| Codetta database | Directory containing `Pfam-A_enone.hmm` plus `.h3f`, `.h3i`, `.h3m`, and `.h3p` |
 | BUSCO source | `--busco_db` with lineage directories, or `--prepare_busco_datasets true` |
 | eggNOG database | Directory passed through `--eggnog_db` |
 
@@ -118,6 +128,7 @@ exist in their final tool-consumable locations.
 nextflow run prepare_databases.nf -profile local,docker \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --download_missing_databases true \
@@ -132,6 +143,7 @@ nextflow run . -profile local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -156,6 +168,7 @@ nextflow run . -profile local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -169,6 +182,7 @@ nextflow run . -profile slurm,singularity \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -182,6 +196,7 @@ nextflow run . -profile oist \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --singularity_cache_dir /path/to/singularity-cache \
@@ -196,6 +211,7 @@ nextflow run . -profile local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --prepare_busco_datasets true \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -218,7 +234,8 @@ The most important outputs are:
 - `results/tables/master_table.tsv`
 - `results/tables/sample_status.tsv`
 - `results/tables/tool_and_db_versions.tsv`
-- `results/samples/<accession>/...` for per-sample tool outputs
+- `results/samples/<accession>/codetta/` for per-sample Codetta outputs and summaries
+- `results/samples/<accession>/...` for the remaining per-sample tool outputs
 - `results/cohort/fastani/` for FastANI inputs, metadata, exclusions, and matrix outputs
 - `results/cohort/ani_clusters/` for clustering and representative tables
 - `results/cohort/taxonomy/` for expanded taxonomy output

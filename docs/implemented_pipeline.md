@@ -22,6 +22,7 @@ Use the main entrypoint for normal analysis runs. It orchestrates:
 - input validation and genome staging
 - taxonomy expansion from a user-supplied taxdump
 - per-sample QC with Barrnap, paired CheckM2 runs, and BUSCO
+- per-sample Codetta execution and summary generation for all samples
 - cohort 16S aggregation
 - gcode-gated annotation with Prokka, CRISPRCasFinder, PADLOC, and eggNOG
 - ANI preparation, all-vs-all FastANI, clustering, and representative selection
@@ -33,6 +34,7 @@ Use the main entrypoint for normal analysis runs. It orchestrates:
 - `metadata`
 - `taxdump`
 - `checkm2_db`
+- `codetta_db`
 - `eggnog_db`
 - `busco_lineages`
 
@@ -52,6 +54,7 @@ The workflow currently supports:
 
 - curated taxdump preparation
 - CheckM2 database preparation
+- Codetta profile database preparation
 - BUSCO lineage directory preparation
 - eggNOG database preparation
 
@@ -60,6 +63,7 @@ parameter among:
 
 - `taxdump`
 - `checkm2_db`
+- `codetta_db`
 - `busco_db`
 - `eggnog_db`
 
@@ -71,6 +75,7 @@ prepare_databases.nf
      -> PREP_TAXDUMP_DATABASE
      -> DOWNLOAD_CHECKM2_DATABASE
      -> FINALISE_RUNTIME_DATABASE
+     -> PREP_CODETTA_DATABASE
      -> DOWNLOAD_BUSCO_DATABASES
      -> FINALISE_RUNTIME_DATABASE
      -> DOWNLOAD_EGGNOG_DATABASE
@@ -94,6 +99,8 @@ main.nf
      -> SUMMARISE_16S
      -> all_best_16S.fna
   -> PER_SAMPLE_ANNOTATION
+     -> CODETTA
+     -> SUMMARISE_CODETTA
      -> PROKKA
      -> CCFINDER
      -> SUMMARISE_CCFINDER
@@ -125,6 +132,7 @@ The most important implementation-level parameters are:
 | `metadata` | `main.nf` | Metadata block preserved into the final master table. |
 | `taxdump` | `main.nf`, `prepare_databases.nf` | Resolved taxdump directory for taxonomy expansion or preparation target. |
 | `checkm2_db` | `main.nf`, `prepare_databases.nf` | CheckM2 database directory. |
+| `codetta_db` | `main.nf`, `prepare_databases.nf` | Codetta profile directory rooted at `Pfam-A_enone.hmm`. |
 | `busco_db` | `main.nf`, `prepare_databases.nf` | Offline BUSCO lineage root unless datasets are downloaded on demand. |
 | `prepare_busco_datasets` | `main.nf` | Switches BUSCO lineage resolution from reuse to download. |
 | `busco_lineages` | both | Non-empty lineage list; defaults to `bacillota_odb12` and `mycoplasmatota_odb12`. |
@@ -142,6 +150,7 @@ not change workflow behaviour:
 
 - `taxdump_label`
 - `checkm2_db_label`
+- `codetta_db_label`
 - `eggnog_db_label`
 
 Supported profiles currently defined in `nextflow.config` and `conf/*.config`
@@ -196,6 +205,7 @@ results/
       checkm2/
       busco/
         <lineage>/
+      codetta/
       prokka/
       ccfinder/
       padloc/
@@ -213,6 +223,8 @@ Notes on that layout:
 
 - `samples/<accession>/...` uses the original accession as the published folder
   name, not the internal sanitized ID
+- `codetta/` is published for every sample and contains the raw Codetta outputs,
+  `codetta.log`, and `codetta_summary.tsv`
 - `prokka/`, `ccfinder/`, `padloc/`, and `eggnog/` are only published for
   samples whose assigned gcode is `4` or `11`
 - `busco/<lineage>/` is published for every configured lineage per sample
@@ -254,6 +266,8 @@ Average_Gene_Length_gcode11
 Total_Coding_Sequences_gcode4
 Total_Coding_Sequences_gcode11
 Gcode
+Codetta_Genetic_Code
+Codetta_NCBI_Table_Candidates
 Low_quality
 16S
 BUSCO_bacillota_odb12
@@ -292,6 +306,7 @@ gcode
 low_quality
 busco_bacillota_odb12_status
 busco_mycoplasmatota_odb12_status
+codetta_status
 prokka_status
 ccfinder_status
 padloc_status
@@ -320,8 +335,15 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
   the merged per-sample QC summary.
 - BUSCO is independent of gcode assignment. It runs offline in genome mode for
   every sample and every configured lineage.
-- `PER_SAMPLE_ANNOTATION` is gated by the assigned gcode. Only samples with
-  gcode `4` or `11` run Prokka, CRISPRCasFinder, PADLOC, and eggNOG.
+- Codetta is independent of gcode assignment. It runs for every sample and
+  adds `Codetta_Genetic_Code`, `Codetta_NCBI_Table_Candidates`, and
+  `codetta_status` to the final reporting layer.
+- The default Codetta image is `quay.io/asuq1617/codetta:2.0`. The workflow
+  reports Codetta as `v2.0` and also records the pinned upstream source commit
+  used to build that image in `tool_and_db_versions.tsv`.
+- `PER_SAMPLE_ANNOTATION` is only partly gated by the assigned gcode. Codetta
+  runs for every sample, while only samples with gcode `4` or `11` run Prokka,
+  CRISPRCasFinder, PADLOC, and eggNOG.
 - PADLOC and eggNOG outputs are intentionally retained in sample folders but
   intentionally excluded from `master_table.tsv`.
 - ANI clustering is driven by `BUILD_FASTANI_INPUTS`, which writes both the

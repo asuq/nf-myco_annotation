@@ -8,6 +8,8 @@ The pipeline requires:
 - `--metadata`: metadata table with `Accession` or `accession`
 - `--taxdump`: pinned NCBI taxdump directory containing `names.dmp` and `nodes.dmp`
 - `--checkm2_db`: CheckM2 database directory containing one top-level `.dmnd`
+- `--codetta_db`: Codetta profile directory containing `Pfam-A_enone.hmm` and
+  its `.h3f`, `.h3i`, `.h3m`, and `.h3p` sidecars
 - `--busco_db` or `--prepare_busco_datasets true`
 - `--eggnog_db` for real eggNOG runs
 
@@ -15,6 +17,7 @@ Optional labels used only in `tool_and_db_versions.tsv`:
 
 - `--taxdump_label`
 - `--checkm2_db_label`
+- `--codetta_db_label`
 - `--eggnog_db_label`
 
 Shared helper image requirement:
@@ -62,6 +65,7 @@ Supported runtime databases:
 
 - taxdump
 - CheckM2
+- Codetta
 - BUSCO lineage directories
 - eggNOG
 
@@ -71,6 +75,7 @@ Example:
 nextflow run prepare_databases.nf -profile oist \
   --taxdump /shared/db/ncbi_taxdump_20240914 \
   --checkm2_db /shared/db/checkm2/CheckM2_database \
+  --codetta_db /shared/db/codetta/Pfam-A_enone \
   --busco_db /shared/db/busco \
   --eggnog_db /shared/db/Eggnog_db/Eggnog_Diamond_db \
   --download_missing_databases true \
@@ -128,6 +133,7 @@ Real-data `local`, `slurm`, and `all` runs require:
 
 - `--taxdump`
 - `--checkm2-db`
+- `--codetta-db`
 - `--busco-db` or `--prepare-busco-datasets`
 - `--eggnog-db`
 
@@ -156,6 +162,7 @@ Example local acceptance run:
 python3 bin/run_acceptance_tests.py local \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
+  --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db
 ```
@@ -166,6 +173,7 @@ Example SLURM acceptance run:
 python3 bin/run_acceptance_tests.py slurm \
   --taxdump /path/to/pinned-taxdump \
   --checkm2-db /path/to/checkm2-db \
+  --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
   --slurm-queue short
@@ -179,6 +187,7 @@ python3 bin/run_acceptance_tests.py dbprep-slurm \
   --work-root /path/to/work-root \
   --taxdump /path/to/db/ncbi_taxdump_20240914 \
   --checkm2-db /path/to/db/checkm2/CheckM2_database \
+  --codetta-db /path/to/db/codetta/Pfam-A_enone \
   --busco-db /path/to/db/busco \
   --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
   --slurm-queue short \
@@ -195,6 +204,7 @@ nextflow run . \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -208,6 +218,7 @@ nextflow run . -profile debug,local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -221,6 +232,7 @@ nextflow run . -profile debug,local,docker \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --eggnog_only_accessions SOME_OTHER_ACCESSION \
@@ -235,6 +247,7 @@ nextflow run . -profile slurm \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -248,6 +261,7 @@ nextflow run . -profile singularity \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --outdir results
@@ -261,6 +275,7 @@ nextflow run . -profile oist \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
   --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --singularity_cache_dir /path/to/singularity-cache \
@@ -528,9 +543,16 @@ Published final tables are written under `results/tables/`:
 
 The master table preserves the original metadata block, then appends derived
 columns in the order locked by `assets/master_table_append_columns.txt`.
+Codetta contributes `Codetta_Genetic_Code` and
+`Codetta_NCBI_Table_Candidates`, and `sample_status.tsv` includes
+`codetta_status`.
 
 ## Notes
 
 - PADLOC and eggNOG outputs are retained per sample but are not merged into the final master table.
 - Original accessions remain the published sample-folder names. Internal sanitized IDs are execution-only.
 - The shared Python helper image now includes `numpy` and `scipy` so ANI clustering and representative selection reuse the same helper container as the other Python tasks.
+- Codetta provenance is split deliberately: `tool_and_db_versions.tsv` reports
+  Codetta as `v2.0`, uses the default image
+  `quay.io/asuq1617/codetta:2.0`, and records the pinned upstream `main`
+  source commit used for that image build.
