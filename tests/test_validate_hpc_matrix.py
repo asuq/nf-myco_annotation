@@ -250,6 +250,58 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
 
+    def test_medium_run_validation_accepts_isolated_secondary_busco_failure(self) -> None:
+        """Allow one medium run where only the non-primary BUSCO lineage failed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outdir = root / "out"
+            write_text(
+                outdir / "tables" / "master_table.tsv",
+                (
+                    "Accession\tphylum\n"
+                    "ACC1\tMycoplasmatota\n"
+                    "ACC2\tBacillota\n"
+                ),
+            )
+            write_text(
+                outdir / "tables" / "sample_status.tsv",
+                (
+                    "accession\tvalidation_status\tgcode_status\t"
+                    "busco_bacillota_odb12_status\tbusco_mycoplasmatota_odb12_status\t"
+                    "codetta_status\tprokka_status\tccfinder_status\tpadloc_status\t"
+                    "eggnog_status\twarnings\n"
+                    "ACC1\tdone\tdone\tdone\tdone\tdone\tdone\tdone\tdone\tdone\t\n"
+                    "ACC2\tdone\tdone\tdone\tfailed\tdone\tdone\tdone\tdone\tdone\t"
+                    "busco_summary_failed\n"
+                ),
+            )
+            write_text(
+                outdir / "tables" / "tool_and_db_versions.tsv",
+                (
+                    "component\tkind\tversion\timage_or_path\tnotes\n"
+                    "eggnog_mapper\ttool\t2.1.13\tNA\tNA\n"
+                    f"taxdump\tdatabase\t20240914\t{(root / 'db' / 'taxdump').resolve()}\tNA\n"
+                ),
+            )
+            for name in ("trace.tsv", "report.html", "timeline.html", "dag.html"):
+                write_text(outdir / "pipeline_info" / name, "ok\n")
+
+            result = self.run_helper(
+                "medium-run",
+                "--outdir",
+                str(outdir),
+                "--db-root",
+                str(root / "db"),
+                "--sample-count",
+                "2",
+                "--allowed-phylum",
+                "Mycoplasmatota",
+                "--allowed-phylum",
+                "Bacillota",
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
     def test_versions_table_validation_accepts_symlinked_db_paths(self) -> None:
         """Allow reported DB paths that use one symlinked alias of the HPC root."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -345,6 +397,46 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
 
             self.assertIn(
                 "Found unexpected medium sample-status failures: ACC1 (gcode_status)",
+                str(context.exception),
+            )
+
+    def test_medium_status_helper_rejects_primary_busco_failure(self) -> None:
+        """Reject one medium row when the primary BUSCO lineage failed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_path = Path(tmpdir) / "sample_status.tsv"
+            write_text(
+                status_path,
+                (
+                    "accession\tbusco_bacillota_odb12_status\twarnings\n"
+                    "ACC1\tfailed\tbusco_summary_failed\n"
+                ),
+            )
+
+            with self.assertRaises(validate_hpc_matrix.ValidateHpcMatrixError) as context:
+                validate_hpc_matrix.assert_medium_statuses_allowed(status_path)
+
+            self.assertIn(
+                "Found unexpected medium sample-status failures: ACC1 (busco_bacillota_odb12_status)",
+                str(context.exception),
+            )
+
+    def test_medium_status_helper_rejects_secondary_busco_failure_without_expected_warning(self) -> None:
+        """Reject one medium row when a secondary BUSCO failure lacks the expected warning."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_path = Path(tmpdir) / "sample_status.tsv"
+            write_text(
+                status_path,
+                (
+                    "accession\tbusco_mycoplasmatota_odb12_status\twarnings\n"
+                    "ACC1\tfailed\tmissing_busco_mycoplasmatota_odb12_summary\n"
+                ),
+            )
+
+            with self.assertRaises(validate_hpc_matrix.ValidateHpcMatrixError) as context:
+                validate_hpc_matrix.assert_medium_statuses_allowed(status_path)
+
+            self.assertIn(
+                "Found unexpected medium sample-status failures: ACC1 (busco_mycoplasmatota_odb12_status)",
                 str(context.exception),
             )
 
