@@ -311,6 +311,35 @@ def assert_no_failed_statuses(sample_status_path: Path) -> None:
         )
 
 
+def split_warning_tokens(value: str) -> set[str]:
+    """Split one semicolon-delimited warning field into distinct tokens."""
+    return {token.strip() for token in value.split(";") if token.strip()}
+
+
+def assert_medium_statuses_allowed(sample_status_path: Path) -> None:
+    """Allow only the expected medium-run `gcode_na` status pattern."""
+    _header, rows = read_tsv(sample_status_path)
+    bad_rows: list[str] = []
+    for row in rows:
+        failed_columns = [
+            column for column, value in row.items() if value is not None and value.strip() == "failed"
+        ]
+        if not failed_columns:
+            continue
+
+        warning_tokens = split_warning_tokens(row.get("warnings", ""))
+        if failed_columns == ["gcode_status"] and "gcode_na" in warning_tokens:
+            continue
+
+        accession = row.get("accession", "UNKNOWN")
+        bad_rows.append(f"{accession} ({', '.join(failed_columns)})")
+
+    if bad_rows:
+        raise ValidateHpcMatrixError(
+            "Found unexpected medium sample-status failures: " + ", ".join(sorted(bad_rows))
+        )
+
+
 def normalise_reported_path(path_text: str) -> Path | None:
     """Normalise one reported path for stable HPC-root comparisons."""
     cleaned = path_text.strip()
@@ -431,7 +460,7 @@ def validate_medium_run(args: argparse.Namespace) -> None:
     versions_path = tables["tool_and_db_versions.tsv"]
     master_table_path = tables["master_table.tsv"]
 
-    assert_no_failed_statuses(sample_status_path)
+    assert_medium_statuses_allowed(sample_status_path)
     assert_versions_table_clean(versions_path, args.db_root)
 
     master_rows = read_rows_indexed_by(master_table_path, "Accession")
