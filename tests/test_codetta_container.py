@@ -37,6 +37,7 @@ class CodettaContainerContractTestCase(unittest.TestCase):
         self.assertIn("ARG CODETTA_REF=863359ed326276602d44e48227b6003ac6ffd266", dockerfile_text)
         self.assertIn("ARG CODETTA_VERSION=v2.0", dockerfile_text)
         self.assertIn("ARG CODETTA_SOURCE_BRANCH=main", dockerfile_text)
+        self.assertIn("procps", dockerfile_text)
         self.assertIn('python3 -m pip install --no-cache-dir numpy scipy "setuptools<82"', dockerfile_text)
         self.assertIn('python3 -c "import pkg_resources"', dockerfile_text)
         self.assertIn("bash setup.sh", dockerfile_text)
@@ -83,6 +84,7 @@ class CodettaContainerContractTestCase(unittest.TestCase):
                 "-lc",
                 (
                     "set -euo pipefail; "
+                    "command -v ps >/dev/null; "
                     "command -v codetta_align.py >/dev/null; "
                     "command -v codetta_summary.py >/dev/null; "
                     "command -v codetta_infer.py >/dev/null; "
