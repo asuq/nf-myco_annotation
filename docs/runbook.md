@@ -97,7 +97,7 @@ Shared helper image requirement:
 - `params.python_container` is the single helper image for Python-based tasks
   such as validation, ANI clustering, ANI representative selection, final
   status assembly, and version collection
-- it must provide `numpy` and `scipy`
+- it must provide `biopython`, `numpy`, and `scipy`
 - the repo-owned Dockerfile for this image lives under
   `docker/python_helper/Dockerfile`
 - local Docker and HPC Singularity runs should reuse that one helper image to
