@@ -3,7 +3,7 @@
  */
 process CODETTA {
     tag "${meta.accession}"
-    label 'process_high'
+    label 'process_medium'
     publishDir(
         { "${params.outdir}/samples/${meta.accession}" },
         mode: 'copy',

@@ -4,7 +4,7 @@
 process SUMMARISE_BUSCO {
     tag "${meta.accession} / ${lineage}"
     label 'process_single'
-    
+
     input:
     tuple val(meta), val(lineage), path(busco_summary_json)
 

@@ -4,7 +4,7 @@
  */
 process BARRNAP {
     tag "${meta.accession}"
-    label 'process_medium'
+    label 'process_small'
     publishDir(
         { "${params.outdir}/samples/${meta.accession}/barrnap" },
         mode: 'copy',

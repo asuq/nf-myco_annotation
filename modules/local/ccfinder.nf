@@ -3,7 +3,7 @@
  */
 process CCFINDER {
     tag "${meta.accession}"
-    label 'process_high'
+    label 'process_small'
     publishDir(
         { "${params.outdir}/samples/${meta.accession}/ccfinder" },
         mode: 'copy',
