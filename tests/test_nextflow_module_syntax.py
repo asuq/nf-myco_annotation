@@ -50,6 +50,18 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("name: 'checkm2_gcode4_report.tsv'", module_text)
         self.assertIn("name: 'checkm2_gcode11_report.tsv'", module_text)
 
+    def test_per_sample_qc_joins_checkm2_reports_by_accession(self) -> None:
+        """Require per-sample QC to stream paired CheckM2 reports via a keyed join."""
+        workflow_path = ROOT / "subworkflows" / "local" / "per_sample_qc.nf"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+
+        self.assertIn("checkm2_gcode4_reports = CHECKM2_GCODE4.out.quality_report", workflow_text)
+        self.assertIn("checkm2_gcode11_reports = CHECKM2_GCODE11.out.quality_report", workflow_text)
+        self.assertIn("tuple(meta.accession, meta, report)", workflow_text)
+        self.assertIn("tuple(meta.accession, report)", workflow_text)
+        self.assertIn(".join(checkm2_gcode11_reports)", workflow_text)
+        self.assertNotIn(".groupTuple()", workflow_text)
+
     def test_checkm2_resolves_directory_parameters_to_dmnd_files(self) -> None:
         """Require CheckM2 to accept one DMND directory and retry transient failures."""
         module_path = MODULES_DIR / "checkm2.nf"
