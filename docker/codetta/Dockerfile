@@ -16,6 +16,7 @@ RUN apt-get update \
         curl \
         gzip \
         make \
+        procps \
         tar \
         wget \
     && rm -rf /var/lib/apt/lists/*
