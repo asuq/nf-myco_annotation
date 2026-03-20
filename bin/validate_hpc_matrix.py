@@ -311,6 +311,14 @@ def assert_no_failed_statuses(sample_status_path: Path) -> None:
         )
 
 
+def normalise_reported_path(path_text: str) -> Path | None:
+    """Normalise one reported path for stable HPC-root comparisons."""
+    cleaned = path_text.strip()
+    if not cleaned or cleaned == "NA":
+        return None
+    return Path(cleaned).expanduser().resolve()
+
+
 def assert_versions_table_clean(versions_path: Path, db_root: Path) -> None:
     """Assert that the final versions table is complete and points at the HPC DB root."""
     _header, rows = read_tsv(versions_path)
@@ -322,11 +330,14 @@ def assert_versions_table_clean(versions_path: Path, db_root: Path) -> None:
         raise ValidateHpcMatrixError("eggnog_mapper version is not 2.1.13")
 
     database_rows = [row for row in rows if row["kind"] == "database"]
-    expected_prefix = str(db_root.resolve())
+    resolved_db_root = db_root.resolve()
     bad_rows = [
         row["component"]
         for row in database_rows
-        if not row["image_or_path"].startswith(expected_prefix)
+        if (
+            (reported_path := normalise_reported_path(row["image_or_path"])) is None
+            or (reported_path != resolved_db_root and resolved_db_root not in reported_path.parents)
+        )
     ]
     if bad_rows:
         raise ValidateHpcMatrixError(
