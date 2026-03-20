@@ -200,6 +200,33 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
 
+    def test_versions_table_validation_accepts_symlinked_db_paths(self) -> None:
+        """Allow reported DB paths that use one symlinked alias of the HPC root."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            real_db_root = root / "real_db"
+            real_db_root.mkdir()
+            alias_db_root = root / "flash_db"
+            alias_db_root.symlink_to(real_db_root, target_is_directory=True)
+
+            versions_path = root / "tool_and_db_versions.tsv"
+            write_text(
+                versions_path,
+                (
+                    "component\tkind\tversion\timage_or_path\tnotes\n"
+                    "eggnog_mapper\ttool\t2.1.13\tNA\tNA\n"
+                    f"taxdump\tdatabase\t20240914\t{alias_db_root / 'ncbi_taxdump_20240914'}\tPinned taxdump\n"
+                    f"checkm2_db\tdatabase\tNA\t{alias_db_root / 'checkm2' / 'CheckM2_database'}\tCheckM2 database\n"
+                    f"codetta_db\tdatabase\tNA\t{alias_db_root / 'codetta' / 'Pfam-A_enone'}\tCodetta profile database\n"
+                    f"busco_datasets\tdatabase\tbacillota_odb12;mycoplasmatota_odb12\t{alias_db_root / 'busco'}\tConfigured BUSCO lineages in order\n"
+                    f"bacillota_odb12\tdatabase\tNA\t{alias_db_root / 'busco' / 'bacillota_odb12'}\tBUSCO lineage dataset\n"
+                    f"mycoplasmatota_odb12\tdatabase\tNA\t{alias_db_root / 'busco' / 'mycoplasmatota_odb12'}\tBUSCO lineage dataset\n"
+                    f"eggnog_db\tdatabase\tNA\t{alias_db_root / 'Eggnog_db' / 'Eggnog_Diamond_db'}\teggNOG database\n"
+                ),
+            )
+
+            validate_hpc_matrix.assert_versions_table_clean(versions_path, real_db_root)
+
     def test_medium_phylum_helper_allows_missing_metadata_case_na(self) -> None:
         """Allow `phylum=NA` only for the deliberate missing-metadata case."""
         master_rows = {
