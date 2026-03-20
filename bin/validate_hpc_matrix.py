@@ -316,9 +316,20 @@ def split_warning_tokens(value: str) -> set[str]:
     return {token.strip() for token in value.split(";") if token.strip()}
 
 
+def primary_busco_status_column(configured_lineages: Sequence[str]) -> str:
+    """Return the sample-status BUSCO column that drives ANI eligibility."""
+    lineages = tuple(lineage.strip() for lineage in configured_lineages if lineage.strip())
+    if not lineages:
+        raise ValidateHpcMatrixError("At least one BUSCO lineage is required for validation.")
+    return f"busco_{lineages[0]}_status"
+
+
 def assert_medium_statuses_allowed(sample_status_path: Path) -> None:
     """Allow only the expected medium-run `gcode_na` status pattern."""
     _header, rows = read_tsv(sample_status_path)
+    primary_busco_column = primary_busco_status_column(
+        run_acceptance_tests.DEFAULT_DBPREP_BUSCO_LINEAGES
+    )
     bad_rows: list[str] = []
     for row in rows:
         failed_columns = [
@@ -329,6 +340,14 @@ def assert_medium_statuses_allowed(sample_status_path: Path) -> None:
 
         warning_tokens = split_warning_tokens(row.get("warnings", ""))
         if failed_columns == ["gcode_status"] and "gcode_na" in warning_tokens:
+            continue
+        if (
+            len(failed_columns) == 1
+            and failed_columns[0].startswith("busco_")
+            and failed_columns[0].endswith("_status")
+            and failed_columns[0] != primary_busco_column
+            and "busco_summary_failed" in warning_tokens
+        ):
             continue
 
         accession = row.get("accession", "UNKNOWN")
