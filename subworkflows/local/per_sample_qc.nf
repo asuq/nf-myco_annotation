@@ -20,24 +20,20 @@ workflow PER_SAMPLE_QC {
     CHECKM2_GCODE4(sample_genomes.combine(checkm2_db), Channel.value(4))
     CHECKM2_GCODE11(sample_genomes.combine(checkm2_db), Channel.value(11))
 
-    paired_checkm2_reports = CHECKM2_GCODE4.out.quality_report
-        .mix(CHECKM2_GCODE11.out.quality_report)
+    checkm2_gcode4_reports = CHECKM2_GCODE4.out.quality_report
         .map { meta, translationTable, report ->
-            tuple(
-                meta.accession,
-                [
-                    meta: meta,
-                    translation_table: translationTable as Integer,
-                    report: report,
-                ],
-            )
+            tuple(meta.accession, meta, report)
         }
-        .groupTuple()
-        .map { accession, groupedReports ->
-            def reportByTable = groupedReports.collectEntries { entry ->
-                [(entry.translation_table as Integer): entry.report]
-            }
-            tuple(groupedReports[0].meta, reportByTable[4], reportByTable[11])
+
+    checkm2_gcode11_reports = CHECKM2_GCODE11.out.quality_report
+        .map { meta, translationTable, report ->
+            tuple(meta.accession, report)
+        }
+
+    paired_checkm2_reports = checkm2_gcode4_reports
+        .join(checkm2_gcode11_reports)
+        .map { accession, meta, gcode4Report, gcode11Report ->
+            tuple(meta, gcode4Report, gcode11Report)
         }
 
     ASSIGN_GCODE_AND_QC(paired_checkm2_reports)
