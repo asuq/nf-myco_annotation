@@ -640,6 +640,12 @@ Then run the medium case with:
 bin/run_oist_hpc_matrix.sh --hpc-root "$HPC_ROOT" p2
 ```
 
+The fixed medium cohort intentionally includes Bacillota genomes that may stay
+unresolved at gcode assignment under the default `strict_delta` rule. For `p2`,
+the validator accepts those rows only when `gcode_status=failed` is the sole
+failed column, `warnings` includes `gcode_na`, and downstream annotation
+statuses remain non-failed, typically `skipped`.
+
 Only after `prepare`, `dbprep-slurm`, and the tracked `p1` run succeed should
 you launch the full scripted campaign:
 

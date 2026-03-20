@@ -57,6 +57,10 @@ override the pipeline's default gcode-resolution policy.
 Codetta remains helper-prepared in the HPC matrix, so a directory with
 `Pfam-A_enone.hmm` and the `.h3*` files but without `.nf_myco_ready.json` is
 an expected `db-matrix` failure unless force rebuild is used.
+For the fixed medium `p2` run, the validator now allows the expected
+`strict_delta` edge case where a row has only `gcode_status=failed`,
+`warnings` includes `gcode_na`, and downstream annotation statuses are
+non-failed.
 
 The medium Mycoplasmatota/Bacillota cohort is now prepared in the same way as
 the tracked small cohort from repo-tracked `source_catalog.tsv` and
