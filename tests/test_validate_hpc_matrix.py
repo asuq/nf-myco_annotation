@@ -200,6 +200,56 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
 
+    def test_medium_run_validation_accepts_isolated_gcode_na_failure(self) -> None:
+        """Allow one medium run where only gcode assignment remains unresolved."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outdir = root / "out"
+            write_text(
+                outdir / "tables" / "master_table.tsv",
+                (
+                    "Accession\tphylum\n"
+                    "ACC1\tMycoplasmatota\n"
+                    "ACC2\tBacillota\n"
+                ),
+            )
+            write_text(
+                outdir / "tables" / "sample_status.tsv",
+                (
+                    "accession\tvalidation_status\tgcode_status\tcodetta_status\t"
+                    "prokka_status\tccfinder_status\tpadloc_status\teggnog_status\twarnings\n"
+                    "ACC1\tdone\tdone\tdone\tdone\tdone\tdone\tdone\tcodetta_multiple_ncbi_tables\n"
+                    "ACC2\tdone\tfailed\tdone\tskipped\tskipped\tskipped\tskipped\t"
+                    "gcode_na;codetta_multiple_ncbi_tables\n"
+                ),
+            )
+            write_text(
+                outdir / "tables" / "tool_and_db_versions.tsv",
+                (
+                    "component\tkind\tversion\timage_or_path\tnotes\n"
+                    "eggnog_mapper\ttool\t2.1.13\tNA\tNA\n"
+                    f"taxdump\tdatabase\t20240914\t{(root / 'db' / 'taxdump').resolve()}\tNA\n"
+                ),
+            )
+            for name in ("trace.tsv", "report.html", "timeline.html", "dag.html"):
+                write_text(outdir / "pipeline_info" / name, "ok\n")
+
+            result = self.run_helper(
+                "medium-run",
+                "--outdir",
+                str(outdir),
+                "--db-root",
+                str(root / "db"),
+                "--sample-count",
+                "2",
+                "--allowed-phylum",
+                "Mycoplasmatota",
+                "--allowed-phylum",
+                "Bacillota",
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
     def test_versions_table_validation_accepts_symlinked_db_paths(self) -> None:
         """Allow reported DB paths that use one symlinked alias of the HPC root."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -257,6 +307,63 @@ class ValidateHpcMatrixTestCase(unittest.TestCase):
             )
 
         self.assertIn("Observed unexpected phylum=NA rows in medium run: ACC_BAD", str(context.exception))
+
+    def test_medium_status_helper_rejects_second_failed_status(self) -> None:
+        """Reject one medium row when any second failed status appears."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_path = Path(tmpdir) / "sample_status.tsv"
+            write_text(
+                status_path,
+                (
+                    "accession\tgcode_status\tprokka_status\twarnings\n"
+                    "ACC1\tfailed\tfailed\tgcode_na\n"
+                ),
+            )
+
+            with self.assertRaises(validate_hpc_matrix.ValidateHpcMatrixError) as context:
+                validate_hpc_matrix.assert_medium_statuses_allowed(status_path)
+
+            self.assertIn(
+                "Found unexpected medium sample-status failures: ACC1 (gcode_status, prokka_status)",
+                str(context.exception),
+            )
+
+    def test_medium_status_helper_rejects_missing_gcode_na_warning(self) -> None:
+        """Reject one medium row when the gcode failure lacks the expected warning token."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_path = Path(tmpdir) / "sample_status.tsv"
+            write_text(
+                status_path,
+                (
+                    "accession\tgcode_status\twarnings\n"
+                    "ACC1\tfailed\tcodetta_multiple_ncbi_tables\n"
+                ),
+            )
+
+            with self.assertRaises(validate_hpc_matrix.ValidateHpcMatrixError) as context:
+                validate_hpc_matrix.assert_medium_statuses_allowed(status_path)
+
+            self.assertIn(
+                "Found unexpected medium sample-status failures: ACC1 (gcode_status)",
+                str(context.exception),
+            )
+
+    def test_strict_status_helper_rejects_any_failed_row(self) -> None:
+        """Keep the tracked-run helper strict for any failed status row."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_path = Path(tmpdir) / "sample_status.tsv"
+            write_text(
+                status_path,
+                (
+                    "accession\tgcode_status\twarnings\n"
+                    "ACC1\tfailed\tgcode_na\n"
+                ),
+            )
+
+            with self.assertRaises(validate_hpc_matrix.ValidateHpcMatrixError) as context:
+                validate_hpc_matrix.assert_no_failed_statuses(status_path)
+
+            self.assertIn("Found failed sample-status rows: ACC1", str(context.exception))
 
 
 if __name__ == "__main__":
