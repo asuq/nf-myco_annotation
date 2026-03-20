@@ -29,11 +29,12 @@ def run_command(args: list[str], *, timeout: int | None = None) -> subprocess.Co
 class PythonHelperContainerContractTestCase(unittest.TestCase):
     """Lock the shared Python helper image contract."""
 
-    def test_dockerfile_installs_numpy_and_scipy(self) -> None:
-        """Require the helper Dockerfile to install the scientific stack."""
+    def test_dockerfile_installs_biopython_numpy_and_scipy(self) -> None:
+        """Require the helper Dockerfile to install the Python reporting stack."""
         dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
 
         self.assertIn("FROM python:3.12", dockerfile_text)
+        self.assertIn("biopython==1.84", dockerfile_text)
         self.assertIn("numpy==2.1.1", dockerfile_text)
         self.assertIn("scipy==1.14.1", dockerfile_text)
 
@@ -41,7 +42,7 @@ class PythonHelperContainerContractTestCase(unittest.TestCase):
         RUN_DOCKER_TESTS,
         "Set RUN_DOCKER_TESTS=1 to run the shared Python helper image contract test.",
     )
-    def test_custom_image_imports_numpy_and_scipy_on_linux_amd64(self) -> None:
+    def test_custom_image_imports_biopython_numpy_and_scipy_on_linux_amd64(self) -> None:
         """Build the helper image and require imports to work on amd64."""
         build_result = run_command(
             [
@@ -72,7 +73,12 @@ class PythonHelperContainerContractTestCase(unittest.TestCase):
                 IMAGE,
                 "python",
                 "-c",
-                "import numpy, scipy; print(numpy.__version__); print(scipy.__version__)",
+                (
+                    "import Bio, numpy, scipy; "
+                    "print(Bio.__version__); "
+                    "print(numpy.__version__); "
+                    "print(scipy.__version__)"
+                ),
             ],
             timeout=30,
         )
@@ -81,6 +87,7 @@ class PythonHelperContainerContractTestCase(unittest.TestCase):
             0,
             msg=f"Python helper image contract failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
         )
+        self.assertIn("1.84", result.stdout)
         self.assertIn("2.1.1", result.stdout)
         self.assertIn("1.14.1", result.stdout)
 
