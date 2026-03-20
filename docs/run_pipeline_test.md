@@ -61,6 +61,8 @@ For the fixed medium `p2` run, the validator now allows the expected
 `strict_delta` edge case where a row has only `gcode_status=failed`,
 `warnings` includes `gcode_na`, and downstream annotation statuses are
 non-failed.
+It also allows an isolated failure in the secondary BUSCO lineage when the row
+records `busco_summary_failed`. The primary BUSCO lineage remains strict.
 
 The medium Mycoplasmatota/Bacillota cohort is now prepared in the same way as
 the tracked small cohort from repo-tracked `source_catalog.tsv` and

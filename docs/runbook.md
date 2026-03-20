@@ -645,6 +645,10 @@ unresolved at gcode assignment under the default `strict_delta` rule. For `p2`,
 the validator accepts those rows only when `gcode_status=failed` is the sole
 failed column, `warnings` includes `gcode_na`, and downstream annotation
 statuses remain non-failed, typically `skipped`.
+The same `p2` validator also accepts an isolated failure in the secondary
+BUSCO lineage when `warnings` includes `busco_summary_failed`. Primary BUSCO
+lineage failures still fail validation because they affect ANI eligibility and
+indicate a materially incomplete QC result.
 
 Only after `prepare`, `dbprep-slurm`, and the tracked `p1` run succeed should
 you launch the full scripted campaign:
