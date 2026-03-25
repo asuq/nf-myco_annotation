@@ -18,6 +18,9 @@ The pipeline requires:
 `accessions.txt` should contain one accession per line. `datasets` and
 `dataformat` must be installed and available on `PATH`. This prepares only
 `metadata.tsv`; the sample manifest still needs to be prepared separately.
+This recipe was checked locally in the `gtdb-genome` environment. The
+resulting `metadata.raw.tsv` uses human-readable `dataformat` headers, not the
+`--fields` token names.
 
 ```bash
 datasets summary genome accession \
@@ -39,45 +42,53 @@ input_path = Path("metadata.raw.tsv")
 output_path = Path("metadata.tsv")
 
 column_map = [
-    ("accession", "accession"),
-    ("assminfo-name", "Assembly_Name"),
-    ("organism-name", "Organism_Name"),
-    ("assminfo-atypicalwarnings", "Atypical_Warnings"),
-    ("assminfo-notes", "Notes"),
-    ("assmstats-total-sequence-len", "Genome_Size"),
-    ("type_material-label", "Type_Material"),
-    ("organism-tax-id", "Tax_ID"),
-    ("assminfo-level", "Assembly_Level"),
-    ("assminfo-release-date", "Release_Date"),
-    ("assminfo-sequencing-tech", "Sequencing_Tech"),
-    ("assminfo-assembly-method", "Assembly_Method"),
-    ("assmstats-number-of-contigs", "Contigs"),
-    ("assmstats-number-of-scaffolds", "Scaffolds"),
-    ("assmstats-scaffold-n50", "N50"),
-    ("assmstats-genome-coverage", "Genome_Coverage"),
-    ("source_database", "Source_Database"),
-    ("assminfo-bioproject", "BioProject"),
-    ("assminfo-biosample-accession", "BioSample"),
-    ("assminfo-submitter", "Submitter"),
+    ("Assembly Accession", "accession"),
+    ("Assembly Name", "Assembly_Name"),
+    ("Organism Name", "Organism_Name"),
+    ("Assembly Atypical Warnings", "Atypical_Warnings"),
+    ("Assembly Notes", "Notes"),
+    ("Assembly Stats Total Sequence Length", "Genome_Size"),
+    ("Type Material Label", "Type_Material"),
+    ("Organism Taxonomic ID", "Tax_ID"),
+    ("Assembly Level", "Assembly_Level"),
+    ("Assembly Release Date", "Release_Date"),
+    ("Assembly Sequencing Tech", "Sequencing_Tech"),
+    ("Assembly Assembly Method", "Assembly_Method"),
+    ("Assembly Stats Number of Contigs", "Contigs"),
+    ("Assembly Stats Number of Scaffolds", "Scaffolds"),
+    ("Assembly Stats Scaffold N50", "N50"),
+    ("Assembly Stats Genome Coverage", "Genome_Coverage"),
+    ("Source Database", "Source_Database"),
+    ("Assembly BioProject Accession", "BioProject"),
+    ("Assembly BioSample Accession", "BioSample"),
+    ("Assembly Submitter", "Submitter"),
 ]
 
 with input_path.open("r", encoding="utf-8", newline="") as handle:
-    reader = csv.DictReader(handle, delimiter="\t")
-    missing = [source for source, _target in column_map if source not in reader.fieldnames]
-    if missing:
-        raise SystemExit(
-            "metadata.raw.tsv is missing expected column(s): " + ", ".join(missing)
-        )
+    reader = csv.reader(handle, delimiter="\t")
+    rows = list(reader)
 
-    with output_path.open("w", encoding="utf-8", newline="") as out_handle:
-        writer = csv.DictWriter(
-            out_handle,
-            fieldnames=[target for _source, target in column_map],
-            delimiter="\t",
+if not rows:
+    raise SystemExit("metadata.raw.tsv is empty.")
+
+header = [cell.strip() for cell in rows[0]]
+index = {name: position for position, name in enumerate(header)}
+missing = [source for source, _target in column_map if source not in index]
+if missing:
+    raise SystemExit(
+        "metadata.raw.tsv is missing expected column(s): " + ", ".join(missing)
+    )
+
+with output_path.open("w", encoding="utf-8", newline="") as out_handle:
+    writer = csv.writer(out_handle, delimiter="\t")
+    writer.writerow([target for _source, target in column_map])
+    for row in rows[1:]:
+        writer.writerow(
+            [
+                row[index[source]] if index[source] < len(row) else ""
+                for source, _target in column_map
+            ]
         )
-        writer.writeheader()
-        for row in reader:
-            writer.writerow({target: row[source] for source, target in column_map})
 PY
 ```
 
