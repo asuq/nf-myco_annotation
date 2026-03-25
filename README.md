@@ -29,6 +29,7 @@ reporting contracts, see
 - [Entrypoints](#entrypoints)
 - [Prerequisites](#prerequisites)
 - [Required inputs and databases](#required-inputs-and-databases)
+- [Preparing sample_csv](#preparing-sample_csv)
 - [Preparing metadata.tsv](#preparing-metadatatsv)
 - [Quick-start workflow](#quick-start-workflow)
 - [Main run examples](#main-run-examples)
@@ -117,6 +118,21 @@ Useful defaults from the implementation:
 - `--gcode_rule` defaults to `strict_delta`
 - `--ani_threshold` defaults to `0.95`
 - `--outdir` defaults to `results`
+
+## Preparing sample_csv
+
+Use `sample_csv` as a simple CSV manifest with one genome per row.
+
+```csv
+accession,is_new,assembly_level,genome_fasta
+GCA_000027325.1,false,NA,/data/genomes/GCA_000027325.1.fasta
+MYCO_NEW_001,true,Complete Genome,/data/genomes/MYCO_NEW_001.fasta
+```
+
+- headers must stay lower-case and in this exact structure
+- `assembly_level` is required when `is_new=true`
+- `assembly_level` can be `NA` when `is_new=false`
+- `genome_fasta` must point to the input FASTA for that accession
 
 ## Preparing metadata.tsv
 
