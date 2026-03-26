@@ -1,3 +1,5 @@
+import java.nio.file.Path
+
 include { VALIDATE_INPUTS } from '../../modules/local/validate_inputs'
 include { STAGE_INPUTS } from '../../modules/local/stage_inputs'
 
@@ -18,7 +20,8 @@ workflow INPUT_VALIDATION_AND_STAGING {
         .splitCsv(header: true, sep: '\t')
         .map { row ->
             def meta = row.collectEntries { key, value -> [(key): value] }
-            tuple(meta, file(row.genome_fasta, checkIfExists: true))
+            def genomePath = Path.of(row.genome_fasta).toRealPath()
+            tuple(meta, genomePath)
         }
 
     STAGE_INPUTS(sample_genomes)

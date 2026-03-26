@@ -44,14 +44,15 @@ process VALIDATE_INPUTS {
     """
 
     stub:
-    '''
+    def stubGenome = file("${projectDir}/assets/testdata/stub/genomes/TEST_ACC.fasta").toString()
+    """
     cat <<'EOF' > validated_samples.tsv
     accession	is_new	assembly_level	genome_fasta	internal_id
-    TEST_ACC	false	NA	assets/testdata/stub/genomes/TEST_ACC.fasta	TEST_ACC
+    TEST_ACC	false	NA	${stubGenome}	TEST_ACC
     EOF
     cat <<'EOF' > accession_map.tsv
     accession	internal_id	is_new	assembly_level	genome_fasta	metadata_present
-    TEST_ACC	TEST_ACC	false	NA	assets/testdata/stub/genomes/TEST_ACC.fasta	true
+    TEST_ACC	TEST_ACC	false	NA	${stubGenome}	true
     EOF
     cat <<'EOF' > validation_warnings.tsv
     accession	warning_code	message
@@ -65,5 +66,5 @@ process VALIDATE_INPUTS {
       python: "stub"
       script: "bin/validate_inputs.py"
     EOF
-    '''
+    """
 }

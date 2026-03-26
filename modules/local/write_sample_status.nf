@@ -5,6 +5,7 @@
 process WRITE_SAMPLE_STATUS {
     tag "sample_status"
     label 'process_single'
+    cache 'deep'
     publishDir(
         "${params.outdir}/tables",
         mode: 'copy',
@@ -14,7 +15,7 @@ process WRITE_SAMPLE_STATUS {
 
     input:
     path validated_samples
-    path initial_status
+    path initial_status, name: 'initial_status.tsv'
     path columns
     path metadata
     path taxonomy

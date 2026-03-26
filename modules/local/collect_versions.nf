@@ -5,6 +5,7 @@
 process COLLECT_VERSIONS {
     tag "versions"
     label 'process_single'
+    cache 'deep'
     publishDir(
         "${params.outdir}/tables",
         mode: 'copy',

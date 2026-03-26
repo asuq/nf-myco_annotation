@@ -4,6 +4,7 @@
 process STAGE_INPUTS {
     tag "${meta.accession}"
     label 'process_single'
+    cache 'deep'
     publishDir(
         { "${params.outdir}/samples/${meta.accession}/staged" },
         mode: 'copy',

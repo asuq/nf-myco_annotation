@@ -5,6 +5,7 @@
 process BUILD_MASTER_TABLE {
     tag "master_table"
     label 'process_single'
+    cache 'deep'
     publishDir(
         "${params.outdir}/tables",
         mode: 'copy',

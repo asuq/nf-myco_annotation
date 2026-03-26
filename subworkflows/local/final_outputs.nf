@@ -38,7 +38,8 @@ workflow FINAL_OUTPUTS {
     ccfinder_seed = Channel.value(file("${projectDir}/assets/testdata/headers/ccfinder_strains.tsv"))
     append_columns = Channel.value(file("${projectDir}/assets/master_table_append_columns.txt"))
     sample_status_columns = Channel.value(file("${projectDir}/assets/sample_status_columns.txt"))
-    primaryBuscoColumn = params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}"
+    primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}").toString()
+    finalOutputsCollectDir = file("${workflow.workDir}/collect/${workflow.sessionId}/final_outputs")
 
     extractExitCode = { logFile ->
         def file = logFile.toFile()
@@ -126,7 +127,12 @@ workflow FINAL_OUTPUTS {
                 "${meta.accession}\t${extractExitCode.call(log)}\t${gff.toFile().length()}\t${faa.toFile().length()}"
             }
         )
-        .collectFile(name: 'prokka_manifest.tsv', newLine: true, sort: false)
+        .collectFile(
+            name: 'prokka_manifest.tsv',
+            newLine: true,
+            sort: false,
+            storeDir: finalOutputsCollectDir,
+        )
 
     padlocManifest = Channel
         .of('accession\texit_code\tresult_file_count')
@@ -135,7 +141,12 @@ workflow FINAL_OUTPUTS {
                 "${meta.accession}\t${extractExitCode.call(log)}\t${countTopLevelFiles.call(padlocDir)}"
             }
         )
-        .collectFile(name: 'padloc_manifest.tsv', newLine: true, sort: false)
+        .collectFile(
+            name: 'padloc_manifest.tsv',
+            newLine: true,
+            sort: false,
+            storeDir: finalOutputsCollectDir,
+        )
 
     eggnogManifest = Channel
         .of('accession\tstatus\twarnings\texit_code\tannotations_size\tresult_file_count')
@@ -166,7 +177,12 @@ workflow FINAL_OUTPUTS {
                     }
                     .filter { row -> row != null }
         )
-        .collectFile(name: 'eggnog_manifest.tsv', newLine: true, sort: false)
+        .collectFile(
+            name: 'eggnog_manifest.tsv',
+            newLine: true,
+            sort: false,
+            storeDir: finalOutputsCollectDir,
+        )
 
     SELECT_ANI_REPRESENTATIVES(
         ani_clusters,
@@ -214,6 +230,11 @@ workflow FINAL_OUTPUTS {
     collected_versions = version_files
         .mix(final_versions)
         .collect()
+        .map { files ->
+            files.sort { left, right ->
+                left.toString() <=> right.toString()
+            }
+        }
 
     COLLECT_VERSIONS(
         collected_versions,

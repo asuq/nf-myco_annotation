@@ -5,6 +5,7 @@
 process CALCULATE_ASSEMBLY_STATS {
     tag "assembly_stats"
     label 'process_single'
+    cache 'deep'
     publishDir(
         { "${params.outdir}/cohort/assembly_stats" },
         mode: 'copy',
