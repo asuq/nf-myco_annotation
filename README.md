@@ -21,7 +21,9 @@ This README is the operator-facing landing page for normal setup and runs. For
 full operator detail, acceptance workflows, and troubleshooting, see
 [`docs/runbook.md`](docs/runbook.md). For the implemented architecture and
 reporting contracts, see
-[`docs/implemented_pipeline.md`](docs/implemented_pipeline.md).
+[`docs/implemented_pipeline.md`](docs/implemented_pipeline.md). For the
+recommended first real server validation path, see
+[`docs/small_cohort_server_test.md`](docs/small_cohort_server_test.md).
 
 ## Table of contents
 
@@ -388,6 +390,9 @@ validation on HPC, use the normal execution profile instead of `debug`.
 - `README.md`: onboarding, prerequisites, quick-start, and normal run examples
 - [`docs/runbook.md`](docs/runbook.md): extended operator detail, runtime
   database preparation notes, acceptance workflows, and troubleshooting
+- [`docs/small_cohort_server_test.md`](docs/small_cohort_server_test.md):
+  recommended first real server validation path for the tracked small
+  acceptance cohort
 - [`docs/implemented_pipeline.md`](docs/implemented_pipeline.md): implemented
   workflow structure, published layout, and final reporting contracts
 - [`docs/run_pipeline_test.md`](docs/run_pipeline_test.md): wrapper-specific

@@ -71,6 +71,9 @@ the tracked small cohort from repo-tracked `source_catalog.tsv` and
 The wrapper's normal `slurm` path remains centred on the debug acceptance
 cohort and local-baseline comparison.
 
+For the recommended first real server validation path with the tracked small
+acceptance cohort, see [`docs/small_cohort_server_test.md`](small_cohort_server_test.md).
+
 ## Command
 
 ```bash

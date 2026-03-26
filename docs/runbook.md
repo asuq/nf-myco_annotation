@@ -189,6 +189,27 @@ nextflow run . -profile test -stub-run
 This validates the DSL wiring, channel contracts, publish locations, and final
 table/version outputs without requiring external databases or tool containers.
 
+## Small-cohort server validation
+
+For the recommended first real server validation path, use the tracked small
+acceptance cohort instead of starting with a custom or medium cohort. The full
+step-by-step guide is in
+[`docs/small_cohort_server_test.md`](small_cohort_server_test.md).
+
+In short:
+
+1. activate the `nextflow` conda environment on the login node
+2. run the stub smoke test
+3. prepare the tracked small acceptance cohort
+4. ensure the runtime databases are ready
+5. run the SLURM acceptance cohort
+6. inspect the published outputs
+7. rerun with `--resume`
+
+Do not start the first small-cohort correctness run with
+`conf/oist_20k_storage.config`. Use the normal path first, then test the 20k
+override separately.
+
 ## Manual wrapper
 
 For a single operator-facing entrypoint, use `bin/run_pipeline_test.sh`.
