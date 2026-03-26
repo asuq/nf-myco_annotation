@@ -4,6 +4,12 @@
 process SUMMARISE_BUSCO {
     tag "${meta.accession} / ${lineage}"
     label 'process_single'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/busco/${lineage}" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename -> filename == "busco_summary_${lineage}.tsv" ? filename : null },
+    )
 
     input:
     tuple val(meta), val(lineage), path(busco_summary_json)

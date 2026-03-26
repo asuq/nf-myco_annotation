@@ -82,6 +82,12 @@ process CHECKM2 {
         : > quality_report.tsv
     fi
 
+    rm -rf "\${output_dir}"
+    mkdir -p "\${output_dir}"
+    if [[ -s quality_report.tsv ]]; then
+        cp quality_report.tsv "\${output_dir}/"
+    fi
+
     printf 'exit_code=%s\n' "\$exit_code" >> checkm2.log
 
     checkm2_version="\$(command -v checkm2 >/dev/null 2>&1 && checkm2 --version 2>&1 | awk 'NF { print; exit }' || echo NA)"

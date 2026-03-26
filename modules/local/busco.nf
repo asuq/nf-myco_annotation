@@ -73,6 +73,12 @@ process BUSCO {
         : > short_summary.json
     fi
 
+    rm -rf "\${output_dir}"
+    mkdir -p "\${output_dir}"
+    if [[ -s short_summary.json ]]; then
+        cp short_summary.json "\${output_dir}/"
+    fi
+
     printf 'exit_code=%s\n' "\$exit_code" >> busco.log
 
     busco_version="\$(command -v busco >/dev/null 2>&1 && busco --version 2>&1 | awk 'NF { value=\$0 } END { if (value) print value }' || true)"

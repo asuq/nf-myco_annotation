@@ -602,6 +602,50 @@ nextflow run . -profile oist \
 
 Do not include `debug` and do not set `--eggnog_only_accessions`.
 
+For large OIST cohorts where shared-storage pressure matters, add the tracked
+opt-in storage override:
+
+```bash
+nextflow run . -profile oist \
+  -c conf/oist_20k_storage.config \
+  -work-dir /flash/path/to/work_nf_myco_annotation_20k \
+  --sample_csv "$ACCEPT_ROOT/generated/sample_sheet.csv" \
+  --metadata "$ACCEPT_ROOT/generated/metadata.tsv" \
+  --taxdump "$TAXDUMP_DIR" \
+  --checkm2_db "$CHECKM2_DIR" \
+  --codetta_db "$CODETTA_DIR" \
+  --busco_db "$BUSCO_DIR" \
+  --eggnog_db "$EGGNOG_DIR" \
+  --singularity_cache_dir "$SINGULARITY_CACHE" \
+  --outdir "$RESULT_ROOT/p1/out"
+```
+
+To guarantee `-resume` for that run design:
+
+- keep the same launch directory so `.nextflow/cache` is reused
+- keep the same `-work-dir` path
+- do not clean the persistent `/flash` work tree between runs
+- do not enable `cleanup = true`
+- do not change input paths, mtimes, or task-defining config between runs
+
+Resume example:
+
+```bash
+nextflow run . -profile oist \
+  -c conf/oist_20k_storage.config \
+  -resume \
+  -work-dir /flash/path/to/work_nf_myco_annotation_20k \
+  --sample_csv "$ACCEPT_ROOT/generated/sample_sheet.csv" \
+  --metadata "$ACCEPT_ROOT/generated/metadata.tsv" \
+  --taxdump "$TAXDUMP_DIR" \
+  --checkm2_db "$CHECKM2_DIR" \
+  --codetta_db "$CODETTA_DIR" \
+  --busco_db "$BUSCO_DIR" \
+  --eggnog_db "$EGGNOG_DIR" \
+  --singularity_cache_dir "$SINGULARITY_CACHE" \
+  --outdir "$RESULT_ROOT/p1/out"
+```
+
 Monitor:
 
 ```bash
@@ -705,6 +749,13 @@ columns in the order locked by `assets/master_table_append_columns.txt`.
 Codetta contributes `Codetta_Genetic_Code` and
 `Codetta_NCBI_Table_Candidates`, and `sample_status.tsv` includes
 `codetta_status`.
+
+Published sample and cohort folders retain the logs and stable intermediate
+files used to assemble the master table, while large raw CheckM2, BUSCO,
+Prokka, CRISPRCasFinder, and Codetta artefacts are pruned before task
+completion. Under the 20k OIST override, `results/cohort/fastani/` keeps only
+`ani_metadata.tsv`, `ani_exclusions.tsv`, `fastani_paths.txt`, and the FastANI
+matrix/log outputs; the staged `fastani_inputs/` directory remains in `work/`.
 
 ## Notes
 

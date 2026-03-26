@@ -5,6 +5,16 @@
 process SUMMARISE_16S {
     tag "${meta.accession}"
     label 'process_single'
+    publishDir(
+        { "${params.outdir}/samples/${meta.accession}/16s" },
+        mode: 'copy',
+        overwrite: true,
+        saveAs: { filename ->
+            filename in ['16S_status.tsv', 'best_16S.fna']
+                ? filename
+                : null
+        },
+    )
 
     input:
     tuple val(meta), path(rrna_gff), path(rrna_fasta), path(barrnap_log)

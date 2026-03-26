@@ -46,8 +46,9 @@ The main analysis workflow is designed around these steps:
 - stage each genome under a sanitized internal ID for tool-safe execution
 - expand taxonomy from a pinned user-supplied taxdump
 - run per-sample QC with Barrnap, paired CheckM2 runs, and BUSCO
-- run Codetta for every sample and publish all Codetta artefacts under
-  `samples/<accession>/codetta/`
+- retain the logs and stable intermediate files used to assemble
+  `master_table.tsv` while pruning bulky raw tool artefacts before task
+  completion
 - run gcode-gated annotation with Prokka, CRISPRCasFinder, PADLOC, and eggNOG
 - build ANI inputs, run all-vs-all FastANI, cluster genomes, and select
   representatives
@@ -303,6 +304,28 @@ nextflow run . -profile oist \
   --outdir results
 ```
 
+Large OIST cohort run with the opt-in storage overrides:
+
+```bash
+nextflow run . -profile oist \
+  -c conf/oist_20k_storage.config \
+  -work-dir /flash/path/to/work_nf_myco_annotation_20k \
+  --sample_csv samples.csv \
+  --metadata metadata.tsv \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
+  --busco_db /path/to/busco \
+  --eggnog_db /path/to/eggnog-db \
+  --singularity_cache_dir /path/to/singularity-cache \
+  --outdir results
+```
+
+To resume that run safely, reuse the same launch directory, `-work-dir`, and
+`--outdir`, then append `-resume`. Do not enable `cleanup = true`, do not
+delete `.nextflow/cache`, and do not purge the shared `/flash` work tree
+between runs.
+
 Main-workflow BUSCO dataset download variant:
 
 ```bash
@@ -334,9 +357,11 @@ The most important outputs are:
 - `results/tables/master_table.tsv`
 - `results/tables/sample_status.tsv`
 - `results/tables/tool_and_db_versions.tsv`
-- `results/samples/<accession>/codetta/` for per-sample Codetta outputs and summaries
-- `results/samples/<accession>/...` for the remaining per-sample tool outputs
-- `results/cohort/fastani/` for FastANI inputs, metadata, exclusions, and matrix outputs
+- `results/samples/<accession>/...` for the logs and stable intermediate files
+  used to build `master_table.tsv`, with bulky raw artefacts pruned before task
+  completion
+- `results/cohort/fastani/` for ANI metadata, exclusions, path lists, and
+  matrix outputs; the staged `fastani_inputs/` directory stays in `work/`
 - `results/cohort/ani_clusters/` for clustering and representative tables
 - `results/cohort/taxonomy/` for expanded taxonomy output
 - `results/pipeline_info/` for Nextflow trace, report, timeline, and DAG files

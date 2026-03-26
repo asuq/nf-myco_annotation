@@ -109,10 +109,6 @@ process CCFINDER {
     if [[ "\${exit_code}" -eq 0 && -n "\${result_json_path}" ]]; then
         perl -0pi -e 's/:\\s*(?=,|\\}|\\])/: null/g' "\${result_json_path}"
     fi
-    if [[ -d "\${tool_output_root}" ]]; then
-        cp -R "\${tool_output_root}/". ccfinder/
-    fi
-
     if [[ "\${exit_code}" -eq 0 && -n "\${result_json_path}" ]]; then
         cp "\${result_json_path}" result.json
     else
@@ -126,6 +122,12 @@ process CCFINDER {
     fi
     cat "\${wrapper_log}" >> ccfinder.log
     printf 'exit_code=%s\n' "\$exit_code" >> ccfinder.log
+
+    rm -rf ccfinder
+    mkdir -p ccfinder
+    if [[ -s result.json ]]; then
+        cp result.json ccfinder/
+    fi
 
     ccfinder_version="\$(perl "\${ccfinder_root}/CRISPRCasFinder.pl" -v 2>&1 | sed -n 's/.*version \\([^,[:space:]]*\\).*/\\1/p' | head -n 1 || true)"
     ccfinder_version="\${ccfinder_version:-NA}"

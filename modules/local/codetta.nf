@@ -99,6 +99,9 @@ process CODETTA {
         : > "\${results_summary}"
     fi
     printf 'exit_code=%s\n' "\${exit_code}" >> codetta/codetta.log
+    rm -f codetta/*.alignment_output.txt codetta/*.alignment_output.txt.gz codetta/*.genetic_code.out
+    rm -rf codetta/*.temp_files
+    rm -rf "\${resource_directory}"
 
     codetta_version='NA'
     codetta_source_commit='NA'
