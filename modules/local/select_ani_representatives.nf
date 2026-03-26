@@ -10,7 +10,7 @@ process SELECT_ANI_REPRESENTATIVES {
         mode: 'copy',
         overwrite: true,
         saveAs: { filename ->
-            filename in ['ani_representatives.tsv']
+            filename in ['ani_representatives.tsv', 'ani_summary.tsv']
                 ? filename
                 : null
         },

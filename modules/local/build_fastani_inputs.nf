@@ -5,11 +5,16 @@
 process BUILD_FASTANI_INPUTS {
     tag "fastani_prep"
     label 'process_single'
+    cache 'deep'
     publishDir(
         { "${params.outdir}/cohort/fastani" },
         mode: 'copy',
         overwrite: true,
-        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+        saveAs: { filename ->
+            filename in ['ani_metadata.tsv', 'ani_exclusions.tsv', 'fastani_paths.txt']
+                ? filename
+                : null
+        },
     )
 
     input:

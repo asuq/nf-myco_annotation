@@ -5,7 +5,6 @@
 process FASTANI {
     tag "fastani"
     label 'process_high'
-    stageInMode 'copy'
     publishDir(
         { "${params.outdir}/cohort/fastani" },
         mode: 'copy',

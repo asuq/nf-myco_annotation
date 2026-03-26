@@ -269,7 +269,11 @@ def ensure_fastani_input(
     if target.exists() or target.is_symlink():
         target.unlink()
 
-    shutil.copy2(source, target)
+    source_real = source.resolve()
+    try:
+        target.hardlink_to(source_real)
+    except OSError:
+        shutil.copy2(source_real, target)
 
     relative_path = str(Path(output_dir.name) / target_name)
     return relative_path, str(target)
