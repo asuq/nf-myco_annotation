@@ -115,8 +115,16 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_path = MODULES_DIR / "summarise_busco.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
+        self.assertIn('{ "${params.outdir}/samples/${meta.accession}/busco/${lineage}" }', module_text)
         self.assertIn('path("busco_summary_${lineage}.tsv")', module_text)
         self.assertIn('--output "busco_summary_${lineage}.tsv"', module_text)
+
+    def test_summarise_16s_publishes_master_table_inputs(self) -> None:
+        """Require the 16S summary module to publish the stable per-sample artefacts."""
+        module_text = (MODULES_DIR / "summarise_16s.nf").read_text(encoding="utf-8")
+
+        self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
+        self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
 
     def test_download_busco_dataset_preserves_lineage_directory_name(self) -> None:
         """Require downloaded BUSCO datasets to be staged under their lineage names."""
@@ -195,8 +203,50 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_path = MODULES_DIR / "write_sample_status.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
+        self.assertIn("path initial_status, name: 'initial_status.tsv'", module_text)
         self.assertIn('script_path="\\$(command -v build_sample_status.py)"', module_text)
         self.assertIn('python3 "\\${script_path}"', module_text)
+
+    def test_resume_safe_collectors_and_consumers_use_stable_inputs(self) -> None:
+        """Require resume-sensitive collectors and consumers to avoid hash drift."""
+        stage_inputs_text = (MODULES_DIR / "stage_inputs.nf").read_text(encoding="utf-8")
+        assembly_stats_text = (MODULES_DIR / "calculate_assembly_stats.nf").read_text(
+            encoding="utf-8"
+        )
+        build_fastani_text = (MODULES_DIR / "build_fastani_inputs.nf").read_text(
+            encoding="utf-8"
+        )
+        build_master_text = (MODULES_DIR / "build_master_table.nf").read_text(
+            encoding="utf-8"
+        )
+        write_status_text = (MODULES_DIR / "write_sample_status.nf").read_text(
+            encoding="utf-8"
+        )
+        collect_versions_text = (MODULES_DIR / "collect_versions.nf").read_text(
+            encoding="utf-8"
+        )
+        input_staging_text = (
+            ROOT / "subworkflows" / "local" / "input_validation_and_staging.nf"
+        ).read_text(encoding="utf-8")
+        final_outputs_text = (
+            ROOT / "subworkflows" / "local" / "final_outputs.nf"
+        ).read_text(encoding="utf-8")
+
+        for module_text in (
+            stage_inputs_text,
+            assembly_stats_text,
+            build_fastani_text,
+            build_master_text,
+            write_status_text,
+            collect_versions_text,
+        ):
+            self.assertIn("cache 'deep'", module_text)
+
+        self.assertIn("import java.nio.file.Path", input_staging_text)
+        self.assertIn("Path.of(row.genome_fasta).toRealPath()", input_staging_text)
+        self.assertIn("finalOutputsCollectDir = file(", final_outputs_text)
+        self.assertIn("workflow.sessionId", final_outputs_text)
+        self.assertIn("storeDir: finalOutputsCollectDir", final_outputs_text)
 
     def test_collect_versions_runs_helper_via_python3(self) -> None:
         """Require version collection to resolve the staged helper explicitly."""
@@ -292,14 +342,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('padloc_version="\\$(padloc --version 2>&1 | awk \'NF { print; exit }\' || echo NA)"', module_text)
         self.assertNotIn('padloc --help 2>&1 | awk \'NF { print; exit }\'', module_text)
 
-    def test_fastani_materialises_inputs_and_fails_early_on_empty_matrix(self) -> None:
-        """Require FastANI to copy-stage inputs and fail before cluster parsing on broken output."""
+    def test_fastani_fails_early_on_empty_matrix_without_module_level_stage_copy(self) -> None:
+        """Require FastANI to keep the early matrix guards and defer stage-copy policy to config."""
         module_text = (MODULES_DIR / "fastani.nf").read_text(encoding="utf-8")
 
-        self.assertIn("stageInMode 'copy'", module_text)
+        self.assertNotIn("stageInMode 'copy'", module_text)
         self.assertIn("grep -q 'Could not open ' fastani.log", module_text)
         self.assertIn('if [[ -s "${fastani_paths}" && ! -s fastani.matrix ]]; then', module_text)
         self.assertIn('FastANI did not produce a matrix for a non-empty input list.', module_text)
+
+    def test_build_fastani_inputs_publishes_only_metadata_side_products(self) -> None:
+        """Require the ANI prep publisher to exclude the staged FASTA directory."""
+        module_text = (MODULES_DIR / "build_fastani_inputs.nf").read_text(encoding="utf-8")
+
+        self.assertIn("filename in ['ani_metadata.tsv', 'ani_exclusions.tsv', 'fastani_paths.txt']", module_text)
+        self.assertNotIn("filename == 'fastani_inputs'", module_text)
+
+    def test_select_ani_representatives_publishes_ani_summary(self) -> None:
+        """Require the final ANI summary table to be published for master-table joins."""
+        module_text = (MODULES_DIR / "select_ani_representatives.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("filename in ['ani_representatives.tsv', 'ani_summary.tsv']", module_text)
 
     def test_ccfinder_extracts_a_numeric_version_from_verbose_output(self) -> None:
         """Require CRISPRCasFinder provenance to store a clean version token."""
@@ -371,6 +436,31 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             module_text,
         )
 
+    def test_pruned_tool_outputs_keep_declared_resume_safe_directories(self) -> None:
+        """Require pruned tool wrappers to recreate declared output directories before task end."""
+        checkm2_text = (MODULES_DIR / "checkm2.nf").read_text(encoding="utf-8")
+        busco_text = (MODULES_DIR / "busco.nf").read_text(encoding="utf-8")
+        prokka_text = (MODULES_DIR / "prokka.nf").read_text(encoding="utf-8")
+        ccfinder_text = (MODULES_DIR / "ccfinder.nf").read_text(encoding="utf-8")
+        codetta_text = (MODULES_DIR / "codetta.nf").read_text(encoding="utf-8")
+
+        self.assertIn('path("checkm2_gcode${translation_table}")', checkm2_text)
+        self.assertIn('rm -rf "\\${output_dir}"', checkm2_text)
+        self.assertIn('cp quality_report.tsv "\\${output_dir}/"', checkm2_text)
+
+        self.assertIn('path("busco_${lineage}")', busco_text)
+        self.assertIn('rm -rf "\\${output_dir}"', busco_text)
+        self.assertIn('cp short_summary.json "\\${output_dir}/"', busco_text)
+
+        self.assertIn("tmp_keep_dir=", prokka_text)
+        self.assertIn("cp -a \"\\${tmp_keep_dir}/.\" prokka/ 2>/dev/null || true", prokka_text)
+
+        self.assertIn("rm -rf ccfinder", ccfinder_text)
+        self.assertIn("cp result.json ccfinder/", ccfinder_text)
+
+        self.assertIn("rm -rf \"\\${resource_directory}\"", codetta_text)
+        self.assertIn("rm -f codetta/*.alignment_output.txt codetta/*.alignment_output.txt.gz codetta/*.genetic_code.out", codetta_text)
+
     def test_summarise_ccfinder_consumes_strict_json_only(self) -> None:
         """Require CRISPR summarisation to depend only on the emitted JSON artefact."""
         module_text = (MODULES_DIR / "summarise_ccfinder.nf").read_text(encoding="utf-8")
@@ -412,9 +502,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         workflow_path = ROOT / "subworkflows" / "local" / "final_outputs.nf"
         workflow_text = workflow_path.read_text(encoding="utf-8")
 
-        self.assertIn("collectFile(name: 'prokka_manifest.tsv', newLine: true, sort: false)", workflow_text)
-        self.assertIn("collectFile(name: 'padloc_manifest.tsv', newLine: true, sort: false)", workflow_text)
-        self.assertIn("collectFile(name: 'eggnog_manifest.tsv', newLine: true, sort: false)", workflow_text)
+        self.assertIn("name: 'prokka_manifest.tsv'", workflow_text)
+        self.assertIn("name: 'padloc_manifest.tsv'", workflow_text)
+        self.assertIn("name: 'eggnog_manifest.tsv'", workflow_text)
+        self.assertIn("sort: false", workflow_text)
+        self.assertIn("storeDir: finalOutputsCollectDir", workflow_text)
         self.assertIn("accession\\tstatus\\twarnings\\texit_code\\tannotations_size\\tresult_file_count", workflow_text)
 
     def test_final_outputs_calls_manifest_helpers_as_closures(self) -> None:

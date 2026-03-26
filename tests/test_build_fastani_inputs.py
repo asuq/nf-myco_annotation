@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -146,6 +147,8 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             self.assertEqual(metadata_rows[0]["checkm2_completeness"], "95")
             self.assertEqual(metadata_rows[1]["assembly_level"], "Scaffold")
             self.assertTrue((outdir / "fastani_inputs" / "ACC1.fasta").exists())
+            self.assertTrue((outdir / "fastani_inputs" / "ACC1.fasta").samefile(staged_a))
+            self.assertTrue((outdir / "fastani_inputs" / "ACC2.fasta").samefile(staged_b))
             self.assertFalse((outdir / "fastani_inputs" / "ACC1.fasta").is_symlink())
             self.assertFalse((outdir / "fastani_inputs" / "ACC2.fasta").is_symlink())
             self.assertEqual(
@@ -299,6 +302,28 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             exclusion_rows = read_tsv(outdir / "ani_exclusions.tsv")
             self.assertEqual(exclusion_rows[0]["ani_included"], "true")
             self.assertEqual(exclusion_rows[0]["ani_exclusion_reason"], "")
+
+    def test_falls_back_to_copy_when_hardlinks_are_unavailable(self) -> None:
+        """Copy the staged FASTA when the filesystem rejects hard links."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source = self.write_text_file(tmpdir / "ACC5.fasta", ">a\nACGT\n")
+            output_dir = tmpdir / "out" / "fastani_inputs"
+
+            with mock.patch.object(Path, "hardlink_to", side_effect=OSError("no hardlinks")):
+                relative_path, absolute_path = build_fastani_inputs.ensure_fastani_input(
+                    staged_filename="ACC5.fasta",
+                    manifest_dir=tmpdir,
+                    internal_id="ACC5",
+                    output_dir=output_dir,
+                )
+
+            target = Path(absolute_path)
+            self.assertEqual(relative_path, "fastani_inputs/ACC5.fasta")
+            self.assertTrue(target.exists())
+            self.assertFalse(target.is_symlink())
+            self.assertEqual(target.read_text(encoding="utf-8"), source.read_text(encoding="utf-8"))
+            self.assertNotEqual(target.stat().st_ino, source.stat().st_ino)
 
 
 if __name__ == "__main__":

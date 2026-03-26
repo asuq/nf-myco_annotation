@@ -14,6 +14,7 @@ DOCKER_CONFIG = ROOT / "conf" / "docker.config"
 SINGULARITY_CONFIG = ROOT / "conf" / "singularity.config"
 SLURM_CONFIG = ROOT / "conf" / "slurm.config"
 OIST_CONFIG = ROOT / "conf" / "oist.config"
+OIST_20K_STORAGE_CONFIG = ROOT / "conf" / "oist_20k_storage.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
 DEBUG_CONFIG = ROOT / "conf" / "debug.config"
 BASE_CONFIG = ROOT / "conf" / "base.config"
@@ -98,6 +99,22 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("withLabel: process_high", oist_text)
         self.assertNotIn("params.slurm_account", oist_text)
         self.assertNotIn("beforeScript", oist_text)
+
+    def test_oist_20k_storage_override_is_opt_in_and_resume_safe(self) -> None:
+        """Keep the large-cohort OIST override separate from the default tracked profiles."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+        override_text = OIST_20K_STORAGE_CONFIG.read_text(encoding="utf-8")
+
+        self.assertTrue(OIST_20K_STORAGE_CONFIG.is_file())
+        self.assertNotIn("includeConfig 'conf/oist_20k_storage.config'", config_text)
+        self.assertIn("scratch = '/scratch'", override_text)
+        self.assertIn("stageOutMode = 'move'", override_text)
+        self.assertIn("withName: BUILD_FASTANI_INPUTS", override_text)
+        self.assertIn("scratch = false", override_text)
+        self.assertIn("withName: FASTANI", override_text)
+        self.assertIn("stageInMode = 'copy'", override_text)
+        self.assertNotIn("cleanup = true", override_text)
+        self.assertNotIn("workDir =", override_text)
 
     def test_debug_profile_sets_default_eggnog_smoke_accession(self) -> None:
         """Provide one composable debug profile for single-sample eggNOG runs."""
