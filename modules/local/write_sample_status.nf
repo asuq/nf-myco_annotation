@@ -16,7 +16,7 @@ process WRITE_SAMPLE_STATUS {
     input:
     path validated_samples
     path initial_status, name: 'initial_status.tsv'
-    path columns
+    val busco_lineages
     path metadata
     path taxonomy
     path checkm2
@@ -38,11 +38,15 @@ process WRITE_SAMPLE_STATUS {
     script:
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
+    def lineageArgs = (busco_lineages as List<String>).collect {
+        "--busco-lineage \"${it}\""
+    }.join(' \\\n        ')
     """
     script_path="\$(command -v build_sample_status.py)"
     python3 "\${script_path}" \
         --validated-samples "${validated_samples}" \
         --initial-status "${initial_status}" \
+        ${lineageArgs} \
         --metadata "${metadata}" \
         --taxonomy "${taxonomy}" \
         --checkm2 "${checkm2}" \
@@ -56,7 +60,6 @@ process WRITE_SAMPLE_STATUS {
         --ani "${ani_summary}" \
         --assembly-stats "${assembly_stats}" \
         --primary-busco-column "${primary_busco_column}" \
-        --columns "${columns}" \
         --output sample_status.tsv
 
     cat <<EOF > versions.yml
@@ -67,49 +70,58 @@ process WRITE_SAMPLE_STATUS {
     """.stripIndent()
 
     stub:
+    def sampleStatusColumns = [
+        'accession',
+        'internal_id',
+        'is_new',
+        'validation_status',
+        'taxonomy_status',
+        'barrnap_status',
+        'checkm2_gcode4_status',
+        'checkm2_gcode11_status',
+        'gcode_status',
+        'gcode',
+        'low_quality',
+        *((busco_lineages as List<String>).collect { "busco_${it}_status" }),
+        'codetta_status',
+        'prokka_status',
+        'ccfinder_status',
+        'padloc_status',
+        'eggnog_status',
+        'ani_included',
+        'ani_exclusion_reason',
+        'warnings',
+        'notes',
+    ]
+    def sampleStatusRow = sampleStatusColumns.collect { column ->
+        switch (column) {
+            case 'accession':
+                return 'sample_a'
+            case 'internal_id':
+                return 'sample_a'
+            case 'is_new':
+                return 'false'
+            case 'gcode':
+                return '4'
+            case 'low_quality':
+                return 'false'
+            case 'ani_included':
+                return 'true'
+            case 'ani_exclusion_reason':
+                return ''
+            case 'warnings':
+                return 'stub_warning'
+            case 'notes':
+                return 'stub note'
+            default:
+                return column.endsWith('_status') ? 'done' : ''
+        }
+    }.join('\t')
     """
-    header="\$(paste -sd '\t' "${columns}")"
-    printf '%s\n' "\${header}" > sample_status.tsv
-    status_values=()
-    while IFS= read -r column; do
-        case "\${column}" in
-            accession)
-                status_values+=("sample_a")
-                ;;
-            internal_id)
-                status_values+=("sample_a")
-                ;;
-            is_new)
-                status_values+=("false")
-                ;;
-            gcode)
-                status_values+=("4")
-                ;;
-            low_quality)
-                status_values+=("false")
-                ;;
-            ani_included)
-                status_values+=("true")
-                ;;
-            ani_exclusion_reason)
-                status_values+=("")
-                ;;
-            warnings)
-                status_values+=("stub_warning")
-                ;;
-            notes)
-                status_values+=("stub note")
-                ;;
-            *_status)
-                status_values+=("done")
-                ;;
-            *)
-                status_values+=("")
-                ;;
-        esac
-    done < "${columns}"
-    tab_char="\$(printf '\t')"
-    printf '%s\n' "\$(IFS="\${tab_char}"; printf '%s' "\${status_values[*]}")" >> sample_status.tsv
+    cat <<'EOF' > sample_status.tsv
+${sampleStatusColumns.join('\t')}
+${sampleStatusRow}
+EOF
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"

@@ -18,7 +18,7 @@ process VALIDATE_INPUTS {
     input:
     path sample_csv
     path metadata
-    path sample_status_columns
+    val busco_lineages
 
     output:
     path 'validated_samples.tsv', emit: validated_samples
@@ -28,10 +28,13 @@ process VALIDATE_INPUTS {
     path 'versions.yml', emit: versions
 
     script:
+    def lineageArgs = (busco_lineages as List<String>).collect {
+        "--busco-lineage \"${it}\""
+    }.join(' \\\n    ')
     """validate_inputs.py \
     --sample-csv "${sample_csv}" \
     --metadata "${metadata}" \
-    --sample-status-columns "${sample_status_columns}" \
+    ${lineageArgs} \
     --defer-genome-fasta-check \
     --outdir .
 
@@ -44,6 +47,52 @@ EOF
 
     stub:
     def stubGenome = file("${projectDir}/assets/testdata/stub/genomes/TEST_ACC.fasta").toString()
+    def sampleStatusColumns = [
+        'accession',
+        'internal_id',
+        'is_new',
+        'validation_status',
+        'taxonomy_status',
+        'barrnap_status',
+        'checkm2_gcode4_status',
+        'checkm2_gcode11_status',
+        'gcode_status',
+        'gcode',
+        'low_quality',
+        *((busco_lineages as List<String>).collect { "busco_${it}_status" }),
+        'codetta_status',
+        'prokka_status',
+        'ccfinder_status',
+        'padloc_status',
+        'eggnog_status',
+        'ani_included',
+        'ani_exclusion_reason',
+        'warnings',
+        'notes',
+    ]
+    def sampleStatusRow = sampleStatusColumns.collect { column ->
+        switch (column) {
+            case 'accession':
+                return 'TEST_ACC'
+            case 'internal_id':
+                return 'TEST_ACC'
+            case 'is_new':
+                return 'false'
+            case 'validation_status':
+                return 'done'
+            case 'warnings':
+                return 'stub_warning'
+            case 'notes':
+                return 'stub warning'
+            case 'gcode':
+            case 'low_quality':
+                return 'NA'
+            case 'ani_included':
+                return 'na'
+            default:
+                return column.endsWith('_status') ? 'na' : ''
+        }
+    }.join('\t')
     """cat <<'EOF' > validated_samples.tsv
 accession	is_new	assembly_level	genome_fasta	internal_id
 TEST_ACC	false	NA	${stubGenome}	TEST_ACC
@@ -55,42 +104,10 @@ EOF
 cat <<'EOF' > validation_warnings.tsv
 accession	warning_code	message
 EOF
-header="\$(paste -sd '\t' "${sample_status_columns}")"
-printf '%s\n' "\${header}" > sample_status.tsv
-status_values=()
-while IFS= read -r column; do
-    case "\${column}" in
-        accession)
-            status_values+=("TEST_ACC")
-            ;;
-        internal_id)
-            status_values+=("TEST_ACC")
-            ;;
-        is_new)
-            status_values+=("false")
-            ;;
-        validation_status)
-            status_values+=("done")
-            ;;
-        warnings)
-            status_values+=("stub_warning")
-            ;;
-        notes)
-            status_values+=("stub warning")
-            ;;
-        *_status|ani_included)
-            status_values+=("na")
-            ;;
-        gcode|low_quality)
-            status_values+=("NA")
-            ;;
-        *)
-            status_values+=("")
-            ;;
-    esac
-done < "${sample_status_columns}"
-tab_char="\$(printf '\t')"
-printf '%s\n' "\$(IFS="\${tab_char}"; printf '%s' "\${status_values[*]}")" >> sample_status.tsv
+cat <<'EOF' > sample_status.tsv
+${sampleStatusColumns.join('\t')}
+${sampleStatusRow}
+EOF
 cat <<'EOF' > versions.yml
 "${task.process}":
   python: "stub"

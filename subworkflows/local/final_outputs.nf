@@ -25,8 +25,7 @@ workflow FINAL_OUTPUTS {
     ani_metadata
     assembly_stats
     ani_matrix
-    append_columns
-    sample_status_columns
+    busco_lineages
     version_files
     nextflow_version
     pipeline_version
@@ -193,7 +192,7 @@ workflow FINAL_OUTPUTS {
     BUILD_MASTER_TABLE(
         validated_samples,
         metadata,
-        append_columns,
+        busco_lineages,
         taxonomy,
         combined_checkm2,
         combined_16s,
@@ -207,7 +206,7 @@ workflow FINAL_OUTPUTS {
     WRITE_SAMPLE_STATUS(
         validated_samples,
         initial_status,
-        sample_status_columns,
+        busco_lineages,
         metadata,
         taxonomy,
         combined_checkm2,

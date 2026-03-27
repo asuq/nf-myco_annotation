@@ -20,7 +20,7 @@ process BUILD_MASTER_TABLE {
     input:
     path validated_samples
     path metadata
-    path append_columns
+    val busco_lineages
     path taxonomy
     path checkm2
     path sixteen_s_status
@@ -37,11 +37,14 @@ process BUILD_MASTER_TABLE {
     script:
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
+    def lineageArgs = (busco_lineages as List<String>).collect {
+        "--busco-lineage \"${it}\""
+    }.join(' \\\n        ')
     """
     build_master_table.py \
         --validated-samples "${validated_samples}" \
         --metadata "${metadata}" \
-        --append-columns "${append_columns}" \
+        ${lineageArgs} \
         --taxonomy "${taxonomy}" \
         --checkm2 "${checkm2}" \
         --16s-status "${sixteen_s_status}" \
@@ -60,61 +63,75 @@ process BUILD_MASTER_TABLE {
     """.stripIndent()
 
     stub:
+    def appendColumns = [
+        'superkingdom',
+        'phylum',
+        'class',
+        'order',
+        'family',
+        'genus',
+        'species',
+        'Completeness_gcode4',
+        'Completeness_gcode11',
+        'Contamination_gcode4',
+        'Contamination_gcode11',
+        'Coding_Density_gcode4',
+        'Coding_Density_gcode11',
+        'Average_Gene_Length_gcode4',
+        'Average_Gene_Length_gcode11',
+        'Total_Coding_Sequences_gcode4',
+        'Total_Coding_Sequences_gcode11',
+        'Gcode',
+        'Codetta_Genetic_Code',
+        'Codetta_NCBI_Table_Candidates',
+        'Low_quality',
+        '16S',
+        *((busco_lineages as List<String>).collect { "BUSCO_${it}" }),
+        'CRISPRS',
+        'SPACERS_SUM',
+        'CRISPR_FRAC',
+        'Cluster_ID',
+        'Is_Representative',
+        'ANI_to_Representative',
+        'Score',
+    ]
+    def appendRow = appendColumns.collect { column ->
+        switch (column) {
+            case 'Gcode':
+                return '4'
+            case 'Codetta_Genetic_Code':
+                return 'FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG'
+            case 'Codetta_NCBI_Table_Candidates':
+                return '1;11'
+            case 'Low_quality':
+                return 'false'
+            case '16S':
+                return 'Yes'
+            case 'CRISPRS':
+                return '2'
+            case 'SPACERS_SUM':
+                return '7'
+            case 'CRISPR_FRAC':
+                return '0.1'
+            case 'Cluster_ID':
+                return 'cluster_1'
+            case 'Is_Representative':
+                return 'yes'
+            case 'ANI_to_Representative':
+                return '100'
+            case 'Score':
+                return '0.95'
+            default:
+                return column.startsWith('BUSCO_')
+                    ? 'C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200'
+                    : 'NA'
+        }
+    }.join('\t')
     """
     metadata_header="\$(head -n 1 "${metadata}")"
     metadata_row="\$(awk 'NR == 2 { print; exit }' "${metadata}")"
-    append_header="\$(paste -sd '\t' "${append_columns}")"
-    printf '%s\t%s\n' "\${metadata_header}" "\${append_header}" > master_table.tsv
-    append_values=()
-    while IFS= read -r column; do
-        case "\${column}" in
-            Gcode)
-                append_values+=("4")
-                ;;
-            Codetta_Genetic_Code)
-                append_values+=("FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG")
-                ;;
-            Codetta_NCBI_Table_Candidates)
-                append_values+=("1;11")
-                ;;
-            Low_quality)
-                append_values+=("false")
-                ;;
-            16S)
-                append_values+=("Yes")
-                ;;
-            BUSCO_*)
-                append_values+=("C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200")
-                ;;
-            CRISPRS)
-                append_values+=("2")
-                ;;
-            SPACERS_SUM)
-                append_values+=("7")
-                ;;
-            CRISPR_FRAC)
-                append_values+=("0.1")
-                ;;
-            Cluster_ID)
-                append_values+=("cluster_1")
-                ;;
-            Is_Representative)
-                append_values+=("yes")
-                ;;
-            ANI_to_Representative)
-                append_values+=("100")
-                ;;
-            Score)
-                append_values+=("0.95")
-                ;;
-            *)
-                append_values+=("NA")
-                ;;
-        esac
-    done < "${append_columns}"
-    tab_char="\$(printf '\t')"
-    append_row="\$(IFS="\${tab_char}"; printf '%s' "\${append_values[*]}")"
-    printf '%s\t%s\n' "\${metadata_row}" "\${append_row}" >> master_table.tsv
+    printf '%s\t%s\n' "\${metadata_header}" "${appendColumns.join('\t')}" > master_table.tsv
+    printf '%s\t%s\n' "\${metadata_row}" "${appendRow}" >> master_table.tsv
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"

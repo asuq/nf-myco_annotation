@@ -2,7 +2,6 @@
 
 nextflow.enable.dsl = 2
 
-include { BUILD_OUTPUT_CONTRACTS } from './modules/local/build_output_contracts'
 include { BUSCO_DATASET_PREP } from './subworkflows/local/busco_dataset_prep'
 include { COHORT_16S } from './subworkflows/local/cohort_16s'
 include { COHORT_ANI } from './subworkflows/local/cohort_ani'
@@ -46,12 +45,10 @@ workflow {
     buscoLineagesList = params.busco_lineages as List<String>
     buscoLineages = Channel.fromList(buscoLineagesList)
 
-    BUILD_OUTPUT_CONTRACTS(Channel.value(buscoLineagesList))
-
     INPUT_VALIDATION_AND_STAGING(
         sampleCsv,
         metadata,
-        BUILD_OUTPUT_CONTRACTS.out.sample_status_columns,
+        Channel.value(buscoLineagesList),
     )
     BUSCO_DATASET_PREP(buscoLineages)
     COHORT_TAXONOMY(INPUT_VALIDATION_AND_STAGING.out.validated_samples, metadata, taxdump)
@@ -92,10 +89,8 @@ workflow {
         COHORT_ANI.out.ani_metadata,
         COHORT_ANI.out.assembly_stats,
         COHORT_ANI.out.fastani_matrix,
-        BUILD_OUTPUT_CONTRACTS.out.append_columns,
-        BUILD_OUTPUT_CONTRACTS.out.sample_status_columns,
+        Channel.value(buscoLineagesList),
         INPUT_VALIDATION_AND_STAGING.out.versions
-            .mix(BUILD_OUTPUT_CONTRACTS.out.versions)
             .mix(BUSCO_DATASET_PREP.out.versions)
             .mix(COHORT_TAXONOMY.out.versions)
             .mix(PER_SAMPLE_QC.out.versions)

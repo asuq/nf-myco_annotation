@@ -11,10 +11,10 @@ workflow INPUT_VALIDATION_AND_STAGING {
     take:
     sample_csv
     metadata
-    sample_status_columns
+    busco_lineages
 
     main:
-    VALIDATE_INPUTS(sample_csv, metadata, sample_status_columns)
+    VALIDATE_INPUTS(sample_csv, metadata, busco_lineages)
 
     sample_genomes = VALIDATE_INPUTS.out.validated_samples
         .splitCsv(header: true, sep: '\t')
