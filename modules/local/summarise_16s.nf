@@ -29,11 +29,15 @@ process SUMMARISE_16S {
 
     script:
     """
-    atypical_warnings="\$(extract_atypical_warning.py \
+    python_path="\$(command -v python3)"
+    extract_script_path="\$(command -v extract_atypical_warning.py)"
+    summarise_script_path="\$(command -v summarise_16s.py)"
+
+    atypical_warnings="\$("\${python_path}" "\${extract_script_path}" \
         --metadata "${metadata}" \
         --accession "${meta.accession}")"
 
-    summarise_16s.py \
+    "\${python_path}" "\${summarise_script_path}" \
         --accession "${meta.accession}" \
         --rrna-gff "${rrna_gff}" \
         --rrna-fasta "${rrna_fasta}" \
