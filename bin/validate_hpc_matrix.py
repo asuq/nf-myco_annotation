@@ -22,10 +22,10 @@ from prepare_runtime_databases import (
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
-DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "source_catalog.tsv"
-DEFAULT_MEDIUM_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "medium" / "cohort_plan.tsv"
-DEFAULT_MEDIUM_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "medium" / "source_catalog.tsv"
+DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "tables" / "acceptance" / "cohort_plan.tsv"
+DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "tables" / "acceptance" / "source_catalog.tsv"
+DEFAULT_MEDIUM_COHORT_PLAN = ROOT_DIR / "assets" / "tables" / "medium" / "cohort_plan.tsv"
+DEFAULT_MEDIUM_SOURCE_CATALOG = ROOT_DIR / "assets" / "tables" / "medium" / "source_catalog.tsv"
 PIPELINE_INFO_OUTPUTS = ("trace.tsv", "report.html", "timeline.html", "dag.html")
 
 

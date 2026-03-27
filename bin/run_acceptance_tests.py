@@ -22,13 +22,13 @@ import validate_inputs
 
 LOGGER = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_WORK_ROOT = ROOT_DIR / "assets" / "testdata" / "local" / "acceptance"
-DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "testdata" / "acceptance" / "source_catalog.tsv"
-DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "acceptance" / "cohort_plan.tsv"
+DEFAULT_WORK_ROOT = ROOT_DIR / "assets" / "fixtures" / "local" / "acceptance"
+DEFAULT_SOURCE_CATALOG = ROOT_DIR / "assets" / "tables" / "acceptance" / "source_catalog.tsv"
+DEFAULT_COHORT_PLAN = ROOT_DIR / "assets" / "tables" / "acceptance" / "cohort_plan.tsv"
 DEFAULT_MEDIUM_SOURCE_CATALOG = (
-    ROOT_DIR / "assets" / "testdata" / "medium" / "source_catalog.tsv"
+    ROOT_DIR / "assets" / "tables" / "medium" / "source_catalog.tsv"
 )
-DEFAULT_MEDIUM_COHORT_PLAN = ROOT_DIR / "assets" / "testdata" / "medium" / "cohort_plan.tsv"
+DEFAULT_MEDIUM_COHORT_PLAN = ROOT_DIR / "assets" / "tables" / "medium" / "cohort_plan.tsv"
 DEFAULT_LOCAL_PROFILE = "debug,local,docker"
 DEFAULT_SLURM_PROFILE = "debug,slurm,singularity"
 DEFAULT_DBPREP_PROFILE = "slurm,singularity"
@@ -74,7 +74,9 @@ DBPREP_OUTPUTS = (
     "pipeline_info/dag.html",
 )
 DEFAULT_DBPREP_BUSCO_LINEAGES = ("bacillota_odb12", "mycoplasmatota_odb12")
-SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
+SAMPLE_STATUS_COLUMNS_ASSET = (
+    ROOT_DIR / "assets" / "tables" / "contracts" / "sample_status_columns.txt"
+)
 REQUIRED_ROLE_TAGS = {
     "gcode4_candidate",
     "gcode11_candidate",

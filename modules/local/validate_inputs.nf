@@ -46,7 +46,7 @@ EOF
 """
 
     stub:
-    def stubGenome = file("${projectDir}/assets/testdata/stub/genomes/TEST_ACC.fasta").toString()
+    def stubGenome = file("${projectDir}/assets/fixtures/stub/genomes/TEST_ACC.fasta").toString()
     def sampleStatusColumns = [
         'accession',
         'internal_id',

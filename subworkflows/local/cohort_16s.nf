@@ -12,7 +12,7 @@ workflow COHORT_16S {
     main:
     SUMMARISE_16S(barrnap_outputs)
 
-    cohortManifestHeader = "${projectDir}/assets/testdata/headers/16s_status.tsv"
+    cohortManifestHeader = "${projectDir}/assets/tables/headers/16s_status.tsv"
 
     collected_all_best_16S = SUMMARISE_16S.out.intact_cohort_candidates
         .map { meta, cohortBest16S -> cohortBest16S }

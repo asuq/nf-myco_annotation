@@ -12,7 +12,7 @@ RUN apt-get update \
 COPY bin/prepare_runtime_databases.py /usr/local/bin/prepare_runtime_databases.py
 COPY bin/finalise_runtime_database.py /usr/local/bin/finalise_runtime_database.py
 COPY bin/merge_runtime_database_reports.py /usr/local/bin/merge_runtime_database_reports.py
-COPY assets/runtime_database_sources.json /opt/nf-myco_annotation/runtime_database_sources.json
+COPY assets/runtime/runtime_database_sources.json /opt/nf-myco_annotation/runtime_database_sources.json
 
 RUN chmod +x /usr/local/bin/prepare_runtime_databases.py /usr/local/bin/finalise_runtime_database.py /usr/local/bin/merge_runtime_database_reports.py
 

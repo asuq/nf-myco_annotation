@@ -33,10 +33,10 @@ workflow FINAL_OUTPUTS {
     container_engine
 
     main:
-    checkm2_seed = Channel.value(file("${projectDir}/assets/testdata/headers/checkm2_summary.tsv"))
-    sixteen_s_seed = Channel.value(file("${projectDir}/assets/testdata/headers/16s_status.tsv"))
-    codetta_seed = Channel.value(file("${projectDir}/assets/testdata/headers/codetta_summary.tsv"))
-    ccfinder_seed = Channel.value(file("${projectDir}/assets/testdata/headers/ccfinder_strains.tsv"))
+    checkm2_seed = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))
+    sixteen_s_seed = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))
+    codetta_seed = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))
+    ccfinder_seed = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))
     primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}").toString()
     finalOutputsCollectDir = file("${workflow.workDir}/collect/${workflow.sessionId}/final_outputs")
 

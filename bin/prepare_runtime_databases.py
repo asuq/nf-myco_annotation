@@ -34,7 +34,10 @@ MAX_MD5_DOWNLOAD_ATTEMPTS = 3
 DEFAULT_REMOTE_SOURCE_MANIFEST = Path(
     os.environ.get(
         "NF_MYCO_RUNTIME_DB_SOURCE_MANIFEST",
-        Path(__file__).resolve().parents[1] / "assets" / "runtime_database_sources.json",
+        Path(__file__).resolve().parents[1]
+        / "assets"
+        / "runtime"
+        / "runtime_database_sources.json",
     )
 )
 

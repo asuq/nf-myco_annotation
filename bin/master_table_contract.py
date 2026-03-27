@@ -33,7 +33,11 @@ GCODE_QC_COLUMNS = ("Gcode", *CODETTA_COLUMNS, "Low_quality", "16S")
 CRISPR_COLUMNS = ("CRISPRS", "SPACERS_SUM", "CRISPR_FRAC")
 ANI_COLUMNS = ("Cluster_ID", "Is_Representative", "ANI_to_Representative", "Score")
 DEFAULT_APPEND_COLUMNS_ASSET = (
-    Path(__file__).resolve().parents[1] / "assets" / "master_table_append_columns.txt"
+    Path(__file__).resolve().parents[1]
+    / "assets"
+    / "tables"
+    / "contracts"
+    / "master_table_append_columns.txt"
 )
 SAMPLE_STATUS_PREFIX_COLUMNS = (
     "accession",
@@ -60,7 +64,11 @@ SAMPLE_STATUS_SUFFIX_COLUMNS = (
     "notes",
 )
 DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = (
-    Path(__file__).resolve().parents[1] / "assets" / "sample_status_columns.txt"
+    Path(__file__).resolve().parents[1]
+    / "assets"
+    / "tables"
+    / "contracts"
+    / "sample_status_columns.txt"
 )
 
 
