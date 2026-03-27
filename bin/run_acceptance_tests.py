@@ -805,6 +805,16 @@ def require_output_tables(outdir: Path) -> dict[str, Path]:
     return {name: table_dir / name for name in FINAL_TABLES}
 
 
+def require_cohort_16s_outputs(outdir: Path) -> dict[str, Path]:
+    """Require the published intact cohort 16S artefacts for one pipeline run."""
+    cohort_16s_dir = outdir / "cohort" / "16s"
+    required = ("all_best_16S.fna", "all_best_16S_manifest.tsv")
+    missing = [name for name in required if not (cohort_16s_dir / name).is_file()]
+    if missing:
+        raise AcceptanceTestError("missing_cohort_16s_outputs:" + ",".join(sorted(missing)))
+    return {name: cohort_16s_dir / name for name in required}
+
+
 def require_dbprep_outputs(outdir: Path) -> dict[str, Path]:
     """Require the published artefacts for one successful database prep run."""
     missing = [name for name in DBPREP_OUTPUTS if not (outdir / name).is_file()]
@@ -923,6 +933,19 @@ def status_contains_token(value: str, token: str) -> bool:
     return token in {part.strip() for part in value.split(";") if part.strip()}
 
 
+def read_fasta_headers(path: Path) -> set[str]:
+    """Read FASTA header lines without their leading `>` characters."""
+    if not path.is_file():
+        raise AcceptanceTestError(f"Missing FASTA file: {path}")
+    headers: set[str] = set()
+    with path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if line.startswith(">"):
+                headers.add(line[1:].strip())
+    return headers
+
+
 def records_with_role(plan: Sequence[CohortRecord], role_tag: str) -> list[CohortRecord]:
     """Return all cohort records carrying one role tag."""
     return [record for record in plan if role_tag in record.role_tags]
@@ -933,6 +956,8 @@ def assert_role_coverage(
     plan: Sequence[CohortRecord],
     master_rows: dict[str, dict[str, str]],
     status_rows: dict[str, dict[str, str]],
+    intact_16s_manifest_rows: dict[str, dict[str, str]],
+    intact_16s_headers: set[str],
 ) -> None:
     """Assert that the positive cohort proved all required acceptance roles."""
     gcode4_candidates = records_with_role(plan, "gcode4_candidate")
@@ -978,6 +1003,12 @@ def assert_role_coverage(
         for record in atypical_exception_candidates
     ):
         raise AcceptanceTestError("missing_atypical_exception_inclusion")
+    if not any(
+        record.accession in intact_16s_manifest_rows
+        and intact_16s_manifest_rows[record.accession]["best_16S_header"] in intact_16s_headers
+        for record in atypical_exception_candidates
+    ):
+        raise AcceptanceTestError("missing_atypical_exception_intact_16s")
 
     missing_metadata_candidates = records_with_role(plan, "missing_metadata_case")
     if not any(
@@ -1010,6 +1041,7 @@ def assert_role_coverage(
 def assert_run_outputs(outdir: Path, plan: Sequence[CohortRecord], metadata_tsv: Path) -> dict[str, Path]:
     """Assert the published outputs for one successful pipeline run."""
     tables = require_output_tables(outdir)
+    cohort_16s_outputs = require_cohort_16s_outputs(outdir)
     assert_metadata_contract(tables["master_table.tsv"], metadata_tsv)
     assert_sample_status_contract(tables["sample_status.tsv"])
 
@@ -1023,6 +1055,12 @@ def assert_run_outputs(outdir: Path, plan: Sequence[CohortRecord], metadata_tsv:
         delimiter="\t",
         key_column="accession",
     )
+    _intact_manifest_header, intact_manifest_rows = read_rows_indexed_by(
+        cohort_16s_outputs["all_best_16S_manifest.tsv"],
+        delimiter="\t",
+        key_column="accession",
+    )
+    intact_16s_headers = read_fasta_headers(cohort_16s_outputs["all_best_16S.fna"])
     if len(master_rows) != len(plan):
         raise AcceptanceTestError("master_table_row_count_mismatch")
     if len(status_rows) != len(plan):
@@ -1038,7 +1076,13 @@ def assert_run_outputs(outdir: Path, plan: Sequence[CohortRecord], metadata_tsv:
             "missing_sample_folders:" + ",".join(missing_sample_dirs)
         )
 
-    assert_role_coverage(plan=plan, master_rows=master_rows, status_rows=status_rows)
+    assert_role_coverage(
+        plan=plan,
+        master_rows=master_rows,
+        status_rows=status_rows,
+        intact_16s_manifest_rows=intact_manifest_rows,
+        intact_16s_headers=intact_16s_headers,
+    )
     return tables
 
 

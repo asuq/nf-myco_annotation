@@ -556,11 +556,32 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "ECOLI-PAIR": {"accession": "ECOLI-PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_aaa"},
                 "ECOLI PAIR": {"accession": "ECOLI PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_bbb"},
             }
+            intact_manifest_rows = {
+                "SRC_ECOLI": {
+                    "accession": "SRC_ECOLI",
+                    "16S": "Yes",
+                    "best_16S_header": "header_src_ecoli",
+                    "best_16S_length": "1500",
+                    "include_in_all_best_16S": "true",
+                    "warnings": "",
+                },
+                "MYCO_EXCEPTION": {
+                    "accession": "MYCO_EXCEPTION",
+                    "16S": "Yes",
+                    "best_16S_header": "header_myco_exception",
+                    "best_16S_length": "1500",
+                    "include_in_all_best_16S": "true",
+                    "warnings": "",
+                },
+            }
+            intact_16s_headers = {"header_src_ecoli", "header_myco_exception"}
 
             run_acceptance_tests.assert_role_coverage(
                 plan=plan,
                 master_rows=master_rows,
                 status_rows=status_rows,
+                intact_16s_manifest_rows=intact_manifest_rows,
+                intact_16s_headers=intact_16s_headers,
             )
 
     def test_assert_metadata_contract_uses_locked_append_columns(self) -> None:
