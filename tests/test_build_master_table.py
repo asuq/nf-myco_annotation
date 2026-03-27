@@ -210,6 +210,57 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["CRISPRS"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "NA")
 
+    def test_main_populates_custom_busco_lineage_columns(self) -> None:
+        """Preserve non-default BUSCO lineage columns from the runtime contract."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\n"
+                "ACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\n"
+                "ACC1\t123\tKnown one\n",
+            )
+            append_columns_path = self.write_text_file(
+                tmpdir / "master_table_append_columns.txt",
+                "\n".join(master_table_contract.build_append_columns(["custom_odb12"])) + "\n",
+            )
+            busco_custom = self.write_text_file(
+                tmpdir / "busco_custom.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_custom_odb12\tbusco_status\twarnings",
+                        "ACC1\tcustom_odb12\tC:99.0%[S:99.0%,D:0.0%],F:0.0%,M:1.0%,n:180\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(append_columns_path),
+                    "--busco",
+                    str(busco_custom),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            header, rows = read_tsv_rows(output)
+            self.assertIn("BUSCO_custom_odb12", header)
+            self.assertNotIn("BUSCO_bacillota_odb12", header)
+            self.assertEqual(rows[0]["BUSCO_custom_odb12"], "C:99.0%[S:99.0%,D:0.0%],F:0.0%,M:1.0%,n:180")
+
     def test_main_uses_keyed_joins_and_marks_missing_joins(self) -> None:
         """Join by accession only and propagate missing derived rows as NA."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

@@ -208,6 +208,59 @@ class ValidateInputsTestCase(unittest.TestCase):
             )
             self.assertEqual(sample_status_rows[0]["validation_status"], "done")
 
+    def test_main_seeds_custom_busco_status_columns(self) -> None:
+        """Seed runtime BUSCO status columns from a supplied contract file."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genomes" / "a.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "accession,is_new,assembly_level,genome_fasta\n"
+                f"ACC1,false,,{fasta_path}\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID,Organism_Name\nACC1,123,Known one\n",
+            )
+            sample_status_columns = self.write_text_file(
+                tmpdir / "sample_status_columns.txt",
+                "\n".join(
+                    [
+                        "accession",
+                        "internal_id",
+                        "is_new",
+                        "validation_status",
+                        "gcode",
+                        "low_quality",
+                        "busco_custom_odb12_status",
+                        "ani_included",
+                        "warnings",
+                        "notes",
+                    ]
+                )
+                + "\n",
+            )
+            outdir = tmpdir / "validated"
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--sample-status-columns",
+                    str(sample_status_columns),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            sample_status_rows = read_tsv(outdir / "sample_status.tsv")
+            self.assertEqual(sample_status_rows[0]["busco_custom_odb12_status"], "na")
+            self.assertEqual(sample_status_rows[0]["gcode"], "NA")
+            self.assertEqual(sample_status_rows[0]["ani_included"], "na")
+
     def test_main_rejects_missing_required_sample_headers(self) -> None:
         """Fail when the sample manifest omits a required locked header."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

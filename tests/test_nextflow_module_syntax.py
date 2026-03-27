@@ -118,6 +118,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/busco/${lineage}" }', module_text)
         self.assertIn('path("busco_summary_${lineage}.tsv")', module_text)
         self.assertIn('--output "busco_summary_${lineage}.tsv"', module_text)
+        self.assertIn("BUSCO_${lineage}", module_text)
+
+    def test_build_output_contracts_writes_runtime_busco_contracts(self) -> None:
+        """Require one process to materialise BUSCO-aware reporting contracts."""
+        module_text = (MODULES_DIR / "build_output_contracts.nf").read_text(encoding="utf-8")
+
+        self.assertIn("input:\n    val busco_lineages", module_text)
+        self.assertIn("path 'master_table_append_columns.txt', emit: append_columns", module_text)
+        self.assertIn("path 'sample_status_columns.txt', emit: sample_status_columns", module_text)
+        self.assertIn('script_path="\\$(command -v build_output_contracts.py)"', module_text)
+        self.assertIn('--append-columns-output master_table_append_columns.txt', module_text)
+        self.assertIn('--sample-status-columns-output sample_status_columns.txt', module_text)
+
+    def test_busco_dataset_prep_reuses_stub_datasets_for_custom_lineages(self) -> None:
+        """Require stub runs to tolerate custom BUSCO lineage names."""
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "busco_dataset_prep.nf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("if (workflow.stubRun) {", workflow_text)
+        self.assertIn("stubDatasetFallback = buscoDbRoot", workflow_text)
+        self.assertIn("&& !new File(datasetPath).exists()", workflow_text)
+        self.assertIn("datasetPath = stubDatasetFallback", workflow_text)
 
     def test_summarise_16s_publishes_master_table_inputs(self) -> None:
         """Require the 16S summary module to publish the stable per-sample artefacts."""
@@ -283,8 +306,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('script_path="\\$(command -v summarise_codetta.py)"', module_text)
         self.assertIn('python3 "\\${script_path}"', module_text)
 
-    def test_validate_inputs_stages_sample_status_columns_asset(self) -> None:
-        """Require input validation to stage the sample-status asset into the container."""
+    def test_validate_inputs_stages_runtime_sample_status_columns(self) -> None:
+        """Require input validation to stage the generated sample-status contract."""
         module_text = (MODULES_DIR / "validate_inputs.nf").read_text(encoding="utf-8")
         workflow_text = (
             ROOT / "subworkflows" / "local" / "input_validation_and_staging.nf"
@@ -295,8 +318,30 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('--sample-status-columns "${sample_status_columns}"', module_text)
         self.assertIn("--defer-genome-fasta-check", module_text)
         self.assertIn("sample_status_columns", workflow_text)
-        self.assertIn("sampleStatusColumns = Channel.value", main_text)
-        self.assertIn("INPUT_VALIDATION_AND_STAGING(sampleCsv, metadata, sampleStatusColumns)", main_text)
+        self.assertIn("include { BUILD_OUTPUT_CONTRACTS }", main_text)
+        self.assertIn("BUILD_OUTPUT_CONTRACTS(Channel.value(buscoLineagesList))", main_text)
+        self.assertIn("BUILD_OUTPUT_CONTRACTS.out.sample_status_columns", main_text)
+
+    def test_final_outputs_accept_runtime_contract_files(self) -> None:
+        """Require final reporting to consume generated contract files explicitly."""
+        workflow_text = (ROOT / "subworkflows" / "local" / "final_outputs.nf").read_text(
+            encoding="utf-8"
+        )
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
+
+        self.assertIn("append_columns", workflow_text)
+        self.assertIn("sample_status_columns", workflow_text)
+        self.assertNotIn('assets/master_table_append_columns.txt', workflow_text)
+        self.assertNotIn('assets/sample_status_columns.txt', workflow_text)
+        self.assertIn("BUILD_OUTPUT_CONTRACTS.out.append_columns", main_text)
+        self.assertIn("BUILD_OUTPUT_CONTRACTS.out.sample_status_columns", main_text)
+
+    def test_build_fastani_inputs_uses_first_busco_lineage_for_primary_column(self) -> None:
+        """Require ANI prep and its stub to honour the first configured BUSCO lineage."""
+        module_text = (MODULES_DIR / "build_fastani_inputs.nf").read_text(encoding="utf-8")
+
+        self.assertIn('params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}"', module_text)
+        self.assertIn("${primaryBuscoColumn}", module_text)
 
     def test_runtime_tool_modules_write_versions_without_indented_headers(self) -> None:
         """Require runtime tool modules to emit versions via printf, not heredoc indentation."""

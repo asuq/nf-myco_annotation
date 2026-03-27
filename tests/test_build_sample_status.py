@@ -55,18 +55,20 @@ class BuildSampleStatusTestCase(unittest.TestCase):
         accession: str,
         internal_id: str,
         is_new: str,
+        columns: list[str] | None = None,
         warnings: str = "",
         notes: str = "",
         **overrides: str,
     ) -> dict[str, str]:
         """Build one seed status row matching the locked sample-status contract."""
-        columns = [
-            line.strip()
-            for line in (ROOT / "assets" / "sample_status_columns.txt").read_text(
-                encoding="utf-8"
-            ).splitlines()
-            if line.strip()
-        ]
+        if columns is None:
+            columns = [
+                line.strip()
+                for line in (ROOT / "assets" / "sample_status_columns.txt").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if line.strip()
+            ]
         row: dict[str, str] = {}
         for column in columns:
             if column.endswith("_status") or column == "ani_included":
@@ -807,6 +809,114 @@ class BuildSampleStatusTestCase(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             self.assertFalse(output.exists())
+
+    def test_main_populates_custom_busco_status_columns(self) -> None:
+        """Use the runtime sample-status contract for non-default BUSCO lineages."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            custom_columns = [
+                "accession",
+                "internal_id",
+                "is_new",
+                "validation_status",
+                "taxonomy_status",
+                "barrnap_status",
+                "checkm2_gcode4_status",
+                "checkm2_gcode11_status",
+                "gcode_status",
+                "gcode",
+                "low_quality",
+                "busco_custom_odb12_status",
+                "codetta_status",
+                "prokka_status",
+                "ccfinder_status",
+                "padloc_status",
+                "eggnog_status",
+                "ani_included",
+                "ani_exclusion_reason",
+                "warnings",
+                "notes",
+            ]
+            columns_path = self.write_text_file(
+                tmpdir / "sample_status_columns.txt",
+                "\n".join(custom_columns) + "\n",
+            )
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\n"
+                "ACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(
+                    accession="ACC1",
+                    internal_id="id_1",
+                    is_new="false",
+                    columns=custom_columns,
+                )
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                custom_columns,
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\n"
+                "ACC1\t123\tKnown one\t50000\t2\t800000\tNA\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\n"
+                "ACC1\tNA\t95\tNA\t1\tNA\tNA\tNA\tNA\tNA\tNA\t11\tfalse\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\n"
+                "ACC1\tYes\th1\t1500\ttrue\t\n",
+            )
+            busco_custom = self.write_text_file(
+                tmpdir / "busco_custom.tsv",
+                "accession\tlineage\tBUSCO_custom_odb12\tbusco_status\twarnings\n"
+                "ACC1\tcustom_odb12\tC:99.0%[S:99.0%,D:0.0%],F:0.0%,M:1.0%,n:180\tdone\t\n",
+            )
+            ani = self.write_text_file(
+                tmpdir / "ani.tsv",
+                "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore\n"
+                "ACC1\tcluster_1\tyes\t100\t0.95\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco_custom),
+                    "--ani",
+                    str(ani),
+                    "--primary-busco-column",
+                    "BUSCO_custom_odb12",
+                    "--columns",
+                    str(columns_path),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            header, rows = read_tsv_rows(output)
+            self.assertIn("busco_custom_odb12_status", header)
+            self.assertNotIn("busco_bacillota_odb12_status", header)
+            self.assertEqual(rows[0]["busco_custom_odb12_status"], "done")
+            self.assertEqual(rows[0]["ani_included"], "true")
 
     def test_main_uses_in_house_assembly_stats_for_ani_decision(self) -> None:
         """Treat computed stats as authoritative when metadata metrics are missing."""

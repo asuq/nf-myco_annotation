@@ -26,6 +26,14 @@ class MasterTableContractTestCase(unittest.TestCase):
             master_table_contract.build_append_columns(),
         )
 
+    def test_default_sample_status_contract_matches_repository_asset(self) -> None:
+        """Keep the sample-status asset aligned with the default code contract."""
+        master_table_contract.validate_default_sample_status_columns_asset()
+        self.assertEqual(
+            master_table_contract.read_sample_status_columns_asset(),
+            master_table_contract.build_sample_status_columns(),
+        )
+
     def test_build_master_table_columns_supports_custom_busco_order(self) -> None:
         """Insert BUSCO columns in caller-provided lineage order."""
         columns = master_table_contract.build_master_table_columns(
@@ -40,6 +48,32 @@ class MasterTableContractTestCase(unittest.TestCase):
         self.assertLess(columns.index("BUSCO_lineage_a"), columns.index("BUSCO_lineage_b"))
         self.assertLess(columns.index("BUSCO_lineage_b"), columns.index("BUSCO_lineage_c"))
         self.assertEqual(columns[-4:], list(master_table_contract.ANI_COLUMNS))
+
+    def test_build_sample_status_columns_supports_custom_busco_order(self) -> None:
+        """Insert BUSCO status columns in caller-provided lineage order."""
+        columns = master_table_contract.build_sample_status_columns(
+            ["lineage_a", "lineage_b", "lineage_c"]
+        )
+
+        self.assertEqual(
+            columns[: len(master_table_contract.SAMPLE_STATUS_PREFIX_COLUMNS)],
+            list(master_table_contract.SAMPLE_STATUS_PREFIX_COLUMNS),
+        )
+        self.assertIn("busco_lineage_a_status", columns)
+        self.assertIn("busco_lineage_b_status", columns)
+        self.assertIn("busco_lineage_c_status", columns)
+        self.assertLess(
+            columns.index("busco_lineage_a_status"),
+            columns.index("busco_lineage_b_status"),
+        )
+        self.assertLess(
+            columns.index("busco_lineage_b_status"),
+            columns.index("busco_lineage_c_status"),
+        )
+        self.assertEqual(
+            columns[-len(master_table_contract.SAMPLE_STATUS_SUFFIX_COLUMNS) :],
+            list(master_table_contract.SAMPLE_STATUS_SUFFIX_COLUMNS),
+        )
 
     def test_codetta_columns_follow_gcode_immediately(self) -> None:
         """Keep the Codetta fields directly after the chosen gcode column."""
@@ -62,6 +96,18 @@ class MasterTableContractTestCase(unittest.TestCase):
         """Fail when metadata columns collide with derived output columns."""
         with self.assertRaises(ValueError):
             master_table_contract.build_master_table_columns(["Accession", "Gcode"])
+
+    def test_extract_busco_lineages_from_runtime_contracts(self) -> None:
+        """Recover BUSCO lineage order from generated reporting contracts."""
+        append_lineages = master_table_contract.extract_busco_lineages_from_append_columns(
+            master_table_contract.build_append_columns(["lineage_b", "lineage_a"])
+        )
+        status_lineages = master_table_contract.extract_busco_lineages_from_sample_status_columns(
+            master_table_contract.build_sample_status_columns(["lineage_b", "lineage_a"])
+        )
+
+        self.assertEqual(append_lineages, ("lineage_b", "lineage_a"))
+        self.assertEqual(status_lineages, ("lineage_b", "lineage_a"))
 
 
 if __name__ == "__main__":
