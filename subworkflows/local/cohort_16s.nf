@@ -12,30 +12,40 @@ workflow COHORT_16S {
     main:
     SUMMARISE_16S(barrnap_outputs)
 
+    cohortManifestHeader = "${projectDir}/assets/testdata/headers/16s_status.tsv"
+
     collected_all_best_16S = SUMMARISE_16S.out.intact_cohort_candidates
         .map { meta, cohortBest16S -> cohortBest16S }
         .collectFile(name: 'all_best_16S.fna')
 
-    collected_all_best_16S_manifest = SUMMARISE_16S.out.intact_manifest_rows
+    intact_manifest_header = Channel.fromPath(cohortManifestHeader, checkIfExists: true)
+    intact_manifest_rows = SUMMARISE_16S.out.intact_manifest_rows
         .map { meta, manifestRow -> manifestRow }
+        .filter { manifestRow -> manifestRow.toFile().length() > 0 }
+
+    collected_all_best_16S_manifest = intact_manifest_header
+        .concat(intact_manifest_rows)
         .collectFile(
             name: 'all_best_16S_manifest.tsv',
             keepHeader: true,
             skip: 1,
-            newLine: true,
         )
 
     collected_all_partial_16S = SUMMARISE_16S.out.partial_cohort_candidates
         .map { meta, cohortPartial16S -> cohortPartial16S }
         .collectFile(name: 'all_partial_16S.fna')
 
-    collected_all_partial_16S_manifest = SUMMARISE_16S.out.partial_manifest_rows
+    partial_manifest_header = Channel.fromPath(cohortManifestHeader, checkIfExists: true)
+    partial_manifest_rows = SUMMARISE_16S.out.partial_manifest_rows
         .map { meta, manifestRow -> manifestRow }
+        .filter { manifestRow -> manifestRow.toFile().length() > 0 }
+
+    collected_all_partial_16S_manifest = partial_manifest_header
+        .concat(partial_manifest_rows)
         .collectFile(
             name: 'all_partial_16S_manifest.tsv',
             keepHeader: true,
             skip: 1,
-            newLine: true,
         )
 
     PUBLISH_COHORT_16S(
