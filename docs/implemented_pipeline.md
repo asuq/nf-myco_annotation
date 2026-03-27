@@ -344,10 +344,13 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
   `all_partial_16S.fna` contains partial-only best hits, including atypical
   partial samples.
 - CheckM2 always runs twice per sample, once with translation table `4` and
-  once with `11`. `summarise_checkm2.py` applies `params.gcode_rule` and emits
-  the merged per-sample QC summary.
+  once with `11`. `summarise_checkm2.py` applies `params.gcode_rule`, requires
+  the full shared assembly-stat set before assigning gcode, and emits the
+  merged per-sample QC summary.
 - BUSCO is independent of gcode assignment. It runs offline in genome mode for
-  every sample and every configured lineage.
+  every sample and every configured lineage. Missing primary BUSCO does not
+  exclude a genome from ANI clustering; it only affects representative
+  selection.
 - Codetta is independent of gcode assignment. It runs for every sample and
   adds `Codetta_Genetic_Code`, `Codetta_NCBI_Table_Candidates`, and
   `codetta_status` to the final reporting layer.
@@ -361,7 +364,15 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
   intentionally excluded from `master_table.tsv`.
 - ANI clustering is driven by `BUILD_FASTANI_INPUTS`, which writes both the
   FastANI path list and the accession-keyed eligibility report
-  `ani_exclusions.tsv`.
+  `ani_exclusions.tsv`. These ANI side products and `assembly_stats.tsv` are
+  now accession-sorted so the published ANI matrix layout is canonical.
+- `SELECT_ANI_REPRESENTATIVES` prefers BUSCO-valid cluster members when the
+  primary lineage is available. BUSCO-missing members still remain in the
+  cluster outputs with `Score = NA`, and clusters with no BUSCO-valid member
+  use the BUSCO-free fallback representative scorer.
+- Final merged one-row summary tables for CheckM2, 16S, Codetta, and
+  CRISPRCasFinder are built against canonical header assets and sorted by
+  accession, rather than relying on header-seeded `collectFile` ordering.
 - The main workflow does not prepare taxdump, CheckM2, or eggNOG at runtime.
   Those resources must already exist or be prepared ahead of time with
   `prepare_databases.nf`.

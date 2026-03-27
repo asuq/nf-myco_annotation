@@ -829,6 +829,12 @@ A genome is eligible only if all of the following are true:
 - `Gcode` is `4` or `11`
 - not atypical, **or** atypical only because of `unverified source organism`
 
+Primary BUSCO handling for ANI:
+
+- the first configured BUSCO lineage remains the primary ANI-scoring lineage
+- missing primary BUSCO does **not** exclude a genome from ANI clustering
+- the primary BUSCO value is carried into ANI metadata for representative selection
+
 For excluded genomes:
 
 - record the exclusion reason(s) in `sample_status.tsv`
@@ -861,6 +867,9 @@ Required adaptation for v1:
 
 - make the primary BUSCO column configurable based on the first lineage in `params.busco_lineages`
 - accept only genomes with valid `Gcode` (`4` or `11`)
+- when a cluster has at least one genome with valid primary BUSCO, only those BUSCO-valid genomes may become the representative
+- BUSCO-missing genomes still remain in the ANI cluster outputs, but get `Score = NA`
+- when a cluster has no BUSCO-valid genomes, keep the cluster and choose a representative with the BUSCO-free fallback scorer
 - keep representative-scoring logic otherwise unchanged unless forced by input-schema normalisation
 
 Master-table contribution:
@@ -926,6 +935,7 @@ Rules:
 
 - warnings should accumulate rather than overwrite each other
 - `ani_exclusion_reason` may be a semicolon-delimited list, e.g. `low_quality;partial_16s;atypical`
+- `ani_included` reflects actual ANI cluster inclusion, not representative-score completeness for the primary BUSCO column
 
 ## 8.22 `collect_versions`
 
@@ -1092,9 +1102,9 @@ Downstream gating must behave sensibly after failure, for example:
 
 - if CheckM2 fails, gcode becomes `NA`, downstream gcode-dependent modules are skipped
 - if Barrnap fails, `16S = NA` or `No` according to the summariser policy and the sample is excluded from ANI
-- if BUSCO fails, ANI representative selection may exclude the sample if the primary BUSCO metric required by `cluster_ani.py` is unavailable
+- if BUSCO fails, the sample may still enter ANI clustering, but representative selection will prefer BUSCO-valid cluster members when they exist
 
-For v1, the recommended ANI rule is conservative: missing required ANI-scoring metadata should exclude the genome and record the reason.
+For v1, the ANI rule is conservative for clustering inputs other than primary BUSCO: missing required ANI-scoring metadata should exclude the genome and record the reason.
 
 ---
 
