@@ -298,6 +298,51 @@ class Summarise16STestCase(unittest.TestCase):
             self.assertEqual(status_row["best_16S_header"], "NA")
             self.assertEqual(status_row["include_in_all_best_16S"], "false")
 
+    def test_main_ignores_duplicate_non_16s_fasta_records_when_16s_is_valid(self) -> None:
+        """Keep a valid 16S call even if non-16S FASTA records are duplicated."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 100, "+")
+            duplicate_header = self.barrnap_header("23S_rRNA", "contig1", 199, 320, "+")
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                "\n".join(
+                    [
+                        "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA",
+                        "contig1\tbarrnap\trRNA\t200\t320\t2.0\t+\t.\tName=23S_rRNA;product=23S ribosomal RNA",
+                    ]
+                )
+                + "\n",
+            )
+            fasta = self.write_barrnap_fasta(
+                tmpdir / "rrna.fa",
+                [
+                    (duplicate_header, "G" * 121),
+                    (intact_header, "A" * 100),
+                    (duplicate_header, "C" * 121),
+                ],
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC5B",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["16S"], "Yes")
+            self.assertEqual(status_row["best_16S_header"], intact_header)
+            self.assertEqual(status_row["warnings"], "")
+
     def test_main_matches_mixed_rrna_order_by_key(self) -> None:
         """Match 16S records by Barrnap key even when mixed rRNA order differs."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -345,6 +390,49 @@ class Summarise16STestCase(unittest.TestCase):
             self.assertEqual(status_row["best_16S_header"], best_header)
             best_fasta = (outdir / "best_16S.fna").read_text(encoding="utf-8")
             self.assertTrue(best_fasta.startswith(f">{best_header}\n"))
+
+    def test_main_ignores_non_16s_gff_fasta_mismatches_when_16s_matches(self) -> None:
+        """Ignore non-16S Barrnap mismatches when the 16S subset is internally consistent."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 100, "+")
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                "\n".join(
+                    [
+                        "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA",
+                        "contig1\tbarrnap\trRNA\t120\t220\t1.0\t+\t.\tName=5S_rRNA;product=5S ribosomal RNA",
+                    ]
+                )
+                + "\n",
+            )
+            fasta = self.write_barrnap_fasta(
+                tmpdir / "rrna.fa",
+                [
+                    (self.barrnap_header("23S_rRNA", "contig1", 119, 220, "+"), "G" * 101),
+                    (intact_header, "A" * 100),
+                ],
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC6B",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["16S"], "Yes")
+            self.assertEqual(status_row["best_16S_header"], intact_header)
+            self.assertEqual(status_row["warnings"], "")
 
     def test_main_prefers_intact_hit_over_better_scoring_partial(self) -> None:
         """Prefer any intact 16S hit over a partial hit with a better score."""

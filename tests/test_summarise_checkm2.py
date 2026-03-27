@@ -44,6 +44,7 @@ class SummariseCheckM2TestCase(unittest.TestCase):
         total_coding_sequences: str = "800",
         genome_size: str = "1000000",
         gc_content: str = "0.3",
+        contig_n50: str = "50000",
     ) -> Path:
         """Write a minimal one-row CheckM2 TSV."""
         content = "\n".join(
@@ -58,6 +59,7 @@ class SummariseCheckM2TestCase(unittest.TestCase):
                         "Total_Coding_Sequences",
                         "Genome_Size",
                         "GC_Content",
+                        "Contig_N50",
                     ]
                 ),
                 "\t".join(
@@ -70,6 +72,7 @@ class SummariseCheckM2TestCase(unittest.TestCase):
                         total_coding_sequences,
                         genome_size,
                         gc_content,
+                        contig_n50,
                     ]
                 ),
             ]
@@ -277,6 +280,54 @@ class SummariseCheckM2TestCase(unittest.TestCase):
             self.assertEqual(row["Low_quality"], "NA")
             self.assertEqual(row["checkm2_status"], "failed")
             self.assertEqual(row["warnings"], "checkm2_gcode11_failed")
+
+    def test_main_marks_reports_without_complete_shared_stats_as_inconsistent(self) -> None:
+        """Require the full shared-stat set before assigning gcode."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            report4 = self.write_text_file(
+                tmpdir / "g4.tsv",
+                "\n".join(
+                    [
+                        "Completeness\tContamination\tCoding_Density\tAverage_Gene_Length\tTotal_Coding_Sequences",
+                        "95\t2\t0.9\t900\t800",
+                    ]
+                )
+                + "\n",
+            )
+            report11 = self.write_text_file(
+                tmpdir / "g11.tsv",
+                "\n".join(
+                    [
+                        "Completeness\tContamination\tCoding_Density\tAverage_Gene_Length\tTotal_Coding_Sequences",
+                        "80\t1\t0.8\t850\t780",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_checkm2.main(
+                [
+                    "--accession",
+                    "ACC_SHARED",
+                    "--gcode4-report",
+                    str(report4),
+                    "--gcode11-report",
+                    str(report11),
+                    "--gcode-rule",
+                    summarise_checkm2.DELTA_THEN_ELEVEN_RULE,
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(row["Gcode"], "NA")
+            self.assertEqual(row["Low_quality"], "NA")
+            self.assertEqual(row["checkm2_status"], "failed")
+            self.assertEqual(row["warnings"], "inconsistent_shared_stats")
 
     def test_main_keeps_gcode_na_at_exact_threshold_difference_under_strict_rule(self) -> None:
         """Keep the strict rule behaviour at an exact threshold difference."""

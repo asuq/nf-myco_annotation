@@ -308,8 +308,16 @@ def pair_16s_hits(
     rrna_fasta: Path,
 ) -> list[RrnaHit]:
     """Match Barrnap 16S FASTA records to 16S GFF hits by canonical key."""
+    sixteen_s_gff_hits = [hit for hit in gff_hits if hit.rrna_name == SIXTEEN_S_NAME]
+    sixteen_s_fasta_records = [
+        record for record in fasta_records if record.rrna_name == SIXTEEN_S_NAME
+    ]
+
+    if not sixteen_s_gff_hits and not sixteen_s_fasta_records:
+        return []
+
     build_keyed_records(
-        records=gff_hits,
+        records=sixteen_s_gff_hits,
         path=rrna_gff,
         source_name="GFF",
         key_builder=lambda hit: build_match_key(
@@ -317,7 +325,7 @@ def pair_16s_hits(
         ),
     )
     fasta_by_key = build_keyed_records(
-        records=fasta_records,
+        records=sixteen_s_fasta_records,
         path=rrna_fasta,
         source_name="FASTA",
         key_builder=lambda record: build_match_key(
@@ -328,14 +336,6 @@ def pair_16s_hits(
             record.strand,
         ),
     )
-
-    sixteen_s_gff_hits = [hit for hit in gff_hits if hit.rrna_name == SIXTEEN_S_NAME]
-    sixteen_s_fasta_records = [
-        record for record in fasta_records if record.rrna_name == SIXTEEN_S_NAME
-    ]
-
-    if not sixteen_s_gff_hits and not sixteen_s_fasta_records:
-        return []
 
     gff_keys = {
         build_match_key(hit.rrna_name, hit.contig, hit.start0, hit.end0, hit.strand)

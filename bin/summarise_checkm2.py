@@ -48,6 +48,7 @@ SHARED_STAT_ALIASES = {
     "GC_Content": ("GC_Content",),
     "Contig_N50": ("Contig_N50", "N50"),
 }
+REQUIRED_SHARED_STATS = tuple(SHARED_STAT_ALIASES)
 
 
 @dataclass(frozen=True)
@@ -177,13 +178,13 @@ def reports_have_consistent_shared_stats(
     report_eleven: ParsedCheckM2Report,
 ) -> bool:
     """Check whether shared assembly statistics match between two reports."""
+    required_keys = set(REQUIRED_SHARED_STATS)
     shared_keys_four = set(report_four.shared_stats)
     shared_keys_eleven = set(report_eleven.shared_stats)
-    if shared_keys_four != shared_keys_eleven:
+    if shared_keys_four != required_keys or shared_keys_eleven != required_keys:
         return False
 
-    shared_keys = shared_keys_four
-    for key in shared_keys:
+    for key in REQUIRED_SHARED_STATS:
         left = report_four.shared_stats[key]
         right = report_eleven.shared_stats[key]
         if isinstance(left, str) or isinstance(right, str):
