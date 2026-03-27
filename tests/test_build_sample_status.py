@@ -811,7 +811,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_main_populates_custom_busco_status_columns(self) -> None:
-        """Use the runtime sample-status contract for non-default BUSCO lineages."""
+        """Use configured BUSCO lineages for non-default sample-status columns."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             custom_columns = [
@@ -837,10 +837,6 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 "warnings",
                 "notes",
             ]
-            columns_path = self.write_text_file(
-                tmpdir / "sample_status_columns.txt",
-                "\n".join(custom_columns) + "\n",
-            )
             validated_samples = self.write_text_file(
                 tmpdir / "validated_samples.tsv",
                 "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\n"
@@ -904,8 +900,8 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     str(ani),
                     "--primary-busco-column",
                     "BUSCO_custom_odb12",
-                    "--columns",
-                    str(columns_path),
+                    "--busco-lineage",
+                    "custom_odb12",
                     "--output",
                     str(output),
                 ]

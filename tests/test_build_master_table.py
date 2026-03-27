@@ -211,7 +211,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "NA")
 
     def test_main_populates_custom_busco_lineage_columns(self) -> None:
-        """Preserve non-default BUSCO lineage columns from the runtime contract."""
+        """Preserve non-default BUSCO lineage columns from configured lineages."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             validated_samples = self.write_text_file(
@@ -223,10 +223,6 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 tmpdir / "metadata.tsv",
                 "Accession\tTax_ID\tOrganism_Name\n"
                 "ACC1\t123\tKnown one\n",
-            )
-            append_columns_path = self.write_text_file(
-                tmpdir / "master_table_append_columns.txt",
-                "\n".join(master_table_contract.build_append_columns(["custom_odb12"])) + "\n",
             )
             busco_custom = self.write_text_file(
                 tmpdir / "busco_custom.tsv",
@@ -246,8 +242,8 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     str(validated_samples),
                     "--metadata",
                     str(metadata),
-                    "--append-columns",
-                    str(append_columns_path),
+                    "--busco-lineage",
+                    "custom_odb12",
                     "--busco",
                     str(busco_custom),
                     "--output",

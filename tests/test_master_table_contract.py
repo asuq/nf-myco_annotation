@@ -109,6 +109,20 @@ class MasterTableContractTestCase(unittest.TestCase):
         self.assertEqual(append_lineages, ("lineage_b", "lineage_a"))
         self.assertEqual(status_lineages, ("lineage_b", "lineage_a"))
 
+    def test_resolve_contracts_support_direct_lineage_inputs(self) -> None:
+        """Build both output contracts directly from configured lineage names."""
+        append_columns, append_lineages = master_table_contract.resolve_append_columns(
+            busco_lineages=["lineage_b", "lineage_a"]
+        )
+        status_columns, status_lineages = master_table_contract.resolve_sample_status_columns(
+            busco_lineages=["lineage_b", "lineage_a"]
+        )
+
+        self.assertEqual(append_lineages, ("lineage_b", "lineage_a"))
+        self.assertEqual(status_lineages, ("lineage_b", "lineage_a"))
+        self.assertIn("BUSCO_lineage_b", append_columns)
+        self.assertIn("busco_lineage_b_status", status_columns)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,7 @@ BIN_DIR = ROOT / "bin"
 if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
+import master_table_contract  # noqa: E402
 import validate_inputs  # noqa: E402
 
 
@@ -140,7 +141,7 @@ class ValidateInputsTestCase(unittest.TestCase):
             )
 
     def test_main_uses_staged_sample_status_columns_asset(self) -> None:
-        """Allow the sample-status column asset to be provided explicitly."""
+        """Allow one valid sample-status contract file to be provided explicitly."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             fasta_path = self.write_text_file(tmpdir / "genomes" / "a.fna", ">a\nACGT\n")
@@ -167,14 +168,7 @@ class ValidateInputsTestCase(unittest.TestCase):
             sample_status_columns = self.write_text_file(
                 tmpdir / "sample_status_columns.txt",
                 "\n".join(
-                    [
-                        "accession",
-                        "internal_id",
-                        "is_new",
-                        "validation_status",
-                        "warnings",
-                        "notes",
-                    ]
+                    master_table_contract.build_sample_status_columns(["custom_odb12"])
                 )
                 + "\n",
             )
@@ -195,21 +189,11 @@ class ValidateInputsTestCase(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             sample_status_rows = read_tsv(outdir / "sample_status.tsv")
-            self.assertEqual(
-                list(sample_status_rows[0].keys()),
-                [
-                    "accession",
-                    "internal_id",
-                    "is_new",
-                    "validation_status",
-                    "warnings",
-                    "notes",
-                ],
-            )
+            self.assertIn("busco_custom_odb12_status", sample_status_rows[0])
             self.assertEqual(sample_status_rows[0]["validation_status"], "done")
 
-    def test_main_seeds_custom_busco_status_columns(self) -> None:
-        """Seed runtime BUSCO status columns from a supplied contract file."""
+    def test_main_seeds_custom_busco_status_columns_from_lineages(self) -> None:
+        """Seed BUSCO status columns directly from configured lineage names."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             fasta_path = self.write_text_file(tmpdir / "genomes" / "a.fna", ">a\nACGT\n")
@@ -222,24 +206,6 @@ class ValidateInputsTestCase(unittest.TestCase):
                 tmpdir / "metadata.csv",
                 "accession,Tax_ID,Organism_Name\nACC1,123,Known one\n",
             )
-            sample_status_columns = self.write_text_file(
-                tmpdir / "sample_status_columns.txt",
-                "\n".join(
-                    [
-                        "accession",
-                        "internal_id",
-                        "is_new",
-                        "validation_status",
-                        "gcode",
-                        "low_quality",
-                        "busco_custom_odb12_status",
-                        "ani_included",
-                        "warnings",
-                        "notes",
-                    ]
-                )
-                + "\n",
-            )
             outdir = tmpdir / "validated"
 
             exit_code = validate_inputs.main(
@@ -248,8 +214,8 @@ class ValidateInputsTestCase(unittest.TestCase):
                     str(sample_csv),
                     "--metadata",
                     str(metadata_csv),
-                    "--sample-status-columns",
-                    str(sample_status_columns),
+                    "--busco-lineage",
+                    "custom_odb12",
                     "--outdir",
                     str(outdir),
                 ]
