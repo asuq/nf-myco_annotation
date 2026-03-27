@@ -182,6 +182,9 @@ results/
     ani_clusters/
       ani_representatives.tsv
       cluster.tsv
+    16s/
+      all_best_16S.fna
+      all_best_16S_manifest.tsv
     fastani/
       ani_exclusions.tsv
       ani_metadata.tsv
@@ -228,6 +231,7 @@ Notes on that layout:
 - `prokka/`, `ccfinder/`, `padloc/`, and `eggnog/` are only published for
   samples whose assigned gcode is `4` or `11`
 - `busco/<lineage>/` is published for every configured lineage per sample
+- `cohort/16s/` contains the combined eligible-sample 16S FASTA and manifest
 - `pipeline_info/` is enabled through base configuration for both entrypoints
 
 The database-preparation workflow publishes these top-level artefacts under its
