@@ -20,14 +20,23 @@ workflow COHORT_ANI {
     main:
     SUMMARISE_BUSCO(busco_summaries)
 
-    staged_manifest = Channel
-        .of('accession\tinternal_id\tstaged_filename')
-        .concat(
-            staged_genomes.map { meta, genome ->
-                "${meta.accession}\t${meta.internal_id}\t${genome.getName()}"
-            }
-        )
-        .collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)
+    staged_manifest = staged_genomes
+        .map { meta, genome ->
+            [
+                meta.accession.toString(),
+                "${meta.accession}\t${meta.internal_id}\t${genome.getName()}",
+            ]
+        }
+        .collect()
+        .flatMap { rows ->
+            [
+                'accession\tinternal_id\tstaged_filename',
+                *rows
+                    .sort { left, right -> left[0] <=> right[0] }
+                    .collect { it[1] },
+            ]
+        }
+        .collectFile(name: 'staged_genomes.tsv', newLine: true)
 
     staged_fasta_files = staged_genomes
         .map { meta, genome -> genome }

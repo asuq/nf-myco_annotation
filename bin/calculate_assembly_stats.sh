@@ -96,7 +96,7 @@ compute_assembly_stats() {
 
 main() {
     local staged_manifest="" output="" manifest_dir header_line duplicate_accessions=""
-    local accession_index staged_filename_index
+    local accession_index staged_filename_index sort_key
 
     while (($# > 0)); do
         case "$1" in
@@ -160,6 +160,7 @@ main() {
         log_error "Staged manifest contains duplicate accession values: ${duplicate_accessions}"
         return 1
     fi
+    sort_key="$((accession_index + 1))"
 
     mkdir -p "$(dirname "${output}")"
     {
@@ -195,7 +196,10 @@ main() {
             fi
 
             printf '%s\t%s\n' "${accession}" "${stats_line}"
-        done < <(tail -n +2 "${staged_manifest}")
+        done < <(
+            tail -n +2 "${staged_manifest}" \
+                | LC_ALL=C sort -t $'\t' -k"${sort_key},${sort_key}"
+        )
     } > "${output}"
 }
 

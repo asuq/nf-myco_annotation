@@ -157,6 +157,38 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                 ],
             )
 
+    def test_sorts_output_rows_by_accession(self) -> None:
+        """Write assembly statistics in canonical accession order."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC_B.fasta", ">contig1\nAAAA\n")
+            self.write_text_file(tmpdir / "ACC_A.fasta", ">contig1\nAAAAAA\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "\n".join(
+                    [
+                        "accession\tinternal_id\tstaged_filename",
+                        "ACC_B\tid_b\tACC_B.fasta",
+                        "ACC_A\tid_a\tACC_A.fasta",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                [row["accession"] for row in read_tsv(output)],
+                ["ACC_A", "ACC_B"],
+            )
+
     def test_fails_for_invalid_or_empty_fasta(self) -> None:
         """Fail cleanly when seqtk cannot produce contig lengths."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

@@ -1,5 +1,9 @@
 include { BUILD_MASTER_TABLE } from '../../modules/local/build_master_table'
 include { COLLECT_VERSIONS } from '../../modules/local/collect_versions'
+include { MERGE_ONE_ROW_TSVS as MERGE_CCFINDER_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
+include { MERGE_ONE_ROW_TSVS as MERGE_CHECKM2_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
+include { MERGE_ONE_ROW_TSVS as MERGE_CODETTA_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
+include { MERGE_ONE_ROW_TSVS as MERGE_SIXTEEN_S_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
 include { SELECT_ANI_REPRESENTATIVES } from '../../modules/local/select_ani_representatives'
 include { WRITE_SAMPLE_STATUS } from '../../modules/local/write_sample_status'
 
@@ -33,10 +37,6 @@ workflow FINAL_OUTPUTS {
     container_engine
 
     main:
-    checkm2_seed = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))
-    sixteen_s_seed = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))
-    codetta_seed = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))
-    ccfinder_seed = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))
     primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}").toString()
     finalOutputsCollectDir = file("${workflow.workDir}/collect/${workflow.sessionId}/final_outputs")
 
@@ -81,41 +81,34 @@ workflow FINAL_OUTPUTS {
 
     configuredEggnogOnlyAccessions = parseConfiguredAccessions.call(params.eggnog_only_accessions)
 
-    combined_checkm2 = checkm2_seed
-        .mix(checkm2_summaries.map { meta, summary -> summary })
-        .collectFile(
-            name: 'checkm2_summaries.tsv',
-            keepHeader: true,
-            skip: 1,
-            newLine: true,
-        )
+    checkm2Header = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))
+    sixteenSHeader = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))
+    codettaHeader = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))
+    ccfinderHeader = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))
 
-    combined_16s = sixteen_s_seed
-        .mix(sixteen_s_summaries.map { meta, best16s, status -> status })
-        .collectFile(
-            name: '16s_statuses.tsv',
-            keepHeader: true,
-            skip: 1,
-            newLine: true,
-        )
+    MERGE_CHECKM2_SUMMARIES(
+        checkm2Header,
+        checkm2_summaries.map { meta, summary -> summary }.collect(),
+    )
+    combined_checkm2 = MERGE_CHECKM2_SUMMARIES.out.merged
 
-    combined_ccfinder = ccfinder_seed
-        .mix(ccfinder_summaries.map { meta, strains, contigs, crisprs -> strains })
-        .collectFile(
-            name: 'ccfinder_strains.tsv',
-            keepHeader: true,
-            skip: 1,
-            newLine: true,
-        )
+    MERGE_SIXTEEN_S_SUMMARIES(
+        sixteenSHeader,
+        sixteen_s_summaries.map { meta, best16s, status -> status }.collect(),
+    )
+    combined_16s = MERGE_SIXTEEN_S_SUMMARIES.out.merged
 
-    combined_codetta = codetta_seed
-        .mix(codetta_summaries.map { meta, summary -> summary })
-        .collectFile(
-            name: 'codetta_summary.tsv',
-            keepHeader: true,
-            skip: 1,
-            newLine: true,
-        )
+    MERGE_CCFINDER_SUMMARIES(
+        ccfinderHeader,
+        ccfinder_summaries.map { meta, strains, contigs, crisprs -> strains }.collect(),
+    )
+    combined_ccfinder = MERGE_CCFINDER_SUMMARIES.out.merged
+
+    MERGE_CODETTA_SUMMARIES(
+        codettaHeader,
+        codetta_summaries.map { meta, summary -> summary }.collect(),
+    )
+    combined_codetta = MERGE_CODETTA_SUMMARIES.out.merged
 
     collected_busco = busco_summaries
 
@@ -222,7 +215,11 @@ workflow FINAL_OUTPUTS {
         primaryBuscoColumn,
     )
 
-    final_versions = SELECT_ANI_REPRESENTATIVES.out.versions
+    final_versions = MERGE_CHECKM2_SUMMARIES.out.versions
+        .mix(MERGE_SIXTEEN_S_SUMMARIES.out.versions)
+        .mix(MERGE_CCFINDER_SUMMARIES.out.versions)
+        .mix(MERGE_CODETTA_SUMMARIES.out.versions)
+        .mix(SELECT_ANI_REPRESENTATIVES.out.versions)
         .mix(BUILD_MASTER_TABLE.out.versions)
         .mix(WRITE_SAMPLE_STATUS.out.versions)
 

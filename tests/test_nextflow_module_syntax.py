@@ -396,21 +396,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn("BUILD_OUTPUT_CONTRACTS", main_text)
         self.assertIn("Channel.value(buscoLineagesList)", main_text)
         self.assertIn(
-            'checkm2_seed = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))',
+            'checkm2Header = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))',
             workflow_text,
         )
         self.assertIn(
-            'sixteen_s_seed = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))',
+            'sixteenSHeader = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))',
             workflow_text,
         )
         self.assertIn(
-            'codetta_seed = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))',
+            'codettaHeader = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))',
             workflow_text,
         )
         self.assertIn(
-            'ccfinder_seed = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))',
+            'ccfinderHeader = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))',
             workflow_text,
         )
+        self.assertIn("MERGE_CHECKM2_SUMMARIES(", workflow_text)
+        self.assertIn("MERGE_SIXTEEN_S_SUMMARIES(", workflow_text)
+        self.assertIn("MERGE_CCFINDER_SUMMARIES(", workflow_text)
+        self.assertIn("MERGE_CODETTA_SUMMARIES(", workflow_text)
+        self.assertNotIn(".mix(checkm2_summaries.map { meta, summary -> summary })", workflow_text)
+        self.assertNotIn(".mix(sixteen_s_summaries.map { meta, best16s, status -> status })", workflow_text)
+        self.assertNotIn(".mix(ccfinder_summaries.map { meta, strains, contigs, crisprs -> strains })", workflow_text)
+        self.assertNotIn(".mix(codetta_summaries.map { meta, summary -> summary })", workflow_text)
         self.assertIn("val busco_lineages", build_master_module)
         self.assertIn('--busco-lineage \\"${it}\\"', build_master_module)
         self.assertNotIn("--append-columns", build_master_module)
@@ -424,6 +432,16 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}"', module_text)
         self.assertIn("${primaryBuscoColumn}", module_text)
+
+    def test_merge_one_row_tsvs_uses_canonical_header_and_python_helper(self) -> None:
+        """Require the deterministic TSV merger to validate against a locked header asset."""
+        module_text = (MODULES_DIR / "merge_one_row_tsvs.nf").read_text(encoding="utf-8")
+
+        self.assertIn("path header_asset, name: 'canonical_header.tsv'", module_text)
+        self.assertIn("path row_files, name: 'rows/row??.tsv'", module_text)
+        self.assertIn('script_path="\\$(command -v merge_one_row_tsvs.py)"', module_text)
+        self.assertIn('--header "${header_asset}"', module_text)
+        self.assertIn('--output merged.tsv', module_text)
 
     def test_runtime_tool_modules_write_versions_without_indented_headers(self) -> None:
         """Require runtime tool modules to emit versions via printf, not heredoc indentation."""
@@ -633,7 +651,12 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         workflow_path = ROOT / "subworkflows" / "local" / "cohort_ani.nf"
         workflow_text = workflow_path.read_text(encoding="utf-8")
 
-        self.assertIn("collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)", workflow_text)
+        self.assertIn("collect()", workflow_text)
+        self.assertIn(".flatMap { rows ->", workflow_text)
+        self.assertIn("'accession\\tinternal_id\\tstaged_filename'", workflow_text)
+        self.assertIn(".sort { left, right -> left[0] <=> right[0] }", workflow_text)
+        self.assertIn("collectFile(name: 'staged_genomes.tsv', newLine: true)", workflow_text)
+        self.assertNotIn("sort: false", workflow_text)
 
     def test_final_outputs_consumes_combined_busco_tables(self) -> None:
         """Require final outputs to consume combined BUSCO lineage tables directly."""
@@ -654,6 +677,21 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("sort: false", workflow_text)
         self.assertIn("storeDir: finalOutputsCollectDir", workflow_text)
         self.assertIn("accession\\tstatus\\twarnings\\texit_code\\tannotations_size\\tresult_file_count", workflow_text)
+
+    def test_final_outputs_use_deterministic_row_mergers_for_one_row_summaries(self) -> None:
+        """Require final outputs to merge one-row summaries via the canonical helper."""
+        workflow_text = (ROOT / "subworkflows" / "local" / "final_outputs.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("MERGE_CHECKM2_SUMMARIES.out.merged", workflow_text)
+        self.assertIn("MERGE_SIXTEEN_S_SUMMARIES.out.merged", workflow_text)
+        self.assertIn("MERGE_CCFINDER_SUMMARIES.out.merged", workflow_text)
+        self.assertIn("MERGE_CODETTA_SUMMARIES.out.merged", workflow_text)
+        self.assertIn(".map { meta, summary -> summary }.collect()", workflow_text)
+        self.assertIn(".map { meta, best16s, status -> status }.collect()", workflow_text)
+        self.assertIn(".map { meta, strains, contigs, crisprs -> strains }.collect()", workflow_text)
+        self.assertNotIn("keepHeader: true", workflow_text)
 
     def test_final_outputs_calls_manifest_helpers_as_closures(self) -> None:
         """Require closure helpers in final outputs to use explicit `.call(...)`."""
