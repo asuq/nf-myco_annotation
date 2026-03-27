@@ -45,7 +45,7 @@ process SUMMARISE_16S {
         cp 16S_status.tsv cohort_intact_manifest_row.tsv
     else
         : > cohort_best_16S.fna
-        head -n 1 16S_status.tsv > cohort_intact_manifest_row.tsv
+        : > cohort_intact_manifest_row.tsv
     fi
 
     if [[ -s best_16S.fna ]] && [[ "\${cohort_status}" == "partial" ]]; then
@@ -53,7 +53,7 @@ process SUMMARISE_16S {
         cp 16S_status.tsv cohort_partial_manifest_row.tsv
     else
         : > cohort_partial_16S.fna
-        head -n 1 16S_status.tsv > cohort_partial_manifest_row.tsv
+        : > cohort_partial_manifest_row.tsv
     fi
 
     cat <<EOF > versions.yml
@@ -76,7 +76,7 @@ process SUMMARISE_16S {
     cp best_16S.fna cohort_best_16S.fna
     cp 16S_status.tsv cohort_intact_manifest_row.tsv
     : > cohort_partial_16S.fna
-    head -n 1 16S_status.tsv > cohort_partial_manifest_row.tsv
+    : > cohort_partial_manifest_row.tsv
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"
