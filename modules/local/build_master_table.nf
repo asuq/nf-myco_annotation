@@ -57,18 +57,68 @@ process BUILD_MASTER_TABLE {
       python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/build_master_table.py"
     EOF
-    """
+    """.stripIndent()
 
     stub:
-    '''
-    cat <<'EOF' > master_table.tsv
-    Accession	Tax_ID	16S	Gcode	Codetta_Genetic_Code	Codetta_NCBI_Table_Candidates	Low_quality	Cluster_ID
-    sample_a	123	Yes	4	FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG	1;11	false	cluster_1
-    EOF
+    """
+    metadata_header="\$(head -n 1 "${metadata}")"
+    metadata_row="\$(awk 'NR == 2 { print; exit }' "${metadata}")"
+    append_header="\$(paste -sd '\t' "${append_columns}")"
+    printf '%s\t%s\n' "\${metadata_header}" "\${append_header}" > master_table.tsv
+    append_values=()
+    while IFS= read -r column; do
+        case "\${column}" in
+            Gcode)
+                append_values+=("4")
+                ;;
+            Codetta_Genetic_Code)
+                append_values+=("FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG")
+                ;;
+            Codetta_NCBI_Table_Candidates)
+                append_values+=("1;11")
+                ;;
+            Low_quality)
+                append_values+=("false")
+                ;;
+            16S)
+                append_values+=("Yes")
+                ;;
+            BUSCO_*)
+                append_values+=("C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200")
+                ;;
+            CRISPRS)
+                append_values+=("2")
+                ;;
+            SPACERS_SUM)
+                append_values+=("7")
+                ;;
+            CRISPR_FRAC)
+                append_values+=("0.1")
+                ;;
+            Cluster_ID)
+                append_values+=("cluster_1")
+                ;;
+            Is_Representative)
+                append_values+=("yes")
+                ;;
+            ANI_to_Representative)
+                append_values+=("100")
+                ;;
+            Score)
+                append_values+=("0.95")
+                ;;
+            *)
+                append_values+=("NA")
+                ;;
+        esac
+    done < "${append_columns}"
+    tab_char="\$(printf '\t')"
+    append_row="\$(IFS="\${tab_char}"; printf '%s' "\${append_values[*]}")"
+    printf '%s\t%s\n' "\${metadata_row}" "\${append_row}" >> master_table.tsv
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"
       script: "bin/build_master_table.py"
     EOF
-    '''
+    """.stripIndent()
 }

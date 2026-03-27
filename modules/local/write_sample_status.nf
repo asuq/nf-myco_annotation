@@ -64,18 +64,56 @@ process WRITE_SAMPLE_STATUS {
       python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
       script: "bin/build_sample_status.py"
     EOF
-    """
+    """.stripIndent()
 
     stub:
-    '''
-    cat <<'EOF' > sample_status.tsv
-    accession	internal_id	is_new	validation_status	taxonomy_status	barrnap_status	checkm2_gcode4_status	checkm2_gcode11_status	gcode_status	gcode	low_quality	busco_bacillota_odb12_status	busco_mycoplasmatota_odb12_status	codetta_status	prokka_status	ccfinder_status	padloc_status	eggnog_status	ani_included	ani_exclusion_reason	warnings	notes
-    sample_a	sample_a	false	done	done	done	done	done	done	4	false	done	done	done	done	done	done	done	true		stub_warning	stub note
-    EOF
+    """
+    header="\$(paste -sd '\t' "${columns}")"
+    printf '%s\n' "\${header}" > sample_status.tsv
+    status_values=()
+    while IFS= read -r column; do
+        case "\${column}" in
+            accession)
+                status_values+=("sample_a")
+                ;;
+            internal_id)
+                status_values+=("sample_a")
+                ;;
+            is_new)
+                status_values+=("false")
+                ;;
+            gcode)
+                status_values+=("4")
+                ;;
+            low_quality)
+                status_values+=("false")
+                ;;
+            ani_included)
+                status_values+=("true")
+                ;;
+            ani_exclusion_reason)
+                status_values+=("")
+                ;;
+            warnings)
+                status_values+=("stub_warning")
+                ;;
+            notes)
+                status_values+=("stub note")
+                ;;
+            *_status)
+                status_values+=("done")
+                ;;
+            *)
+                status_values+=("")
+                ;;
+        esac
+    done < "${columns}"
+    tab_char="\$(printf '\t')"
+    printf '%s\n' "\$(IFS="\${tab_char}"; printf '%s' "\${status_values[*]}")" >> sample_status.tsv
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"
       script: "bin/build_sample_status.py"
     EOF
-    '''
+    """.stripIndent()
 }

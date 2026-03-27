@@ -19,10 +19,29 @@ workflow BUSCO_DATASET_PREP {
             error "params.busco_db is required unless params.prepare_busco_datasets=true"
         }
 
+        def buscoDbRoot = new File(params.busco_db.toString())
+        def stubDatasetFallback = null
+        if (workflow.stubRun) {
+            stubDatasetFallback = buscoDbRoot
+                .listFiles()
+                ?.findAll { it.isDirectory() }
+                ?.sort { it.name }
+                ?.findResult { datasetDir -> datasetDir.absolutePath }
+        }
+
         datasets = lineages.map { lineage ->
+            def datasetPath = "${params.busco_db}/${lineage}"
+            if (
+                workflow.stubRun
+                && !new File(datasetPath).exists()
+                && stubDatasetFallback != null
+            ) {
+                datasetPath = stubDatasetFallback
+            }
+
             tuple(
                 lineage,
-                file("${params.busco_db}/${lineage}", checkIfExists: true),
+                file(datasetPath, checkIfExists: true),
             )
         }
         logs = Channel.empty()
