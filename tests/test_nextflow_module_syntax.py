@@ -458,6 +458,18 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('--header "${header_asset}"', module_text)
         self.assertIn('--output merged.tsv', module_text)
 
+    def test_build_staged_manifest_uses_python_helper(self) -> None:
+        """Require staged-manifest building to use the dedicated Python helper."""
+        module_text = (MODULES_DIR / "build_staged_manifest.nf").read_text(encoding="utf-8")
+
+        self.assertIn("val manifest_rows", module_text)
+        self.assertIn("path 'staged_genomes.tsv', emit: manifest", module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', module_text)
+        self.assertIn('script_path="\\$(command -v build_staged_manifest.py)"', module_text)
+        self.assertIn("staged_manifest_rows.tsv", module_text)
+        self.assertIn('--input staged_manifest_rows.tsv \\', module_text)
+        self.assertIn('--output staged_genomes.tsv', module_text)
+
     def test_runtime_tool_modules_write_versions_without_indented_headers(self) -> None:
         """Require runtime tool modules to emit versions via printf, not heredoc indentation."""
         expected_modules = (
@@ -666,11 +678,16 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         workflow_path = ROOT / "subworkflows" / "local" / "cohort_ani.nf"
         workflow_text = workflow_path.read_text(encoding="utf-8")
 
-        self.assertIn("collect()", workflow_text)
-        self.assertIn(".flatMap { rows ->", workflow_text)
-        self.assertIn("'accession\\tinternal_id\\tstaged_filename'", workflow_text)
-        self.assertIn(".sort { left, right -> left[0] <=> right[0] }", workflow_text)
-        self.assertIn("collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)", workflow_text)
+        self.assertIn("include { BUILD_STAGED_MANIFEST }", workflow_text)
+        self.assertIn("staged_manifest_rows = staged_genomes", workflow_text)
+        self.assertIn('.map { meta, genome ->', workflow_text)
+        self.assertIn('BUILD_STAGED_MANIFEST(staged_manifest_rows)', workflow_text)
+        self.assertIn('staged_manifest = BUILD_STAGED_MANIFEST.out.manifest', workflow_text)
+        self.assertIn('CALCULATE_ASSEMBLY_STATS(staged_manifest, staged_fasta_files)', workflow_text)
+        self.assertIn('BUILD_FASTANI_INPUTS(', workflow_text)
+        self.assertIn('staged_manifest,', workflow_text)
+        self.assertNotIn(".flatMap { rows ->", workflow_text)
+        self.assertNotIn("collectFile(name: 'staged_genomes.tsv'", workflow_text)
 
     def test_final_outputs_consumes_combined_busco_tables(self) -> None:
         """Require final outputs to consume combined BUSCO lineage tables directly."""

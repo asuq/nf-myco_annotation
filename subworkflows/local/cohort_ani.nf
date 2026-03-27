@@ -1,4 +1,5 @@
 include { SUMMARISE_BUSCO } from '../../modules/local/summarise_busco'
+include { BUILD_STAGED_MANIFEST } from '../../modules/local/build_staged_manifest'
 include { CALCULATE_ASSEMBLY_STATS } from '../../modules/local/calculate_assembly_stats'
 include { BUILD_FASTANI_INPUTS } from '../../modules/local/build_fastani_inputs'
 include { FASTANI } from '../../modules/local/fastani'
@@ -20,23 +21,14 @@ workflow COHORT_ANI {
     main:
     SUMMARISE_BUSCO(busco_summaries)
 
-    staged_manifest = staged_genomes
+    staged_manifest_rows = staged_genomes
         .map { meta, genome ->
-            [
-                meta.accession.toString(),
-                "${meta.accession}\t${meta.internal_id}\t${genome.getName()}",
-            ]
+            "${meta.accession}\t${meta.internal_id}\t${genome.getName()}"
         }
         .collect()
-        .flatMap { rows ->
-            [
-                'accession\tinternal_id\tstaged_filename',
-                *rows
-                    .sort { left, right -> left[0] <=> right[0] }
-                    .collect { it[1] },
-            ]
-        }
-        .collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)
+
+    BUILD_STAGED_MANIFEST(staged_manifest_rows)
+    staged_manifest = BUILD_STAGED_MANIFEST.out.manifest
 
     staged_fasta_files = staged_genomes
         .map { meta, genome -> genome }
@@ -88,6 +80,7 @@ workflow COHORT_ANI {
     CLUSTER_ANI(FASTANI.out.matrix, BUILD_FASTANI_INPUTS.out.metadata)
 
     versions = SUMMARISE_BUSCO.out.versions
+        .mix(BUILD_STAGED_MANIFEST.out.versions)
         .mix(CALCULATE_ASSEMBLY_STATS.out.versions)
         .mix(BUILD_FASTANI_INPUTS.out.versions)
         .mix(FASTANI.out.versions)
