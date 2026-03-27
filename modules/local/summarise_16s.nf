@@ -1,6 +1,6 @@
 /*
- * Summarise one sample's Barrnap results and emit cohort-candidate files that
- * the subworkflow can concatenate without parsing TSV state in Groovy.
+ * Summarise one sample's Barrnap results and emit separate intact and partial
+ * cohort-candidate files without parsing TSV state in Groovy.
  */
 process SUMMARISE_16S {
     tag "${meta.accession}"
@@ -21,8 +21,10 @@ process SUMMARISE_16S {
 
     output:
     tuple val(meta), path('best_16S.fna'), path('16S_status.tsv'), emit: sample_summaries
-    tuple val(meta), path('cohort_best_16S.fna'), emit: cohort_candidates
-    tuple val(meta), path('cohort_manifest_row.tsv'), emit: cohort_manifest_rows
+    tuple val(meta), path('cohort_best_16S.fna'), emit: intact_cohort_candidates
+    tuple val(meta), path('cohort_intact_manifest_row.tsv'), emit: intact_manifest_rows
+    tuple val(meta), path('cohort_partial_16S.fna'), emit: partial_cohort_candidates
+    tuple val(meta), path('cohort_partial_manifest_row.tsv'), emit: partial_manifest_rows
     path 'versions.yml', emit: versions
 
     script:
@@ -35,12 +37,23 @@ process SUMMARISE_16S {
         --outdir . \
         --is-atypical "${isAtypical}"
 
-    if [[ -s best_16S.fna ]] && awk -F '\t' 'NR == 2 && \$5 == "true" { found = 1 } END { exit(found ? 0 : 1) }' 16S_status.tsv; then
+    cohort_status="\$(awk -F '\t' 'NR == 2 { print \$2 }' 16S_status.tsv)"
+    include_in_all="\$(awk -F '\t' 'NR == 2 { print \$5 }' 16S_status.tsv)"
+
+    if [[ -s best_16S.fna ]] && [[ "\${include_in_all}" == "true" ]]; then
         cp best_16S.fna cohort_best_16S.fna
-        cp 16S_status.tsv cohort_manifest_row.tsv
+        cp 16S_status.tsv cohort_intact_manifest_row.tsv
     else
         : > cohort_best_16S.fna
-        head -n 1 16S_status.tsv > cohort_manifest_row.tsv
+        head -n 1 16S_status.tsv > cohort_intact_manifest_row.tsv
+    fi
+
+    if [[ -s best_16S.fna ]] && [[ "\${cohort_status}" == "partial" ]]; then
+        cp best_16S.fna cohort_partial_16S.fna
+        cp 16S_status.tsv cohort_partial_manifest_row.tsv
+    else
+        : > cohort_partial_16S.fna
+        head -n 1 16S_status.tsv > cohort_partial_manifest_row.tsv
     fi
 
     cat <<EOF > versions.yml
@@ -61,7 +74,9 @@ process SUMMARISE_16S {
     sample_a	Yes	sample_a 16S ribosomal RNA	80	true
     EOF
     cp best_16S.fna cohort_best_16S.fna
-    cp 16S_status.tsv cohort_manifest_row.tsv
+    cp 16S_status.tsv cohort_intact_manifest_row.tsv
+    : > cohort_partial_16S.fna
+    head -n 1 16S_status.tsv > cohort_partial_manifest_row.tsv
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"
