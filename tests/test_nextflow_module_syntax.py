@@ -136,6 +136,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_text = (MODULES_DIR / "summarise_16s.nf").read_text(encoding="utf-8")
 
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
+        self.assertIn("path metadata", module_text)
         self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
         self.assertIn("path('cohort_best_16S.fna'), emit: intact_cohort_candidates", module_text)
         self.assertIn(
@@ -147,6 +148,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             "path('cohort_partial_manifest_row.tsv'), emit: partial_manifest_rows",
             module_text,
         )
+        self.assertIn('--metadata "${metadata}"', module_text)
+        self.assertNotIn("meta.is_atypical", module_text)
         self.assertIn('[[ "\\${cohort_status}" == "partial" ]]', module_text)
         self.assertIn(": > cohort_intact_manifest_row.tsv", module_text)
         self.assertIn(": > cohort_partial_manifest_row.tsv", module_text)
@@ -182,8 +185,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         workflow_text = (ROOT / "subworkflows" / "local" / "cohort_16s.nf").read_text(
             encoding="utf-8"
         )
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
 
+        self.assertIn("take:\n    barrnap_outputs\n    metadata", workflow_text)
         self.assertIn("include { PUBLISH_COHORT_16S }", workflow_text)
+        self.assertIn("SUMMARISE_16S(barrnap_outputs, metadata)", workflow_text)
         self.assertIn("collected_all_partial_16S = SUMMARISE_16S.out.partial_cohort_candidates", workflow_text)
         self.assertIn("intact_manifest_rows = SUMMARISE_16S.out.intact_manifest_rows", workflow_text)
         self.assertIn(
@@ -217,6 +223,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             "all_partial_16S_manifest = PUBLISH_COHORT_16S.out.partial_manifest",
             workflow_text,
         )
+        self.assertIn("COHORT_16S(PER_SAMPLE_QC.out.barrnap, metadata)", main_text)
 
     def test_download_busco_dataset_preserves_lineage_directory_name(self) -> None:
         """Require downloaded BUSCO datasets to be staged under their lineage names."""

@@ -561,7 +561,59 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 plan=plan,
                 master_rows=master_rows,
                 status_rows=status_rows,
+                intact_manifest_accessions={"MYCO_EXCEPTION"},
             )
+
+    def test_assert_role_coverage_rejects_atypical_intact_16s_inclusion(self) -> None:
+        """Reject intact 16S cohort inclusion for non-exception atypical samples."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            cohort_plan_path = self.write_cohort_plan(tmpdir / "cohort_plan.tsv")
+            source_catalog_path = self.write_source_catalog(
+                tmpdir / "source_catalog.tsv",
+                {
+                    "SRC_MYCO_A": self.write_gzip_file(tmpdir / "a.fna.gz", ">a\nAAAA\n").resolve().as_uri(),
+                    "SRC_MYCO_B": self.write_gzip_file(tmpdir / "b.fna.gz", ">a\nAAAA\n").resolve().as_uri(),
+                    "SRC_ECOLI": self.write_gzip_file(tmpdir / "c.fna.gz", ">a\nAAAA\n").resolve().as_uri(),
+                    "SRC_STREP": self.write_gzip_file(tmpdir / "d.fna.gz", ">a\nAAAA\n").resolve().as_uri(),
+                },
+            )
+            catalog = run_acceptance_tests.load_source_catalog(source_catalog_path)
+            plan = run_acceptance_tests.load_cohort_plan(cohort_plan_path, catalog)
+
+            master_rows = {
+                "SRC_MYCO_A": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
+                "SRC_MYCO_B": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "102"},
+                "SRC_ECOLI": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "103"},
+                "SRC_STREP": {"Gcode": "11", "CRISPRS": "2", "Cluster_ID": "NA", "Tax_ID": "104"},
+                "SRC_MYCO_A_NEW": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "NA"},
+                "MYCO-ATYPICAL": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
+                "MYCO_EXCEPTION": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "C000001", "Tax_ID": "101"},
+                "ECOLI-PAIR": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "C000002", "Tax_ID": "103"},
+                "ECOLI PAIR": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "C000002", "Tax_ID": "103"},
+            }
+            status_rows = {
+                "SRC_MYCO_A": {"accession": "SRC_MYCO_A", "ani_included": "false", "ani_exclusion_reason": "low_quality", "warnings": "", "internal_id": "SRC_MYCO_A"},
+                "SRC_MYCO_B": {"accession": "SRC_MYCO_B", "ani_included": "false", "ani_exclusion_reason": "low_quality", "warnings": "", "internal_id": "SRC_MYCO_B"},
+                "SRC_ECOLI": {"accession": "SRC_ECOLI", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "", "internal_id": "SRC_ECOLI"},
+                "SRC_STREP": {"accession": "SRC_STREP", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "", "internal_id": "SRC_STREP"},
+                "SRC_MYCO_A_NEW": {"accession": "SRC_MYCO_A_NEW", "ani_included": "false", "ani_exclusion_reason": "partial_16s", "warnings": "missing_metadata_for_new_sample", "internal_id": "SRC_MYCO_A_NEW"},
+                "MYCO-ATYPICAL": {"accession": "MYCO-ATYPICAL", "ani_included": "false", "ani_exclusion_reason": "atypical", "warnings": "", "internal_id": "MYCO_ATYPICAL"},
+                "MYCO_EXCEPTION": {"accession": "MYCO_EXCEPTION", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "", "internal_id": "MYCO_EXCEPTION"},
+                "ECOLI-PAIR": {"accession": "ECOLI-PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_aaa"},
+                "ECOLI PAIR": {"accession": "ECOLI PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_bbb"},
+            }
+
+            with self.assertRaisesRegex(
+                run_acceptance_tests.AcceptanceTestError,
+                "unexpected_atypical_excluded_16s_inclusion",
+            ):
+                run_acceptance_tests.assert_role_coverage(
+                    plan=plan,
+                    master_rows=master_rows,
+                    status_rows=status_rows,
+                    intact_manifest_accessions={"MYCO-ATYPICAL", "MYCO_EXCEPTION"},
+                )
 
     def test_assert_metadata_contract_uses_locked_append_columns(self) -> None:
         """Require the metadata prefix and append-column contract exactly."""
