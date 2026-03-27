@@ -148,6 +148,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             module_text,
         )
         self.assertIn('[[ "\\${cohort_status}" == "partial" ]]', module_text)
+        self.assertIn(": > cohort_intact_manifest_row.tsv", module_text)
+        self.assertIn(": > cohort_partial_manifest_row.tsv", module_text)
 
     def test_publish_cohort_16s_exposes_stable_cohort_outputs(self) -> None:
         """Require the cohort 16S publisher to emit the design-spec artefacts."""
@@ -183,10 +185,23 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn("include { PUBLISH_COHORT_16S }", workflow_text)
         self.assertIn("collected_all_partial_16S = SUMMARISE_16S.out.partial_cohort_candidates", workflow_text)
+        self.assertIn("intact_manifest_rows = SUMMARISE_16S.out.intact_manifest_rows", workflow_text)
         self.assertIn(
-            "collected_all_partial_16S_manifest = SUMMARISE_16S.out.partial_manifest_rows",
+            "partial_manifest_rows = SUMMARISE_16S.out.partial_manifest_rows",
             workflow_text,
         )
+        self.assertIn(
+            'cohortManifestHeader = "${projectDir}/assets/testdata/headers/16s_status.tsv"',
+            workflow_text,
+        )
+        self.assertIn(
+            "Channel.fromPath(cohortManifestHeader, checkIfExists: true)",
+            workflow_text,
+        )
+        self.assertIn(".filter { manifestRow -> manifestRow.toFile().length() > 0 }", workflow_text)
+        self.assertIn(".concat(intact_manifest_rows)", workflow_text)
+        self.assertIn(".concat(partial_manifest_rows)", workflow_text)
+        self.assertNotIn("newLine: true", workflow_text)
         self.assertIn("PUBLISH_COHORT_16S(", workflow_text)
         self.assertIn("collected_all_best_16S,", workflow_text)
         self.assertIn("collected_all_best_16S_manifest,", workflow_text)
