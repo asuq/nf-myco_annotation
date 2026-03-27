@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Sequence
 
 import build_master_table as table_helpers
+import master_table_contract
 
 
 LOGGER = logging.getLogger(__name__)
@@ -776,6 +777,12 @@ def run_build(args: argparse.Namespace) -> None:
         validated_samples = table_helpers.load_validated_samples(args.validated_samples)
         validated_accessions = {row["accession"] for row in validated_samples}
         output_columns = load_output_columns(args.columns)
+        contract_busco_lineages = master_table_contract.extract_busco_lineages_from_sample_status_columns(
+            output_columns
+        )
+        expected_busco_columns = {
+            f"BUSCO_{lineage}" for lineage in contract_busco_lineages
+        }
         initial_status_index = load_initial_status(
             args.initial_status,
             output_columns=output_columns,
@@ -841,6 +848,23 @@ def run_build(args: argparse.Namespace) -> None:
         )
     except table_helpers.MasterTableError as error:
         raise SampleStatusError(str(error)) from error
+    except ValueError as error:
+        raise SampleStatusError(str(error)) from error
+
+    unexpected_busco_columns = sorted(provided_busco_columns - expected_busco_columns)
+    if unexpected_busco_columns:
+        raise SampleStatusError(
+            "BUSCO summaries contain lineage columns not present in the sample-status "
+            "contract: " + ", ".join(unexpected_busco_columns)
+        )
+    if (
+        args.primary_busco_column is not None
+        and args.primary_busco_column not in expected_busco_columns
+    ):
+        raise SampleStatusError(
+            "--primary-busco-column is not present in the sample-status BUSCO contract: "
+            + args.primary_busco_column
+        )
 
     rows: list[dict[str, str]] = []
     for sample_row in validated_samples:

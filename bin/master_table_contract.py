@@ -35,6 +35,33 @@ ANI_COLUMNS = ("Cluster_ID", "Is_Representative", "ANI_to_Representative", "Scor
 DEFAULT_APPEND_COLUMNS_ASSET = (
     Path(__file__).resolve().parents[1] / "assets" / "master_table_append_columns.txt"
 )
+SAMPLE_STATUS_PREFIX_COLUMNS = (
+    "accession",
+    "internal_id",
+    "is_new",
+    "validation_status",
+    "taxonomy_status",
+    "barrnap_status",
+    "checkm2_gcode4_status",
+    "checkm2_gcode11_status",
+    "gcode_status",
+    "gcode",
+    "low_quality",
+)
+SAMPLE_STATUS_SUFFIX_COLUMNS = (
+    "codetta_status",
+    "prokka_status",
+    "ccfinder_status",
+    "padloc_status",
+    "eggnog_status",
+    "ani_included",
+    "ani_exclusion_reason",
+    "warnings",
+    "notes",
+)
+DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = (
+    Path(__file__).resolve().parents[1] / "assets" / "sample_status_columns.txt"
+)
 
 
 def normalise_busco_lineages(
@@ -97,6 +124,99 @@ def read_append_columns_asset(path: Path = DEFAULT_APPEND_COLUMNS_ASSET) -> list
     ]
 
 
+def build_sample_status_columns(
+    busco_lineages: Sequence[str] | None = None,
+) -> list[str]:
+    """Return the final sample-status columns in locked output order."""
+    busco_columns = [
+        f"busco_{lineage}_status" for lineage in normalise_busco_lineages(busco_lineages)
+    ]
+    return [
+        *SAMPLE_STATUS_PREFIX_COLUMNS,
+        *busco_columns,
+        *SAMPLE_STATUS_SUFFIX_COLUMNS,
+    ]
+
+
+def read_sample_status_columns_asset(
+    path: Path = DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET,
+) -> list[str]:
+    """Read the repository sample-status column asset file."""
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def extract_busco_lineages_from_append_columns(
+    append_columns: Sequence[str],
+) -> tuple[str, ...]:
+    """Return BUSCO lineage names encoded in one append-column contract."""
+    prefix_columns = [
+        *TAXONOMY_COLUMNS,
+        *CHECKM2_COLUMNS,
+        *GCODE_QC_COLUMNS,
+    ]
+    suffix_columns = [*CRISPR_COLUMNS, *ANI_COLUMNS]
+    append_list = [column.strip() for column in append_columns]
+
+    if append_list[: len(prefix_columns)] != prefix_columns:
+        raise ValueError("Append-column contract has an unexpected non-BUSCO prefix.")
+    if append_list[-len(suffix_columns) :] != suffix_columns:
+        raise ValueError("Append-column contract has an unexpected non-BUSCO suffix.")
+
+    busco_columns = append_list[len(prefix_columns) : len(append_list) - len(suffix_columns)]
+    if not busco_columns:
+        raise ValueError("Append-column contract must contain at least one BUSCO column.")
+    if any(not column.startswith("BUSCO_") for column in busco_columns):
+        raise ValueError("Append-column contract contains a non-BUSCO column in the BUSCO block.")
+
+    busco_lineages = normalise_busco_lineages(
+        [column.removeprefix("BUSCO_") for column in busco_columns]
+    )
+    expected_columns = build_append_columns(busco_lineages)
+    if append_list != expected_columns:
+        raise ValueError("Append-column contract does not match the BUSCO-aware contract.")
+    return busco_lineages
+
+
+def extract_busco_lineages_from_sample_status_columns(
+    sample_status_columns: Sequence[str],
+) -> tuple[str, ...]:
+    """Return BUSCO lineage names encoded in one sample-status contract."""
+    status_list = [column.strip() for column in sample_status_columns]
+
+    if status_list[: len(SAMPLE_STATUS_PREFIX_COLUMNS)] != list(SAMPLE_STATUS_PREFIX_COLUMNS):
+        raise ValueError("Sample-status contract has an unexpected non-BUSCO prefix.")
+    if status_list[-len(SAMPLE_STATUS_SUFFIX_COLUMNS) :] != list(SAMPLE_STATUS_SUFFIX_COLUMNS):
+        raise ValueError("Sample-status contract has an unexpected non-BUSCO suffix.")
+
+    busco_columns = status_list[
+        len(SAMPLE_STATUS_PREFIX_COLUMNS) : len(status_list) - len(SAMPLE_STATUS_SUFFIX_COLUMNS)
+    ]
+    if not busco_columns:
+        raise ValueError("Sample-status contract must contain at least one BUSCO status column.")
+    if any(
+        not column.startswith("busco_") or not column.endswith("_status")
+        for column in busco_columns
+    ):
+        raise ValueError(
+            "Sample-status contract contains a non-BUSCO status column in the BUSCO block."
+        )
+
+    busco_lineages = normalise_busco_lineages(
+        [
+            column.removeprefix("busco_").removesuffix("_status")
+            for column in busco_columns
+        ]
+    )
+    expected_columns = build_sample_status_columns(busco_lineages)
+    if status_list != expected_columns:
+        raise ValueError("Sample-status contract does not match the BUSCO-aware contract.")
+    return busco_lineages
+
+
 def validate_default_append_columns_asset(
     path: Path = DEFAULT_APPEND_COLUMNS_ASSET,
 ) -> None:
@@ -106,4 +226,16 @@ def validate_default_append_columns_asset(
     if asset_columns != expected_columns:
         raise ValueError(
             f"Append-column asset {path} does not match the default v1 contract."
+        )
+
+
+def validate_default_sample_status_columns_asset(
+    path: Path = DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET,
+) -> None:
+    """Raise when the default sample-status asset drifts from the code contract."""
+    asset_columns = read_sample_status_columns_asset(path)
+    expected_columns = build_sample_status_columns(DEFAULT_BUSCO_LINEAGES)
+    if asset_columns != expected_columns:
+        raise ValueError(
+            f"Sample-status column asset {path} does not match the default v1 contract."
         )

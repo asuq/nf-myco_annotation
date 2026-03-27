@@ -15,7 +15,6 @@ import master_table_contract
 
 
 LOGGER = logging.getLogger(__name__)
-ROOT_DIR = Path(__file__).resolve().parents[1]
 
 VALIDATED_SAMPLE_REQUIRED_COLUMNS = (
     "accession",
@@ -30,7 +29,6 @@ CODETTA_COLUMNS = tuple(master_table_contract.CODETTA_COLUMNS)
 SIXTEEN_S_COLUMNS = ("16S",)
 CRISPR_COLUMNS = tuple(master_table_contract.CRISPR_COLUMNS)
 ANI_COLUMNS = tuple(master_table_contract.ANI_COLUMNS)
-DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 ASSEMBLY_STATS_COLUMNS = ("n50", "scaffolds", "genome_size")
 ASSEMBLY_METADATA_COLUMN_MAP = {
@@ -281,7 +279,7 @@ def load_validated_samples(path: Path) -> list[dict[str, str]]:
 
 
 def load_sample_status_columns(
-    path: Path = DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET,
+    path: Path = master_table_contract.DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET,
 ) -> list[str]:
     """Load the maintained sample-status column order asset."""
     if not path.is_file():
@@ -586,10 +584,20 @@ def run_build(args: argparse.Namespace) -> None:
     metadata_header, metadata_key_column, metadata_index = load_metadata(args.metadata)
     append_columns = load_append_columns(args.append_columns)
 
-    expected_header = master_table_contract.build_master_table_columns(metadata_header)
+    try:
+        busco_lineages = master_table_contract.extract_busco_lineages_from_append_columns(
+            append_columns
+        )
+    except ValueError as error:
+        raise MasterTableError(str(error)) from error
+
+    expected_header = master_table_contract.build_master_table_columns(
+        metadata_header,
+        busco_lineages,
+    )
     if append_columns != expected_header[len(metadata_header) :]:
         raise MasterTableError(
-            "Append-column contract does not match the default master-table column contract."
+            "Append-column contract does not match the BUSCO-aware master-table contract."
         )
 
     taxonomy_index = load_taxonomy_index(args.taxonomy)
@@ -624,7 +632,14 @@ def run_build(args: argparse.Namespace) -> None:
         "ANI summary table",
         validated_accessions,
     )
-    busco_index, _provided_busco_columns = load_busco_index(args.busco, validated_accessions)
+    busco_index, provided_busco_columns = load_busco_index(args.busco, validated_accessions)
+    expected_busco_columns = {f"BUSCO_{lineage}" for lineage in busco_lineages}
+    unexpected_busco_columns = sorted(provided_busco_columns - expected_busco_columns)
+    if unexpected_busco_columns:
+        raise MasterTableError(
+            "BUSCO summaries contain lineage columns not present in the append-column "
+            "contract: " + ", ".join(unexpected_busco_columns)
+        )
 
     rows: list[dict[str, str]] = []
     for sample_row in validated_samples:
