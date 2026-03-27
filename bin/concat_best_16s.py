@@ -22,6 +22,7 @@ REQUIRED_STATUS_COLUMNS = (
     "include_in_all_best_16S",
     "warnings",
 )
+COHORT_KINDS = ("intact", "partial")
 
 
 class Cohort16SError(RuntimeError):
@@ -43,13 +44,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--output-fasta",
         required=True,
         type=Path,
-        help="Path to the concatenated all_best_16S.fna file.",
+        help="Path to the concatenated cohort 16S FASTA file.",
     )
     parser.add_argument(
         "--output-manifest",
         required=True,
         type=Path,
         help="Path to the cohort manifest TSV.",
+    )
+    parser.add_argument(
+        "--cohort-kind",
+        choices=COHORT_KINDS,
+        default="intact",
+        help="Which cohort subset to build.",
     )
     return parser.parse_args(argv)
 
@@ -123,6 +130,13 @@ def append_fasta_content(output_handle, fasta_path: Path) -> None:
     output_handle.write(content if content.endswith("\n") else content + "\n")
 
 
+def should_include_in_cohort(status_row: dict[str, str], cohort_kind: str) -> bool:
+    """Return True when a sample belongs in the requested cohort subset."""
+    if cohort_kind == "intact":
+        return status_row["include_in_all_best_16S"] == "true"
+    return status_row["16S"] == "partial"
+
+
 def write_manifest(path: Path, rows: Sequence[dict[str, str]]) -> None:
     """Write the cohort manifest TSV."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +155,7 @@ def build_cohort_fasta(
     inputs_path: Path,
     output_fasta: Path,
     output_manifest: Path,
+    cohort_kind: str,
 ) -> None:
     """Build the cohort FASTA and manifest from per-sample 16S outputs."""
     manifest_rows: list[dict[str, str]] = []
@@ -157,7 +172,7 @@ def build_cohort_fasta(
                     "Cohort input accession does not match the status TSV accession "
                     f"for {status_path}."
                 )
-            if status_row["include_in_all_best_16S"] != "true":
+            if not should_include_in_cohort(status_row, cohort_kind):
                 continue
             append_fasta_content(fasta_handle, best_fasta_path)
             manifest_rows.append(status_row)
@@ -174,6 +189,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             inputs_path=args.inputs,
             output_fasta=args.output_fasta,
             output_manifest=args.output_manifest,
+            cohort_kind=args.cohort_kind,
         )
     except Cohort16SError as error:
         LOGGER.error(str(error))

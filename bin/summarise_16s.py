@@ -257,6 +257,15 @@ def write_status(path: Path, row: dict[str, str]) -> None:
         writer.writerow(row)
 
 
+def should_include_in_all_best_16s(
+    status: str,
+    best_hit: RrnaHit | None,
+    is_atypical: bool,
+) -> bool:
+    """Return True only for intact, non-atypical cohort members."""
+    return status == "Yes" and best_hit is not None and not is_atypical
+
+
 def summarise_hits(
     accession: str,
     rrna_gff: Path,
@@ -295,7 +304,11 @@ def summarise_hits(
     else:
         status = "partial"
 
-    include_in_all = best_hit is not None and not is_atypical
+    include_in_all = should_include_in_all_best_16s(
+        status=status,
+        best_hit=best_hit,
+        is_atypical=is_atypical,
+    )
     row = {
         "accession": accession,
         "16S": status,
