@@ -933,6 +933,7 @@ def assert_role_coverage(
     plan: Sequence[CohortRecord],
     master_rows: dict[str, dict[str, str]],
     status_rows: dict[str, dict[str, str]],
+    intact_manifest_accessions: set[str],
 ) -> None:
     """Assert that the positive cohort proved all required acceptance roles."""
     gcode4_candidates = records_with_role(plan, "gcode4_candidate")
@@ -971,6 +972,11 @@ def assert_role_coverage(
         for record in atypical_excluded_candidates
     ):
         raise AcceptanceTestError("missing_atypical_exclusion")
+    if any(
+        record.accession in intact_manifest_accessions
+        for record in atypical_excluded_candidates
+    ):
+        raise AcceptanceTestError("unexpected_atypical_excluded_16s_inclusion")
 
     atypical_exception_candidates = records_with_role(plan, "atypical_exception_candidate")
     if not any(
@@ -978,6 +984,11 @@ def assert_role_coverage(
         for record in atypical_exception_candidates
     ):
         raise AcceptanceTestError("missing_atypical_exception_inclusion")
+    if not any(
+        record.accession in intact_manifest_accessions
+        for record in atypical_exception_candidates
+    ):
+        raise AcceptanceTestError("missing_atypical_exception_16s_inclusion")
 
     missing_metadata_candidates = records_with_role(plan, "missing_metadata_case")
     if not any(
@@ -1038,7 +1049,22 @@ def assert_run_outputs(outdir: Path, plan: Sequence[CohortRecord], metadata_tsv:
             "missing_sample_folders:" + ",".join(missing_sample_dirs)
         )
 
-    assert_role_coverage(plan=plan, master_rows=master_rows, status_rows=status_rows)
+    intact_manifest_path = outdir / "cohort" / "16s" / "all_best_16S_manifest.tsv"
+    intact_manifest_header, intact_manifest_rows = read_tsv(intact_manifest_path)
+    if "accession" not in intact_manifest_header:
+        raise AcceptanceTestError("missing_intact_16s_manifest_accession_column")
+    intact_manifest_accessions = {
+        row.get("accession", "").strip()
+        for row in intact_manifest_rows
+        if row.get("accession", "").strip()
+    }
+
+    assert_role_coverage(
+        plan=plan,
+        master_rows=master_rows,
+        status_rows=status_rows,
+        intact_manifest_accessions=intact_manifest_accessions,
+    )
     return tables
 
 
