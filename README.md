@@ -362,8 +362,8 @@ The most important outputs are:
 - `results/samples/<accession>/...` for the logs and stable intermediate files
   used to build `master_table.tsv`, with bulky raw artefacts pruned before task
   completion
-- `results/cohort/16s/` for the combined eligible-sample 16S FASTA and its
-  manifest
+- `results/cohort/16s/` for the intact-only eligible-sample 16S FASTA, the
+  partial-only 16S FASTA, and their manifests
 - `results/cohort/fastani/` for ANI metadata, exclusions, path lists, and
   matrix outputs; the staged `fastani_inputs/` directory stays in `work/`
 - `results/cohort/ani_clusters/` for clustering and representative tables

@@ -98,6 +98,7 @@ main.nf
   -> COHORT_16S
      -> SUMMARISE_16S
      -> all_best_16S.fna
+     -> all_partial_16S.fna
   -> PER_SAMPLE_ANNOTATION
      -> CODETTA
      -> SUMMARISE_CODETTA
@@ -185,6 +186,8 @@ results/
     16s/
       all_best_16S.fna
       all_best_16S_manifest.tsv
+      all_partial_16S.fna
+      all_partial_16S_manifest.tsv
     fastani/
       ani_exclusions.tsv
       ani_metadata.tsv
@@ -337,7 +340,9 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
   accession is kept in tables and published paths; the sanitized internal ID is
   only used for execution-safe filenames and tool prefixes.
 - Barrnap runs for every sample. `SUMMARISE_16S` always emits per-sample status
-  files, but only eligible samples contribute to `all_best_16S.fna`.
+  files. `all_best_16S.fna` contains only intact, non-atypical best hits, while
+  `all_partial_16S.fna` contains partial-only best hits, including atypical
+  partial samples.
 - CheckM2 always runs twice per sample, once with translation table `4` and
   once with `11`. `summarise_checkm2.py` applies `params.gcode_rule` and emits
   the merged per-sample QC summary.
