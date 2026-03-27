@@ -154,6 +154,19 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_text = (MODULES_DIR / "publish_cohort_16s.nf").read_text(encoding="utf-8")
 
         self.assertIn('"${params.outdir}/cohort/16s"', module_text)
+        self.assertIn("path cohort_best_fasta, name: 'staged_all_best_16S.fna'", module_text)
+        self.assertIn(
+            "path cohort_best_manifest, name: 'staged_all_best_16S_manifest.tsv'",
+            module_text,
+        )
+        self.assertIn(
+            "path cohort_partial_fasta, name: 'staged_all_partial_16S.fna'",
+            module_text,
+        )
+        self.assertIn(
+            "path cohort_partial_manifest, name: 'staged_all_partial_16S_manifest.tsv'",
+            module_text,
+        )
         self.assertIn("path 'all_best_16S.fna', emit: best_fasta", module_text)
         self.assertIn("path 'all_best_16S_manifest.tsv', emit: best_manifest", module_text)
         self.assertIn("path 'all_partial_16S.fna', emit: partial_fasta", module_text)

@@ -12,10 +12,10 @@ process PUBLISH_COHORT_16S {
     )
 
     input:
-    path cohort_best_fasta
-    path cohort_best_manifest
-    path cohort_partial_fasta
-    path cohort_partial_manifest
+    path cohort_best_fasta, name: 'staged_all_best_16S.fna'
+    path cohort_best_manifest, name: 'staged_all_best_16S_manifest.tsv'
+    path cohort_partial_fasta, name: 'staged_all_partial_16S.fna'
+    path cohort_partial_manifest, name: 'staged_all_partial_16S_manifest.tsv'
 
     output:
     path 'all_best_16S.fna', emit: best_fasta
