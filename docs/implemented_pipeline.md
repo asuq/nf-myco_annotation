@@ -248,8 +248,10 @@ summaries rather than by re-reading raw tool directories.
 ### `master_table.tsv`
 
 The master table preserves the original metadata block exactly as supplied and
-in its original order. Derived columns are appended afterwards in the order
-locked by `assets/master_table_append_columns.txt`.
+in its original order. Derived columns are appended afterwards in the runtime
+order generated from `params.busco_lineages`. The checked-in
+`assets/master_table_append_columns.txt` snapshot records the default lineage
+pair only.
 
 ```text
 superkingdom
@@ -294,7 +296,9 @@ The status table is created twice:
 2. `WRITE_SAMPLE_STATUS` overlays downstream module outcomes and ANI inclusion
    state to produce the final audit table.
 
-The final column contract is locked by `assets/sample_status_columns.txt`.
+The final column contract is generated at runtime from `params.busco_lineages`.
+The checked-in `assets/sample_status_columns.txt` snapshot records the default
+lineage pair only.
 
 ```text
 accession
