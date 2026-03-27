@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from atypical_helpers import detect_atypical_flags
 from build_master_table import (
     detect_key_column,
     find_column_by_normalised_name,
@@ -212,18 +213,6 @@ def detect_metadata_value(metadata_row: dict[str, str], column_name: str) -> str
     return MISSING_VALUE if is_missing(value) else value
 
 
-def detect_atypical_flags(metadata_row: dict[str, str]) -> tuple[bool, bool]:
-    """Detect atypical status and the locked unverified-source exception."""
-    atypical_column = find_column_by_normalised_name(tuple(metadata_row), "Atypical_Warnings")
-    if atypical_column is None:
-        return False, False
-    atypical_value = metadata_row.get(atypical_column, "")
-    if is_missing(atypical_value):
-        return False, False
-    lowered = atypical_value.casefold()
-    return True, "unverified source organism" in lowered
-
-
 def choose_assembly_level(sample_row: dict[str, str], metadata_row: dict[str, str]) -> str:
     """Choose the ANI assembly level, using the sample manifest for new genomes."""
     if sample_row.get("is_new") == "true":
@@ -370,7 +359,14 @@ def run_build_fastani_inputs(
         elif sixteen_s_value != "Yes":
             reasons.append("16s_na")
 
-        is_atypical, is_exception = detect_atypical_flags(metadata_row) if metadata_row else (False, False)
+        is_atypical, is_exception = (
+            detect_atypical_flags(
+                metadata_row,
+                find_column_by_normalised_name=find_column_by_normalised_name,
+            )
+            if metadata_row
+            else (False, False)
+        )
         if is_atypical and not is_exception:
             reasons.append("atypical")
 
