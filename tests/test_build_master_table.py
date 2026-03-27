@@ -17,6 +17,8 @@ if str(BIN_DIR) not in sys.path:
 import build_master_table  # noqa: E402
 import master_table_contract  # noqa: E402
 
+APPEND_COLUMNS_ASSET = master_table_contract.DEFAULT_APPEND_COLUMNS_ASSET
+
 
 def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     """Read a TSV file into a header and row dictionaries."""
@@ -153,7 +155,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--taxonomy",
                     str(taxonomy),
                     "--checkm2",
@@ -334,7 +336,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--checkm2",
                     str(checkm2),
                     "--16s-status",
@@ -447,7 +449,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--checkm2",
                     str(checkm2),
                     "--16s-status",
@@ -502,7 +504,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--output",
                     str(master_output),
                 ]
@@ -550,7 +552,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--output",
                     str(master_output),
                 ]
@@ -597,7 +599,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--checkm2",
                     str(duplicate_checkm2),
                     "--output",
@@ -699,7 +701,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--assembly-stats",
                     str(assembly_stats),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--output",
                     str(master_output),
                 ]
@@ -743,7 +745,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
                     "--assembly-stats",
                     str(assembly_stats),
                     "--append-columns",
-                    str(ROOT / "assets" / "master_table_append_columns.txt"),
+                    str(APPEND_COLUMNS_ASSET),
                     "--output",
                     str(master_output),
                 ]

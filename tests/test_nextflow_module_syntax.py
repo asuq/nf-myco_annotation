@@ -191,7 +191,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             workflow_text,
         )
         self.assertIn(
-            'cohortManifestHeader = "${projectDir}/assets/testdata/headers/16s_status.tsv"',
+            'cohortManifestHeader = "${projectDir}/assets/tables/headers/16s_status.tsv"',
             workflow_text,
         )
         self.assertIn(
@@ -368,6 +368,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('--busco-lineage \\"${it}\\"', module_text)
         self.assertNotIn("--sample-status-columns", module_text)
         self.assertIn("--defer-genome-fasta-check", module_text)
+        self.assertIn(
+            'def stubGenome = file("${projectDir}/assets/fixtures/stub/genomes/TEST_ACC.fasta").toString()',
+            module_text,
+        )
         self.assertIn("busco_lineages", workflow_text)
         self.assertNotIn("sample_status_columns", workflow_text)
         self.assertNotIn("BUILD_OUTPUT_CONTRACTS", main_text)
@@ -391,6 +395,22 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn("sample_status_columns", workflow_text)
         self.assertNotIn("BUILD_OUTPUT_CONTRACTS", main_text)
         self.assertIn("Channel.value(buscoLineagesList)", main_text)
+        self.assertIn(
+            'checkm2_seed = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))',
+            workflow_text,
+        )
+        self.assertIn(
+            'sixteen_s_seed = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))',
+            workflow_text,
+        )
+        self.assertIn(
+            'codetta_seed = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))',
+            workflow_text,
+        )
+        self.assertIn(
+            'ccfinder_seed = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))',
+            workflow_text,
+        )
         self.assertIn("val busco_lineages", build_master_module)
         self.assertIn('--busco-lineage \\"${it}\\"', build_master_module)
         self.assertNotIn("--append-columns", build_master_module)

@@ -22,8 +22,8 @@ if str(BIN_DIR) not in sys.path:
 import master_table_contract  # noqa: E402
 import run_acceptance_tests  # noqa: E402
 
-MEDIUM_SOURCE_CATALOG = ROOT / "assets" / "testdata" / "medium" / "source_catalog.tsv"
-MEDIUM_COHORT_PLAN = ROOT / "assets" / "testdata" / "medium" / "cohort_plan.tsv"
+MEDIUM_SOURCE_CATALOG = ROOT / "assets" / "tables" / "medium" / "source_catalog.tsv"
+MEDIUM_COHORT_PLAN = ROOT / "assets" / "tables" / "medium" / "cohort_plan.tsv"
 
 
 def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:

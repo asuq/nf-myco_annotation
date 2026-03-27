@@ -16,6 +16,10 @@ if str(BIN_DIR) not in sys.path:
 
 import build_sample_status  # noqa: E402
 
+SAMPLE_STATUS_COLUMNS_ASSET = (
+    ROOT / "assets" / "tables" / "contracts" / "sample_status_columns.txt"
+)
+
 
 def read_tsv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     """Read a TSV file into a header and row dictionaries."""
@@ -64,9 +68,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
         if columns is None:
             columns = [
                 line.strip()
-                for line in (ROOT / "assets" / "sample_status_columns.txt").read_text(
-                    encoding="utf-8"
-                ).splitlines()
+                for line in SAMPLE_STATUS_COLUMNS_ASSET.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
         row: dict[str, str] = {}
@@ -276,7 +278,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--primary-busco-column",
                     "BUSCO_bacillota_odb12",
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -288,9 +290,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 header,
                 [
                     line.strip()
-                    for line in (ROOT / "assets" / "sample_status_columns.txt").read_text(
-                        encoding="utf-8"
-                    ).splitlines()
+                    for line in SAMPLE_STATUS_COLUMNS_ASSET.read_text(encoding="utf-8").splitlines()
                     if line.strip()
                 ],
             )
@@ -409,7 +409,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--eggnog-manifest",
                     str(eggnog_manifest),
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -503,7 +503,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--eggnog-manifest",
                     str(eggnog_manifest),
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -597,7 +597,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--eggnog-manifest",
                     str(eggnog_manifest),
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -752,7 +752,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--primary-busco-column",
                     "BUSCO_mycoplasmatota_odb12",
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -801,7 +801,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--metadata",
                     str(metadata),
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -983,7 +983,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--primary-busco-column",
                     "BUSCO_bacillota_odb12",
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
@@ -1062,7 +1062,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                     "--primary-busco-column",
                     "BUSCO_bacillota_odb12",
                     "--columns",
-                    str(ROOT / "assets" / "sample_status_columns.txt"),
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
                     "--output",
                     str(output),
                 ]
