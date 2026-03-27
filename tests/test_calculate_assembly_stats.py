@@ -189,6 +189,64 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                 ["ACC_A", "ACC_B"],
             )
 
+    def test_fails_for_malformed_manifest_rows(self) -> None:
+        """Fail with a direct row-shape error before duplicate checking."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC1.fasta", ">contig1\nAACCGGTT\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "\n".join(
+                    [
+                        "accession\tinternal_id\tstaged_filename",
+                        "ACC1\tid_1\tACC1.fasta",
+                        "ACC2",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Staged manifest row 3 is malformed", result.stderr)
+            self.assertIn("expected at least 3 tab-delimited fields", result.stderr)
+
+    def test_fails_for_duplicate_accessions(self) -> None:
+        """Fail cleanly when the staged manifest repeats an accession."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC1.fasta", ">contig1\nAACCGGTT\n")
+            self.write_text_file(tmpdir / "ACC1_copy.fasta", ">contig1\nTTGGCCAA\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "\n".join(
+                    [
+                        "accession\tinternal_id\tstaged_filename",
+                        "ACC1\tid_1\tACC1.fasta",
+                        "ACC1\tid_1_copy\tACC1_copy.fasta",
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("duplicate accession values: ACC1", result.stderr)
+
     def test_fails_for_invalid_or_empty_fasta(self) -> None:
         """Fail cleanly when seqtk cannot produce contig lengths."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

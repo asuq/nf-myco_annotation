@@ -96,7 +96,7 @@ compute_assembly_stats() {
 
 main() {
     local staged_manifest="" output="" manifest_dir header_line duplicate_accessions=""
-    local accession_index staged_filename_index sort_key
+    local accession_index staged_filename_index required_field_count sort_key malformed_row_info
 
     while (($# > 0)); do
         case "$1" in
@@ -147,6 +147,22 @@ main() {
     fi
     if ! staged_filename_index="$(find_column_index header_line "staged_filename")"; then
         log_error "Staged manifest is missing the staged_filename column."
+        return 1
+    fi
+    required_field_count=$((accession_index > staged_filename_index ? accession_index + 1 : staged_filename_index + 1))
+
+    malformed_row_info="$(
+        awk -F '\t' -v min_fields="${required_field_count}" '
+            NR > 1 && NF < min_fields {
+                printf "%d\t%d\n", NR, NF
+                exit
+            }
+        ' "${staged_manifest}"
+    )"
+    if [[ -n "${malformed_row_info}" ]]; then
+        local malformed_row_number observed_fields
+        IFS=$'\t' read -r malformed_row_number observed_fields <<< "${malformed_row_info}"
+        log_error "Staged manifest row ${malformed_row_number} is malformed: expected at least ${required_field_count} tab-delimited fields, found ${observed_fields}."
         return 1
     fi
 
