@@ -295,6 +295,11 @@ def write_path_list(path: Path, paths: Sequence[str]) -> None:
     path.write_text("\n".join(paths) + ("\n" if paths else ""), encoding="utf-8")
 
 
+def sort_accession_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return rows sorted canonically by accession."""
+    return sorted(rows, key=lambda row: row["accession"])
+
+
 def run_build_fastani_inputs(
     validated_samples: Path,
     metadata: Path,
@@ -370,8 +375,6 @@ def run_build_fastani_inputs(
             reasons.append("atypical")
 
         primary_busco_value = busco_row.get(primary_busco_column, MISSING_VALUE)
-        if is_missing(primary_busco_value):
-            reasons.append("missing_primary_busco")
 
         assembly_level = choose_assembly_level(sample_row, metadata_row)
         if is_missing(assembly_level):
@@ -449,6 +452,10 @@ def run_build_fastani_inputs(
                 "ani_exclusion_reason": join_tokens(reasons),
             }
         )
+
+    metadata_rows = sort_accession_rows(metadata_rows)
+    exclusion_rows = sort_accession_rows(exclusion_rows)
+    fastani_paths = [row["path"] for row in metadata_rows]
 
     metadata_header_out = [*ANI_METADATA_COLUMNS, primary_busco_column]
     write_path_list(outdir / "fastani_paths.txt", fastani_paths)

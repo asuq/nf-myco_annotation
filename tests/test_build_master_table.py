@@ -477,6 +477,107 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["ANI_to_Representative"], "97.2500")
             self.assertNotEqual(master_by_accession["ACC2"]["Score"], "NA")
 
+    def test_main_preserves_na_ani_score_for_non_scorable_cluster_member(self) -> None:
+        """Keep precomputed ANI summary NA scores when a BUSCO-missing member stays clustered."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                        "ACC2\tfalse\tNA\t/path/two.fna\tid_2",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                        "ACC1\t123\tOne\tComplete Genome\t100000\t1\t900000\tNA",
+                        "ACC2\t456\tTwo\tScaffold\t50000\t5\t850000\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "\n".join(
+                    [
+                        "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings",
+                        "ACC1\t90\t97\t2\t1\t0.8\t0.95\t850\t980\t780\t910\t11\tfalse\tdone\t",
+                        "ACC2\t88\t93\t3\t2\t0.75\t0.90\t800\t930\t760\t880\t11\tfalse\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC1\tYes\th1\t1500\ttrue\t",
+                        "ACC2\tYes\th2\t1490\ttrue\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings",
+                        "ACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t",
+                        "ACC2\tbacillota_odb12\tNA\tfailed\tbusco_summary_failed",
+                    ]
+                )
+                + "\n",
+            )
+            ani_summary = self.write_text_file(
+                tmpdir / "ani_summary.tsv",
+                "\n".join(
+                    [
+                        "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore",
+                        "ACC1\tC000001\tyes\t100.0000\t7.500000",
+                        "ACC2\tC000001\tno\t97.2500\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(APPEND_COLUMNS_ASSET),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco),
+                    "--ani",
+                    str(ani_summary),
+                    "--output",
+                    str(master_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, master_rows = read_tsv_rows(master_output)
+            master_by_accession = {row["Accession"]: row for row in master_rows}
+            self.assertEqual(master_by_accession["ACC1"]["Score"], "7.500000")
+            self.assertEqual(master_by_accession["ACC2"]["Cluster_ID"], "C000001")
+            self.assertEqual(master_by_accession["ACC2"]["ANI_to_Representative"], "97.2500")
+            self.assertEqual(master_by_accession["ACC2"]["Score"], "NA")
+
     def test_main_handles_new_genome_with_sparse_metadata(self) -> None:
         """Fill missing metadata with NA while preserving supplemental new-sample values."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

@@ -303,6 +303,123 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             self.assertEqual(exclusion_rows[0]["ani_included"], "true")
             self.assertEqual(exclusion_rows[0]["ani_exclusion_reason"], "")
 
+    def test_keeps_missing_primary_busco_in_ani_and_sorts_outputs_by_accession(self) -> None:
+        """Keep ANI membership independent of primary BUSCO completeness and sort outputs."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            staged_a = self.write_text_file(tmpdir / "ACC_A.fasta", ">a\nACGT\n")
+            staged_b = self.write_text_file(tmpdir / "ACC_B.fasta", ">b\nACGT\n")
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        f"ACC_B\tfalse\tNA\t{staged_b}\tACC_B",
+                        f"ACC_A\tfalse\tNA\t{staged_a}\tACC_A",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                        "ACC_A\tGenome A\tScaffold\t40000\t3\t800000\tNA",
+                        "ACC_B\tGenome B\tScaffold\t50000\t2\t850000\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            staged_manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "\n".join(
+                    [
+                        "accession\tinternal_id\tstaged_filename",
+                        "ACC_B\tACC_B\tACC_B.fasta",
+                        "ACC_A\tACC_A\tACC_A.fasta",
+                    ]
+                )
+                + "\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "\n".join(
+                    [
+                        "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tGcode\tLow_quality",
+                        "ACC_A\tNA\t95\tNA\t1\t11\tfalse",
+                        "ACC_B\tNA\t94\tNA\t2\t11\tfalse",
+                    ]
+                )
+                + "\n",
+            )
+            sixteen_s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC_A\tYes\thA\t1500\ttrue\t",
+                        "ACC_B\tYes\thB\t1490\ttrue\t",
+                    ]
+                )
+                + "\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "\n".join(
+                    [
+                        "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings",
+                        "ACC_A\tbacillota_odb12\tNA\tfailed\tbusco_summary_failed",
+                        "ACC_B\tbacillota_odb12\tC:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200\tdone\t",
+                    ]
+                )
+                + "\n",
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = build_fastani_inputs.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--staged-manifest",
+                    str(staged_manifest),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(sixteen_s),
+                    "--busco",
+                    str(busco),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                (outdir / "fastani_paths.txt").read_text(encoding="utf-8").splitlines(),
+                ["fastani_inputs/ACC_A.fasta", "fastani_inputs/ACC_B.fasta"],
+            )
+            metadata_rows = read_tsv(outdir / "ani_metadata.tsv")
+            self.assertEqual(
+                [row["accession"] for row in metadata_rows],
+                ["ACC_A", "ACC_B"],
+            )
+            self.assertEqual(metadata_rows[0]["BUSCO_bacillota_odb12"], "NA")
+            self.assertEqual(metadata_rows[1]["BUSCO_bacillota_odb12"], "C:96.0%[S:96.0%,D:0.0%],F:2.0%,M:2.0%,n:200")
+            exclusion_rows = read_tsv(outdir / "ani_exclusions.tsv")
+            self.assertEqual(
+                [row["accession"] for row in exclusion_rows],
+                ["ACC_A", "ACC_B"],
+            )
+            self.assertEqual(exclusion_rows[0]["ani_included"], "true")
+            self.assertEqual(exclusion_rows[0]["ani_exclusion_reason"], "")
+            self.assertEqual(exclusion_rows[1]["ani_included"], "true")
+            self.assertEqual(exclusion_rows[1]["ani_exclusion_reason"], "")
+
     def test_falls_back_to_copy_when_hardlinks_are_unavailable(self) -> None:
         """Copy the staged FASTA when the filesystem rejects hard links."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

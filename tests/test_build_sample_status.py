@@ -321,7 +321,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             self.assertEqual(by_accession["ACC2"]["ani_included"], "false")
             self.assertEqual(
                 by_accession["ACC2"]["ani_exclusion_reason"],
-                "gcode_na;no_16s;missing_primary_busco",
+                "gcode_na;no_16s",
             )
             self.assertEqual(
                 by_accession["ACC2"]["warnings"],
@@ -765,6 +765,80 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             self.assertEqual(by_accession["ACC1"]["ani_exclusion_reason"], "")
             self.assertEqual(by_accession["ACC2"]["ani_included"], "false")
             self.assertEqual(by_accession["ACC2"]["ani_exclusion_reason"], "atypical")
+
+    def test_main_keeps_ani_included_true_when_primary_busco_is_missing(self) -> None:
+        """Reflect actual ANI membership instead of primary-BUSCO score completeness."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\nACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(accession="ACC1", internal_id="id_1", is_new="false")
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\nACC1\t123\tOne\tNA\tNA\tNA\tNA\n",
+            )
+            assembly_stats = self.write_text_file(
+                tmpdir / "assembly_stats.tsv",
+                "accession\tn50\tscaffolds\tgenome_size\nACC1\t100000\t1\t900000\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings\nACC1\t80\t95\t3\t1\t0.8\t0.95\t800\t950\t700\t920\t11\tfalse\tdone\t\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\nACC1\tbacillota_odb12\tNA\tfailed\tbusco_summary_failed\n",
+            )
+            ani = self.write_text_file(
+                tmpdir / "ani.tsv",
+                "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore\nACC1\tcluster_1\tyes\t100\t7.5\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco),
+                    "--ani",
+                    str(ani),
+                    "--assembly-stats",
+                    str(assembly_stats),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--columns",
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, rows = read_tsv_rows(output)
+            self.assertEqual(rows[0]["ani_included"], "true")
+            self.assertEqual(rows[0]["ani_exclusion_reason"], "")
 
     def test_main_rejects_initial_status_identity_mismatch(self) -> None:
         """Hard-fail when the seed status table disagrees with validated samples."""

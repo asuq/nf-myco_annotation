@@ -54,8 +54,8 @@ class Genome:
     Scaffolds: int
     Genome_Size: int
     BUSCO_str: str
-    BUSCO_C: float
-    BUSCO_M: float
+    BUSCO_C: float | None
+    BUSCO_M: float | None
     Assembly_Level: str
     Assembly_Rank: int
     Path: str
@@ -107,6 +107,11 @@ def try_parse_busco(busco_str: Any) -> tuple[float, float] | None:
     if not match:
         return None
     return float(match.group("C")), float(match.group("M"))
+
+
+def has_busco_score(genome: Genome) -> bool:
+    """Return True when a genome has a usable BUSCO completeness/missing pair."""
+    return genome.BUSCO_C is not None and genome.BUSCO_M is not None
 
 
 def load_phylip_lower_triangular(path: Path) -> tuple[list[str], list[list[str]]]:
@@ -264,8 +269,6 @@ def build_genome_from_row(
 
     busco_str = row[busco_column].strip()
     busco_parsed = try_parse_busco(busco_str)
-    if busco_parsed is None:
-        reasons.append(f"missing_{busco_column}")
 
     if reasons:
         return None, reasons
@@ -276,7 +279,13 @@ def build_genome_from_row(
     assert n50 is not None
     assert scaffolds is not None
     assert genome_size is not None
-    busco_c, busco_m = busco_parsed
+    busco_c: float | None
+    busco_m: float | None
+    if busco_parsed is None:
+        busco_c = None
+        busco_m = None
+    else:
+        busco_c, busco_m = busco_parsed
     return (
         Genome(
             Accession=acc,

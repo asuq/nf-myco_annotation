@@ -432,7 +432,6 @@ def derive_ani_decision(
     assembly_metrics: EffectiveAssemblyMetrics,
     ani_index: dict[str, dict[str, str]],
     ani_requested: bool,
-    primary_busco_value: str,
 ) -> tuple[str, str]:
     """Return ANI inclusion status and exclusion reasons for one sample."""
     if not ani_requested:
@@ -458,8 +457,6 @@ def derive_ani_decision(
     if is_atypical and not is_exception:
         exclusion_reasons.append("atypical")
 
-    if table_helpers.is_missing(primary_busco_value):
-        exclusion_reasons.append("missing_primary_busco")
     if table_helpers.is_missing(assembly_metrics.n50):
         exclusion_reasons.append("missing_n50")
     if table_helpers.is_missing(assembly_metrics.scaffolds):
@@ -740,9 +737,6 @@ def build_status_row(
     warnings.extend(eggnog_warnings)
 
     sixteen_s_value = sixteen_s_index.get(accession, {}).get("16S", "NA") or "NA"
-    primary_busco_value = "NA"
-    if primary_busco_column is not None:
-        primary_busco_value = busco_values.get(primary_busco_column, "NA")
     assembly_metrics = EffectiveAssemblyMetrics(
         n50=table_helpers.resolve_assembly_metric_value(
             metadata_row,
@@ -770,7 +764,6 @@ def build_status_row(
         assembly_metrics=assembly_metrics,
         ani_index=ani_index,
         ani_requested=ani_requested,
-        primary_busco_value=primary_busco_value,
     )
 
     row["warnings"] = table_helpers.join_tokens(warnings)

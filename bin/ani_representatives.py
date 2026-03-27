@@ -13,7 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Sequence
 
-from ani_common import Genome
+from ani_common import Genome, has_busco_score
 
 
 def select_representative_for_indices(
@@ -55,13 +55,20 @@ def select_representative_for_indices(
 
     epsilon = 1e-6
     debug_lines: list[str] = []
-    matrix_names = [names[index] for index in idxs]
+    cluster_matrix_names = [names[index] for index in idxs]
+    busco_candidate_idxs = [
+        index for index in idxs if has_busco_score(meta[names[index]])
+    ]
+    use_busco_fallback = not busco_candidate_idxs
+    candidate_idxs = busco_candidate_idxs if busco_candidate_idxs else idxs
+    matrix_names = [names[index] for index in candidate_idxs]
     genomes = [meta[matrix_name] for matrix_name in matrix_names]
-    cluster_size = len(genomes)
+    cluster_size = len(cluster_matrix_names)
+    candidate_count = len(genomes)
 
     def winsorize(values: list[float]) -> "np.ndarray":
         """Winsorize a value vector within one cluster."""
-        if cluster_size < 8:
+        if candidate_count < 8:
             return np.asarray(values, dtype=float)
         array = np.asarray(values, dtype=float)
         low, high = np.quantile(array, [0.05, 0.95])
@@ -75,14 +82,17 @@ def select_representative_for_indices(
             return (values - low) / (high - low)
         return np.full_like(values, 0.5, dtype=float)
 
-    def ani_centrality(cluster_indices: list[int]) -> "np.ndarray":
-        """Compute ANI centrality within one cluster."""
+    def ani_centrality(
+        cluster_indices: list[int],
+        candidate_indices: list[int],
+    ) -> "np.ndarray":
+        """Compute ANI centrality for representative candidates within one cluster."""
         member_count = len(cluster_indices)
         if member_count <= 1:
-            return np.ones(member_count, dtype=float)
+            return np.ones(len(candidate_indices), dtype=float)
 
         means: list[float] = []
-        for index in cluster_indices:
+        for index in candidate_indices:
             others = [ani[index, other] for other in cluster_indices if other != index]
             means.append(float(np.mean(others)) if others else 100.0)
 
@@ -93,11 +103,18 @@ def select_representative_for_indices(
         return (values - float(values.min())) / spread
 
     assembly_values = np.array([genome.Assembly_Rank / 3.0 for genome in genomes], dtype=float)
-    busco_raw = np.array(
-        [(genome.BUSCO_C - genome.BUSCO_M) / 100.0 for genome in genomes],
-        dtype=float,
-    )
-    busco_values = minmax_norm(winsorize(busco_raw))
+    if use_busco_fallback:
+        busco_raw = np.zeros(candidate_count, dtype=float)
+        busco_values = np.zeros(candidate_count, dtype=float)
+    else:
+        busco_raw = np.array(
+            [
+                ((genome.BUSCO_C or 0.0) - (genome.BUSCO_M or 0.0)) / 100.0
+                for genome in genomes
+            ],
+            dtype=float,
+        )
+        busco_values = minmax_norm(winsorize(busco_raw))
 
     checkm2_raw = np.array(
         [
@@ -116,7 +133,7 @@ def select_representative_for_indices(
             np.log10(np.array([genome.Scaffolds for genome in genomes], dtype=float) + 1.0)
         )
     )
-    centrality_values = ani_centrality(idxs)
+    centrality_values = ani_centrality(idxs, candidate_idxs)
 
     if score_profile == "isolate":
         weights = (3.5, 1.5, 1.5, 1.0, 0.25, 0.5)
@@ -150,9 +167,16 @@ def select_representative_for_indices(
         scored.append((matrix_name, genome.Accession, float(score), components, genome))
 
     debug_lines.append(
-        "Cluster size=%d; profile=%s; weights: A=%s, Q=%s, B=%s, N=%s, S=%s, C=%s"
-        % (cluster_size, score_profile, *weights)
+        "Cluster size=%d; representative candidates=%d; profile=%s; weights: A=%s, Q=%s, B=%s, N=%s, S=%s, C=%s"
+        % (cluster_size, candidate_count, score_profile, *weights)
     )
+    if use_busco_fallback:
+        debug_lines.append("Primary BUSCO missing for the whole cluster; using BUSCO-free fallback scoring.")
+    elif candidate_count < cluster_size:
+        debug_lines.append(
+            "Restricting representative candidates to %d BUSCO-valid genome(s)."
+            % candidate_count
+        )
     for _matrix_name, accession, score, components, genome in sorted(
         scored,
         key=lambda item: (-item[2], item[1]),
@@ -174,8 +198,8 @@ def select_representative_for_indices(
                 components["C"],
                 genome.Assembly_Level,
                 genome.Assembly_Rank,
-                genome.BUSCO_C,
-                genome.BUSCO_M,
+                genome.BUSCO_C if genome.BUSCO_C is not None else float("nan"),
+                genome.BUSCO_M if genome.BUSCO_M is not None else float("nan"),
                 genome.CheckM2_Completeness,
                 genome.CheckM2_Contamination,
                 genome.Scaffolds,
@@ -221,8 +245,18 @@ def select_representative_for_indices(
         return winners
 
     tied = reduce_tie(tied, lambda genome: genome.Assembly_Rank, "Assembly rank (higher)")
-    tied = reduce_tie(tied, lambda genome: genome.BUSCO_C, "BUSCO C (higher)")
-    tied = reduce_tie(tied, lambda genome: genome.BUSCO_M, "BUSCO M (lower)", True)
+    if not use_busco_fallback:
+        tied = reduce_tie(
+            tied,
+            lambda genome: genome.BUSCO_C if genome.BUSCO_C is not None else float("-inf"),
+            "BUSCO C (higher)",
+        )
+        tied = reduce_tie(
+            tied,
+            lambda genome: genome.BUSCO_M if genome.BUSCO_M is not None else float("inf"),
+            "BUSCO M (lower)",
+            True,
+        )
     tied = reduce_tie(
         tied,
         lambda genome: genome.CheckM2_Contamination,
@@ -388,10 +422,6 @@ def build_ani_summary_from_clusters(
         representative_index = name_to_idx[representative_matrix_name]
         for matrix_name in sorted(matrix_names, key=lambda item: meta[item].Accession):
             genome = meta[matrix_name]
-            if genome.Score is None:
-                raise RuntimeError(
-                    f"Representative score was not set for accession {genome.Accession!r}."
-                )
             if matrix_name == representative_matrix_name:
                 ani_to_representative = "100.0000"
                 is_representative = "yes"
@@ -409,7 +439,7 @@ def build_ani_summary_from_clusters(
                 "Cluster_ID": cluster_id,
                 "Is_Representative": is_representative,
                 "ANI_to_Representative": ani_to_representative,
-                "Score": f"{genome.Score:.6f}",
+                "Score": "NA" if genome.Score is None else f"{genome.Score:.6f}",
             }
 
     return summary_index, representative_rows

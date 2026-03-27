@@ -190,6 +190,143 @@ class SelectAniRepresentativesTestCase(unittest.TestCase):
             _, representative_rows = read_tsv_rows(ani_representatives)
             self.assertEqual(representative_rows[0]["Representative_Accession"], "ACC1")
 
+    def test_main_keeps_busco_missing_member_in_cluster_but_not_as_candidate(self) -> None:
+        """Keep cluster membership while restricting representative choice to BUSCO-valid rows."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            ani_clusters = self.write_text_file(
+                tmpdir / "cluster.tsv",
+                "\n".join(
+                    [
+                        "Accession\tCluster_ID\tMatrix_Name",
+                        "ACC1\tC000001\tfastani_inputs/ACC1.fasta",
+                        "ACC2\tC000001\tfastani_inputs/ACC2.fasta",
+                    ]
+                )
+                + "\n",
+            )
+            ani_metadata = self.write_text_file(
+                tmpdir / "ani_metadata.tsv",
+                "\n".join(
+                    [
+                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\torganism_name\tBUSCO_bacillota_odb12",
+                        "ACC1\tfastani_inputs/ACC1.fasta\tfastani_inputs/ACC1.fasta\tScaffold\t11\t97\t1\t90000\t2\t900000\tOne\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+                        "ACC2\tfastani_inputs/ACC2.fasta\tfastani_inputs/ACC2.fasta\tComplete Genome\t11\t99\t1\t120000\t1\t950000\tTwo\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            ani_matrix = self.write_text_file(
+                tmpdir / "fastani.matrix",
+                "\n".join(
+                    [
+                        "2",
+                        "fastani_inputs/ACC1.fasta",
+                        "fastani_inputs/ACC2.fasta 97.2500",
+                    ]
+                )
+                + "\n",
+            )
+            ani_summary = tmpdir / "ani_summary.tsv"
+            ani_representatives = tmpdir / "ani_representatives.tsv"
+
+            exit_code = select_ani_representatives.main(
+                [
+                    "--ani-clusters",
+                    str(ani_clusters),
+                    "--ani-metadata",
+                    str(ani_metadata),
+                    "--ani-matrix",
+                    str(ani_matrix),
+                    "--ani-summary-output",
+                    str(ani_summary),
+                    "--ani-representatives-output",
+                    str(ani_representatives),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, summary_rows = read_tsv_rows(ani_summary)
+            summary_by_accession = {row["Accession"]: row for row in summary_rows}
+            self.assertEqual(summary_by_accession["ACC1"]["Is_Representative"], "yes")
+            self.assertNotEqual(summary_by_accession["ACC1"]["Score"], "NA")
+            self.assertEqual(summary_by_accession["ACC2"]["Is_Representative"], "no")
+            self.assertEqual(summary_by_accession["ACC2"]["ANI_to_Representative"], "97.2500")
+            self.assertEqual(summary_by_accession["ACC2"]["Score"], "NA")
+
+            _, representative_rows = read_tsv_rows(ani_representatives)
+            self.assertEqual(representative_rows[0]["Representative_Accession"], "ACC1")
+            self.assertEqual(
+                representative_rows[0]["BUSCO"],
+                "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+            )
+
+    def test_main_uses_fallback_representative_when_cluster_lacks_busco_scores(self) -> None:
+        """Choose one representative even when every cluster member lacks primary BUSCO."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            ani_clusters = self.write_text_file(
+                tmpdir / "cluster.tsv",
+                "\n".join(
+                    [
+                        "Accession\tCluster_ID\tMatrix_Name",
+                        "ACC1\tC000001\tfastani_inputs/ACC1.fasta",
+                        "ACC2\tC000001\tfastani_inputs/ACC2.fasta",
+                    ]
+                )
+                + "\n",
+            )
+            ani_metadata = self.write_text_file(
+                tmpdir / "ani_metadata.tsv",
+                "\n".join(
+                    [
+                        "accession\tmatrix_name\tpath\tassembly_level\tgcode\tcheckm2_completeness\tcheckm2_contamination\tn50\tscaffolds\tgenome_size\torganism_name\tBUSCO_bacillota_odb12",
+                        "ACC1\tfastani_inputs/ACC1.fasta\tfastani_inputs/ACC1.fasta\tScaffold\t11\t91\t2\t60000\t4\t900000\tOne\tNA",
+                        "ACC2\tfastani_inputs/ACC2.fasta\tfastani_inputs/ACC2.fasta\tComplete Genome\t11\t95\t1\t120000\t1\t950000\tTwo\tNA",
+                    ]
+                )
+                + "\n",
+            )
+            ani_matrix = self.write_text_file(
+                tmpdir / "fastani.matrix",
+                "\n".join(
+                    [
+                        "2",
+                        "fastani_inputs/ACC1.fasta",
+                        "fastani_inputs/ACC2.fasta 97.2500",
+                    ]
+                )
+                + "\n",
+            )
+            ani_summary = tmpdir / "ani_summary.tsv"
+            ani_representatives = tmpdir / "ani_representatives.tsv"
+
+            exit_code = select_ani_representatives.main(
+                [
+                    "--ani-clusters",
+                    str(ani_clusters),
+                    "--ani-metadata",
+                    str(ani_metadata),
+                    "--ani-matrix",
+                    str(ani_matrix),
+                    "--ani-summary-output",
+                    str(ani_summary),
+                    "--ani-representatives-output",
+                    str(ani_representatives),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, summary_rows = read_tsv_rows(ani_summary)
+            summary_by_accession = {row["Accession"]: row for row in summary_rows}
+            self.assertEqual(summary_by_accession["ACC2"]["Is_Representative"], "yes")
+            self.assertNotEqual(summary_by_accession["ACC1"]["Score"], "NA")
+            self.assertNotEqual(summary_by_accession["ACC2"]["Score"], "NA")
+
+            _, representative_rows = read_tsv_rows(ani_representatives)
+            self.assertEqual(representative_rows[0]["Representative_Accession"], "ACC2")
+            self.assertEqual(representative_rows[0]["BUSCO"], "NA")
+
     def test_main_fails_when_cluster_accession_is_missing_from_metadata(self) -> None:
         """Fail when cluster.tsv references an accession absent from ANI metadata."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
