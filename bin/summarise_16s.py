@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence, TypeVar
 
 
 LOGGER = logging.getLogger(__name__)
@@ -25,23 +26,47 @@ STATUS_COLUMNS = (
 TRUE_TOKENS = {"true", "t", "yes", "y", "1"}
 FALSE_TOKENS = {"false", "f", "no", "n", "0"}
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
+SIXTEEN_S_NAME = "16S_rRNA"
+FASTA_HEADER_RE = re.compile(
+    r"^(?P<rrna_name>[^:]+)::(?P<contig>.+):(?P<start0>\d+)-(?P<end0>\d+)\((?P<strand>[+-])\)$"
+)
+MatchKey = tuple[str, str, int, int, str]
+RecordT = TypeVar("RecordT")
 
 
 @dataclass(frozen=True)
 class FastaRecord:
-    """Represent one FASTA record."""
+    """Represent one Barrnap FASTA record."""
 
     header: str
     sequence: str
+    rrna_name: str
+    contig: str
+    start0: int
+    end0: int
+    strand: str
+
+
+@dataclass(frozen=True)
+class GffHit:
+    """Represent one Barrnap GFF hit."""
+
+    order_index: int
+    score: float
+    rrna_name: str
+    contig: str
+    start0: int
+    end0: int
+    strand: str
+    is_partial: bool
 
 
 @dataclass(frozen=True)
 class RrnaHit:
-    """Represent one paired Barrnap GFF and FASTA hit."""
+    """Represent one matched Barrnap 16S hit."""
 
     order_index: int
     score: float
-    is_16s: bool
     is_partial: bool
     record: FastaRecord
 
@@ -121,39 +146,47 @@ def determine_is_atypical(
     return not is_missing(atypical_warnings)
 
 
-def parse_gff_hits(path: Path) -> list[tuple[bool, bool, float]]:
-    """Parse Barrnap GFF rows into ordered hit metadata."""
-    if not path.is_file():
-        raise ValueError(f"Missing Barrnap GFF file: {path}")
+def build_match_key(
+    rrna_name: str,
+    contig: str,
+    start0: int,
+    end0: int,
+    strand: str,
+) -> MatchKey:
+    """Build a canonical Barrnap record key."""
+    return rrna_name, contig, start0, end0, strand
 
-    parsed_hits: list[tuple[bool, bool, float]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            fields = line.split("\t")
-            if len(fields) != 9:
-                raise ValueError(f"Malformed GFF line in {path}: {line}")
-            attributes = fields[8].lower()
-            is_16s = "16s" in attributes
-            is_partial = "partial" in attributes
-            score_value = fields[5]
-            if score_value == ".":
-                score = float("inf")
-            else:
-                try:
-                    score = float(score_value)
-                except ValueError as error:
-                    raise ValueError(
-                        f"Could not parse Barrnap score {score_value!r} in {path}."
-                    ) from error
-            parsed_hits.append((is_16s, is_partial, score))
-    return parsed_hits
+
+def parse_fasta_header(header: str) -> tuple[str, str, int, int, str]:
+    """Parse one Barrnap FASTA header into its canonical fields."""
+    match = FASTA_HEADER_RE.fullmatch(header)
+    if match is None:
+        raise ValueError(f"Malformed Barrnap FASTA header: {header!r}")
+    return (
+        match.group("rrna_name"),
+        match.group("contig"),
+        int(match.group("start0")),
+        int(match.group("end0")),
+        match.group("strand"),
+    )
+
+
+def build_fasta_record(header: str, sequence_lines: Sequence[str]) -> FastaRecord:
+    """Build one parsed Barrnap FASTA record from a header and sequence lines."""
+    rrna_name, contig, start0, end0, strand = parse_fasta_header(header)
+    return FastaRecord(
+        header=header,
+        sequence="".join(sequence_lines),
+        rrna_name=rrna_name,
+        contig=contig,
+        start0=start0,
+        end0=end0,
+        strand=strand,
+    )
 
 
 def parse_fasta_records(path: Path) -> list[FastaRecord]:
-    """Parse a FASTA file into ordered records."""
+    """Parse a Barrnap FASTA file into ordered records."""
     if not path.is_file():
         raise ValueError(f"Missing Barrnap FASTA file: {path}")
 
@@ -167,9 +200,7 @@ def parse_fasta_records(path: Path) -> list[FastaRecord]:
                 continue
             if line.startswith(">"):
                 if header is not None:
-                    records.append(
-                        FastaRecord(header=header, sequence="".join(sequence_lines))
-                    )
+                    records.append(build_fasta_record(header, sequence_lines))
                 header = line[1:].strip()
                 sequence_lines = []
                 continue
@@ -178,49 +209,175 @@ def parse_fasta_records(path: Path) -> list[FastaRecord]:
             sequence_lines.append(line.strip())
 
     if header is not None:
-        records.append(FastaRecord(header=header, sequence="".join(sequence_lines)))
+        records.append(build_fasta_record(header, sequence_lines))
     return records
 
 
-def pair_hits(
-    gff_hits: Sequence[tuple[bool, bool, float]],
-    fasta_records: Sequence[FastaRecord],
-) -> list[RrnaHit]:
-    """Pair GFF rows to FASTA records in file order."""
-    if len(gff_hits) != len(fasta_records):
-        raise ValueError(
-            "Barrnap GFF and FASTA outputs contain different numbers of hits."
-        )
+def parse_gff_attributes(attributes_field: str) -> dict[str, str]:
+    """Parse one GFF attributes field into a key-value mapping."""
+    attributes: dict[str, str] = {}
+    for raw_part in attributes_field.split(";"):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise ValueError(f"Malformed GFF attribute: {part!r}")
+        key, value = part.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            raise ValueError(f"Malformed GFF attribute key: {part!r}")
+        attributes[key] = value
+    return attributes
 
-    paired_hits: list[RrnaHit] = []
-    for order_index, (gff_hit, record) in enumerate(
-        zip(gff_hits, fasta_records, strict=True),
-        start=1,
-    ):
-        gff_is_16s, gff_is_partial, score = gff_hit
-        header_text = record.header.lower()
-        is_16s = gff_is_16s or "16s" in header_text
-        is_partial = gff_is_partial or "partial" in header_text
-        paired_hits.append(
+
+def parse_gff_hits(path: Path) -> list[GffHit]:
+    """Parse Barrnap GFF rows into ordered hit metadata."""
+    if not path.is_file():
+        raise ValueError(f"Missing Barrnap GFF file: {path}")
+
+    parsed_hits: list[GffHit] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split("\t")
+            if len(fields) != 9:
+                raise ValueError(f"Malformed GFF line in {path}: {line}")
+
+            attributes = parse_gff_attributes(fields[8])
+            rrna_name = attributes.get("Name", "").strip()
+            if not rrna_name:
+                raise ValueError(f"Missing Name attribute in {path}: {line}")
+
+            score_value = fields[5]
+            if score_value == ".":
+                score = float("inf")
+            else:
+                try:
+                    score = float(score_value)
+                except ValueError as error:
+                    raise ValueError(
+                        f"Could not parse Barrnap score {score_value!r} in {path}."
+                    ) from error
+
+            try:
+                start1 = int(fields[3])
+                end1 = int(fields[4])
+            except ValueError as error:
+                raise ValueError(f"Could not parse GFF coordinates in {path}: {line}") from error
+
+            parsed_hits.append(
+                GffHit(
+                    order_index=len(parsed_hits) + 1,
+                    score=score,
+                    rrna_name=rrna_name,
+                    contig=fields[0].strip(),
+                    start0=start1 - 1,
+                    end0=end1,
+                    strand=fields[6].strip(),
+                    is_partial="partial" in fields[8].lower(),
+                )
+            )
+    return parsed_hits
+
+
+def build_keyed_records(
+    records: Sequence[RecordT],
+    path: Path,
+    source_name: str,
+    key_builder: Callable[[RecordT], MatchKey],
+) -> dict[MatchKey, RecordT]:
+    """Build a unique keyed mapping for parsed Barrnap records."""
+    keyed_records: dict[MatchKey, RecordT] = {}
+    for record in records:
+        key = key_builder(record)
+        if key in keyed_records:
+            raise ValueError(
+                f"Duplicate {source_name} record in {path} for key {key!r}."
+            )
+        keyed_records[key] = record
+    return keyed_records
+
+
+def pair_16s_hits(
+    gff_hits: Sequence[GffHit],
+    fasta_records: Sequence[FastaRecord],
+    rrna_gff: Path,
+    rrna_fasta: Path,
+) -> list[RrnaHit]:
+    """Match Barrnap 16S FASTA records to 16S GFF hits by canonical key."""
+    build_keyed_records(
+        records=gff_hits,
+        path=rrna_gff,
+        source_name="GFF",
+        key_builder=lambda hit: build_match_key(
+            hit.rrna_name, hit.contig, hit.start0, hit.end0, hit.strand
+        ),
+    )
+    fasta_by_key = build_keyed_records(
+        records=fasta_records,
+        path=rrna_fasta,
+        source_name="FASTA",
+        key_builder=lambda record: build_match_key(
+            record.rrna_name,
+            record.contig,
+            record.start0,
+            record.end0,
+            record.strand,
+        ),
+    )
+
+    sixteen_s_gff_hits = [hit for hit in gff_hits if hit.rrna_name == SIXTEEN_S_NAME]
+    sixteen_s_fasta_records = [
+        record for record in fasta_records if record.rrna_name == SIXTEEN_S_NAME
+    ]
+
+    if not sixteen_s_gff_hits and not sixteen_s_fasta_records:
+        return []
+
+    gff_keys = {
+        build_match_key(hit.rrna_name, hit.contig, hit.start0, hit.end0, hit.strand)
+        for hit in sixteen_s_gff_hits
+    }
+    fasta_keys = {
+        build_match_key(
+            record.rrna_name,
+            record.contig,
+            record.start0,
+            record.end0,
+            record.strand,
+        )
+        for record in sixteen_s_fasta_records
+    }
+    if gff_keys != fasta_keys:
+        raise ValueError("Barrnap 16S GFF and FASTA outputs do not match.")
+
+    matched_hits: list[RrnaHit] = []
+    for hit in sixteen_s_gff_hits:
+        key = build_match_key(hit.rrna_name, hit.contig, hit.start0, hit.end0, hit.strand)
+        record = fasta_by_key.get(key)
+        if record is None:
+            raise ValueError("Barrnap 16S GFF and FASTA outputs do not match.")
+        matched_hits.append(
             RrnaHit(
-                order_index=order_index,
-                score=score,
-                is_16s=is_16s,
-                is_partial=is_partial,
+                order_index=hit.order_index,
+                score=hit.score,
+                is_partial=hit.is_partial,
                 record=record,
             )
         )
-    return paired_hits
+    return matched_hits
 
 
 def choose_best_hit(hits: Sequence[RrnaHit]) -> RrnaHit | None:
     """Choose the best 16S hit using the locked Barrnap tie-break rules."""
-    candidate_hits = [hit for hit in hits if hit.is_16s]
-    if not candidate_hits:
+    if not hits:
         return None
 
-    intact_hits = [hit for hit in candidate_hits if not hit.is_partial]
-    ranking_pool = intact_hits if intact_hits else candidate_hits
+    intact_hits = [hit for hit in hits if not hit.is_partial]
+    ranking_pool = intact_hits if intact_hits else list(hits)
     return min(
         ranking_pool,
         key=lambda hit: (
@@ -266,6 +423,18 @@ def should_include_in_all_best_16s(
     return status == "Yes" and best_hit is not None and not is_atypical
 
 
+def build_invalid_output_row(accession: str, warnings: Sequence[str]) -> dict[str, str]:
+    """Build the soft-fail output row for invalid Barrnap outputs."""
+    return {
+        "accession": accession,
+        "16S": "NA",
+        "best_16S_header": "NA",
+        "best_16S_length": "NA",
+        "include_in_all_best_16S": "false",
+        "warnings": ";".join(warnings),
+    }
+
+
 def summarise_hits(
     accession: str,
     rrna_gff: Path,
@@ -278,28 +447,26 @@ def summarise_hits(
     outdir.mkdir(parents=True, exist_ok=True)
 
     try:
-        hits = pair_hits(parse_gff_hits(rrna_gff), parse_fasta_records(rrna_fasta))
+        matched_hits = pair_16s_hits(
+            parse_gff_hits(rrna_gff),
+            parse_fasta_records(rrna_fasta),
+            rrna_gff,
+            rrna_fasta,
+        )
     except ValueError as error:
         LOGGER.warning(str(error))
         warnings.append("invalid_barrnap_output")
-        row = {
-            "accession": accession,
-            "16S": "NA",
-            "best_16S_header": "NA",
-            "best_16S_length": "NA",
-            "include_in_all_best_16S": "false",
-            "warnings": ";".join(warnings),
-        }
         write_best_fasta(outdir / "best_16S.fna", None)
-        write_status(outdir / "16S_status.tsv", row)
+        write_status(
+            outdir / "16S_status.tsv",
+            build_invalid_output_row(accession, warnings),
+        )
         return
 
-    sixteen_s_hits = [hit for hit in hits if hit.is_16s]
-    best_hit = choose_best_hit(hits)
-
-    if not sixteen_s_hits:
+    best_hit = choose_best_hit(matched_hits)
+    if not matched_hits:
         status = "No"
-    elif any(not hit.is_partial for hit in sixteen_s_hits):
+    elif any(not hit.is_partial for hit in matched_hits):
         status = "Yes"
     else:
         status = "partial"
