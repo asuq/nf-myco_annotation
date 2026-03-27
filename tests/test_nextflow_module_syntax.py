@@ -137,14 +137,30 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
         self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
+        self.assertIn("path('cohort_best_16S.fna'), emit: intact_cohort_candidates", module_text)
+        self.assertIn(
+            "path('cohort_intact_manifest_row.tsv'), emit: intact_manifest_rows",
+            module_text,
+        )
+        self.assertIn("path('cohort_partial_16S.fna'), emit: partial_cohort_candidates", module_text)
+        self.assertIn(
+            "path('cohort_partial_manifest_row.tsv'), emit: partial_manifest_rows",
+            module_text,
+        )
+        self.assertIn('[[ "\\${cohort_status}" == "partial" ]]', module_text)
 
     def test_publish_cohort_16s_exposes_stable_cohort_outputs(self) -> None:
         """Require the cohort 16S publisher to emit the design-spec artefacts."""
         module_text = (MODULES_DIR / "publish_cohort_16s.nf").read_text(encoding="utf-8")
 
         self.assertIn('"${params.outdir}/cohort/16s"', module_text)
-        self.assertIn("path 'all_best_16S.fna', emit: fasta", module_text)
-        self.assertIn("path 'all_best_16S_manifest.tsv', emit: manifest", module_text)
+        self.assertIn("path 'all_best_16S.fna', emit: best_fasta", module_text)
+        self.assertIn("path 'all_best_16S_manifest.tsv', emit: best_manifest", module_text)
+        self.assertIn("path 'all_partial_16S.fna', emit: partial_fasta", module_text)
+        self.assertIn(
+            "path 'all_partial_16S_manifest.tsv', emit: partial_manifest",
+            module_text,
+        )
 
     def test_cohort_16s_publishes_collected_outputs_via_dedicated_module(self) -> None:
         """Require the cohort 16S workflow to publish collected files via one process."""
@@ -153,9 +169,26 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         )
 
         self.assertIn("include { PUBLISH_COHORT_16S }", workflow_text)
-        self.assertIn("PUBLISH_COHORT_16S(collected_all_best_16S, collected_all_best_16S_manifest)", workflow_text)
-        self.assertIn("all_best_16S = PUBLISH_COHORT_16S.out.fasta", workflow_text)
-        self.assertIn("all_best_16S_manifest = PUBLISH_COHORT_16S.out.manifest", workflow_text)
+        self.assertIn("collected_all_partial_16S = SUMMARISE_16S.out.partial_cohort_candidates", workflow_text)
+        self.assertIn(
+            "collected_all_partial_16S_manifest = SUMMARISE_16S.out.partial_manifest_rows",
+            workflow_text,
+        )
+        self.assertIn("PUBLISH_COHORT_16S(", workflow_text)
+        self.assertIn("collected_all_best_16S,", workflow_text)
+        self.assertIn("collected_all_best_16S_manifest,", workflow_text)
+        self.assertIn("collected_all_partial_16S,", workflow_text)
+        self.assertIn("collected_all_partial_16S_manifest,", workflow_text)
+        self.assertIn("all_best_16S = PUBLISH_COHORT_16S.out.best_fasta", workflow_text)
+        self.assertIn(
+            "all_best_16S_manifest = PUBLISH_COHORT_16S.out.best_manifest",
+            workflow_text,
+        )
+        self.assertIn("all_partial_16S = PUBLISH_COHORT_16S.out.partial_fasta", workflow_text)
+        self.assertIn(
+            "all_partial_16S_manifest = PUBLISH_COHORT_16S.out.partial_manifest",
+            workflow_text,
+        )
 
     def test_download_busco_dataset_preserves_lineage_directory_name(self) -> None:
         """Require downloaded BUSCO datasets to be staged under their lineage names."""

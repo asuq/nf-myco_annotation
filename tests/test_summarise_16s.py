@@ -94,7 +94,7 @@ class Summarise16STestCase(unittest.TestCase):
             self.assertTrue(best_fasta.startswith(">hit2 16S ribosomal RNA\n"))
 
     def test_main_reports_partial_when_only_partial_hits_exist(self) -> None:
-        """Emit `partial` when only partial 16S records are available."""
+        """Emit `partial` and keep the sample out of the intact cohort."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             gff = self.write_text_file(
@@ -117,8 +117,6 @@ class Summarise16STestCase(unittest.TestCase):
                     str(fasta),
                     "--outdir",
                     str(outdir),
-                    "--is-atypical",
-                    "true",
                 ]
             )
 
@@ -281,13 +279,13 @@ class Summarise16STestCase(unittest.TestCase):
             self.assertEqual(status_row["best_16S_header"], "NA")
             self.assertEqual(status_row["include_in_all_best_16S"], "false")
 
-    def test_concat_best_16s_excludes_atypical_samples_from_cohort(self) -> None:
-        """Concatenate only rows explicitly marked for cohort inclusion."""
+    def test_concat_best_16s_excludes_partial_rows_from_intact_cohort(self) -> None:
+        """Build the intact cohort from complete, explicitly included rows only."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
 
             include_dir = tmpdir / "include"
-            exclude_dir = tmpdir / "exclude"
+            exclude_dir = tmpdir / "partial"
             include_dir.mkdir()
             exclude_dir.mkdir()
 
@@ -311,14 +309,14 @@ class Summarise16STestCase(unittest.TestCase):
                 "\n".join(
                     [
                         "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_ATYP\tYes\thit_excluded\t90\tfalse\t",
+                        "ACC_PART\tpartial\thit_partial\t90\tfalse\t",
                     ]
                 )
                 + "\n",
             )
             exclude_best = self.write_text_file(
                 exclude_dir / "best_16S.fna",
-                ">hit_excluded\n" + "C" * 90 + "\n",
+                ">hit_partial\n" + "C" * 90 + "\n",
             )
 
             cohort_inputs = self.write_text_file(
@@ -327,7 +325,7 @@ class Summarise16STestCase(unittest.TestCase):
                     [
                         "accession\tstatus_tsv\tbest_16s_fasta",
                         f"ACC_OK\t{include_status}\t{include_best}",
-                        f"ACC_ATYP\t{exclude_status}\t{exclude_best}",
+                        f"ACC_PART\t{exclude_status}\t{exclude_best}",
                     ]
                 )
                 + "\n",
@@ -354,6 +352,109 @@ class Summarise16STestCase(unittest.TestCase):
             manifest_rows = read_tsv_rows(output_manifest)
             self.assertEqual(len(manifest_rows), 1)
             self.assertEqual(manifest_rows[0]["accession"], "ACC_OK")
+
+    def test_concat_best_16s_builds_partial_cohort_including_atypical_samples(self) -> None:
+        """Build the partial cohort from all partial rows, including atypical ones."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+
+            intact_dir = tmpdir / "intact"
+            partial_dir = tmpdir / "partial"
+            atypical_partial_dir = tmpdir / "atypical_partial"
+            intact_dir.mkdir()
+            partial_dir.mkdir()
+            atypical_partial_dir.mkdir()
+
+            intact_status = self.write_text_file(
+                intact_dir / "16S_status.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC_OK\tYes\thit_ok\t100\ttrue\t",
+                    ]
+                )
+                + "\n",
+            )
+            intact_best = self.write_text_file(
+                intact_dir / "best_16S.fna",
+                ">hit_ok\n" + "A" * 100 + "\n",
+            )
+
+            partial_status = self.write_text_file(
+                partial_dir / "16S_status.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC_PART\tpartial\thit_partial\t90\tfalse\t",
+                    ]
+                )
+                + "\n",
+            )
+            partial_best = self.write_text_file(
+                partial_dir / "best_16S.fna",
+                ">hit_partial\n" + "C" * 90 + "\n",
+            )
+
+            atypical_partial_status = self.write_text_file(
+                atypical_partial_dir / "16S_status.tsv",
+                "\n".join(
+                    [
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
+                        "ACC_ATYP_PART\tpartial\thit_atyp_partial\t80\tfalse\tatypical",
+                    ]
+                )
+                + "\n",
+            )
+            atypical_partial_best = self.write_text_file(
+                atypical_partial_dir / "best_16S.fna",
+                ">hit_atyp_partial\n" + "G" * 80 + "\n",
+            )
+
+            cohort_inputs = self.write_text_file(
+                tmpdir / "cohort_inputs.tsv",
+                "\n".join(
+                    [
+                        "accession\tstatus_tsv\tbest_16s_fasta",
+                        f"ACC_OK\t{intact_status}\t{intact_best}",
+                        f"ACC_PART\t{partial_status}\t{partial_best}",
+                        (
+                            "ACC_ATYP_PART\t"
+                            f"{atypical_partial_status}\t{atypical_partial_best}"
+                        ),
+                    ]
+                )
+                + "\n",
+            )
+            output_fasta = tmpdir / "all_partial_16S.fna"
+            output_manifest = tmpdir / "all_partial_16S_manifest.tsv"
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--cohort-kind",
+                    "partial",
+                    "--output-fasta",
+                    str(output_fasta),
+                    "--output-manifest",
+                    str(output_manifest),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                output_fasta.read_text(encoding="utf-8"),
+                ">hit_partial\n"
+                + "C" * 90
+                + "\n>hit_atyp_partial\n"
+                + "G" * 80
+                + "\n",
+            )
+            manifest_rows = read_tsv_rows(output_manifest)
+            self.assertEqual(
+                [row["accession"] for row in manifest_rows],
+                ["ACC_PART", "ACC_ATYP_PART"],
+            )
 
     def test_concat_best_16s_fails_when_included_fasta_is_empty(self) -> None:
         """Fail when a cohort-included sample has no FASTA content to append."""
