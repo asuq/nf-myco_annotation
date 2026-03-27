@@ -217,6 +217,47 @@ def extract_busco_lineages_from_sample_status_columns(
     return busco_lineages
 
 
+def resolve_append_columns(
+    path: Path | None = None,
+    busco_lineages: Sequence[str] | None = None,
+) -> tuple[list[str], tuple[str, ...]]:
+    """Resolve one append-column contract from an override, lineages, or defaults."""
+    if path is not None:
+        if not path.is_file():
+            raise ValueError(f"Missing append-column contract: {path}")
+        append_columns = read_append_columns_asset(path)
+        return append_columns, extract_busco_lineages_from_append_columns(append_columns)
+
+    if busco_lineages:
+        resolved_lineages = normalise_busco_lineages(busco_lineages)
+        return build_append_columns(resolved_lineages), resolved_lineages
+
+    validate_default_append_columns_asset()
+    return build_append_columns(DEFAULT_BUSCO_LINEAGES), DEFAULT_BUSCO_LINEAGES
+
+
+def resolve_sample_status_columns(
+    path: Path | None = None,
+    busco_lineages: Sequence[str] | None = None,
+) -> tuple[list[str], tuple[str, ...]]:
+    """Resolve one sample-status contract from an override, lineages, or defaults."""
+    if path is not None:
+        if not path.is_file():
+            raise ValueError(f"Missing sample-status column asset: {path}")
+        sample_status_columns = read_sample_status_columns_asset(path)
+        return (
+            sample_status_columns,
+            extract_busco_lineages_from_sample_status_columns(sample_status_columns),
+        )
+
+    if busco_lineages:
+        resolved_lineages = normalise_busco_lineages(busco_lineages)
+        return build_sample_status_columns(resolved_lineages), resolved_lineages
+
+    validate_default_sample_status_columns_asset()
+    return build_sample_status_columns(DEFAULT_BUSCO_LINEAGES), DEFAULT_BUSCO_LINEAGES
+
+
 def validate_default_append_columns_asset(
     path: Path = DEFAULT_APPEND_COLUMNS_ASSET,
 ) -> None:

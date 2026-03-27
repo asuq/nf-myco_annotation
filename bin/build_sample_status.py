@@ -129,10 +129,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="BUSCO_<lineage> column used for ANI eligibility decisions.",
     )
     parser.add_argument(
+        "--busco-lineage",
+        action="append",
+        help="Configured BUSCO lineage name. May be supplied multiple times.",
+    )
+    parser.add_argument(
         "--columns",
-        required=True,
         type=Path,
-        help="Path to the ordered sample-status column asset.",
+        help="Optional path to the ordered sample-status column asset override.",
     )
     parser.add_argument(
         "--output",
@@ -165,11 +169,17 @@ def write_tsv(path: Path, header: Sequence[str], rows: Sequence[dict[str, str]])
             writer.writerow(row)
 
 
-def load_output_columns(path: Path) -> list[str]:
-    """Load the maintained sample-status column contract."""
+def resolve_output_columns(
+    path: Path | None = None,
+    busco_lineages: Sequence[str] | None = None,
+) -> tuple[list[str], tuple[str, ...]]:
+    """Resolve the sample-status contract from an override, lineages, or defaults."""
     try:
-        return table_helpers.load_sample_status_columns(path)
-    except table_helpers.MasterTableError as error:
+        return master_table_contract.resolve_sample_status_columns(
+            path=path,
+            busco_lineages=busco_lineages,
+        )
+    except ValueError as error:
         raise SampleStatusError(str(error)) from error
 
 
@@ -776,9 +786,9 @@ def run_build(args: argparse.Namespace) -> None:
     try:
         validated_samples = table_helpers.load_validated_samples(args.validated_samples)
         validated_accessions = {row["accession"] for row in validated_samples}
-        output_columns = load_output_columns(args.columns)
-        contract_busco_lineages = master_table_contract.extract_busco_lineages_from_sample_status_columns(
-            output_columns
+        output_columns, contract_busco_lineages = resolve_output_columns(
+            args.columns,
+            busco_lineages=args.busco_lineage,
         )
         expected_busco_columns = {
             f"BUSCO_{lineage}" for lineage in contract_busco_lineages

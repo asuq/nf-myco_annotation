@@ -71,8 +71,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--append-columns",
         type=Path,
-        default=master_table_contract.DEFAULT_APPEND_COLUMNS_ASSET,
-        help="Path to the ordered derived-column contract file.",
+        help="Optional path to the ordered derived-column contract override.",
+    )
+    parser.add_argument(
+        "--busco-lineage",
+        action="append",
+        help="Configured BUSCO lineage name. May be supplied multiple times.",
     )
     parser.add_argument(
         "--taxonomy",
@@ -457,14 +461,18 @@ def load_busco_index(
     return busco_index, seen_busco_columns
 
 
-def load_append_columns(path: Path) -> list[str]:
-    """Load and validate the append-column contract file."""
-    columns = master_table_contract.read_append_columns_asset(path)
-    if not columns:
-        raise MasterTableError(f"Append-column contract is empty: {path}")
-    if len(set(columns)) != len(columns):
-        raise MasterTableError(f"Append-column contract contains duplicate columns: {path}")
-    return columns
+def resolve_append_columns(
+    path: Path | None = None,
+    busco_lineages: Sequence[str] | None = None,
+) -> tuple[list[str], tuple[str, ...]]:
+    """Resolve one append-column contract from an override, lineages, or defaults."""
+    try:
+        return master_table_contract.resolve_append_columns(
+            path=path,
+            busco_lineages=busco_lineages,
+        )
+    except ValueError as error:
+        raise MasterTableError(str(error)) from error
 
 
 def derive_taxonomy_values(
@@ -582,14 +590,10 @@ def run_build(args: argparse.Namespace) -> None:
     validated_samples = load_validated_samples(args.validated_samples)
     validated_accessions = {row["accession"] for row in validated_samples}
     metadata_header, metadata_key_column, metadata_index = load_metadata(args.metadata)
-    append_columns = load_append_columns(args.append_columns)
-
-    try:
-        busco_lineages = master_table_contract.extract_busco_lineages_from_append_columns(
-            append_columns
-        )
-    except ValueError as error:
-        raise MasterTableError(str(error)) from error
+    append_columns, busco_lineages = resolve_append_columns(
+        args.append_columns,
+        busco_lineages=args.busco_lineage,
+    )
 
     expected_header = master_table_contract.build_master_table_columns(
         metadata_header,

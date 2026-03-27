@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+import master_table_contract
+
 
 LOGGER = logging.getLogger(__name__)
-ROOT_DIR = Path(__file__).resolve().parents[1]
 
 REQUIRED_SAMPLE_COLUMNS = (
     "accession",
@@ -33,7 +34,6 @@ ACCESSION_MAP_COLUMNS = (
     "metadata_present",
 )
 VALIDATION_WARNING_COLUMNS = ("accession", "warning_code", "message")
-DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET = ROOT_DIR / "assets" / "sample_status_columns.txt"
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 TRUE_TOKENS = {"true", "t", "yes", "y", "1"}
 FALSE_TOKENS = {"false", "f", "no", "n", "0"}
@@ -86,9 +86,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--sample-status-columns",
-        default=DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET,
         type=Path,
-        help="Path to the ordered sample-status column asset.",
+        help="Optional path to the ordered sample-status column asset override.",
+    )
+    parser.add_argument(
+        "--busco-lineage",
+        action="append",
+        help="Configured BUSCO lineage name. May be supplied multiple times.",
     )
     parser.add_argument(
         "--defer-genome-fasta-check",
@@ -441,21 +445,21 @@ def build_warning_rows(warnings: Sequence[ValidationWarning]) -> list[dict[str, 
     ]
 
 
-def load_sample_status_columns(path: Path = DEFAULT_SAMPLE_STATUS_COLUMNS_ASSET) -> list[str]:
-    """Load the ordered sample-status columns from the maintained asset file."""
-    if not path.is_file():
-        raise ValidationError(f"Missing sample-status column asset: {path}")
-
-    columns = [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    if not columns:
-        raise ValidationError(f"Sample-status column asset is empty: {path}")
-    if len(set(columns)) != len(columns):
-        raise ValidationError(f"Sample-status column asset contains duplicates: {path}")
-    return columns
+def resolve_sample_status_columns(
+    path: Path | None = None,
+    busco_lineages: Sequence[str] | None = None,
+) -> list[str]:
+    """Resolve the sample-status contract from an override, lineages, or defaults."""
+    try:
+        sample_status_columns, _contract_lineages = (
+            master_table_contract.resolve_sample_status_columns(
+                path=path,
+                busco_lineages=busco_lineages,
+            )
+        )
+    except ValueError as error:
+        raise ValidationError(str(error)) from error
+    return sample_status_columns
 
 
 def build_initial_sample_status_row(
@@ -510,8 +514,9 @@ def run_validation(
     sample_csv: Path,
     metadata: Path,
     outdir: Path,
-    sample_status_columns_path: Path,
+    sample_status_columns_path: Path | None,
     *,
+    busco_lineages: Sequence[str] | None = None,
     defer_genome_fasta_check: bool = False,
 ) -> None:
     """Validate inputs and write the expected downstream TSV outputs."""
@@ -528,7 +533,10 @@ def run_validation(
         metadata_index=metadata_index,
         defer_genome_fasta_check=defer_genome_fasta_check,
     )
-    sample_status_columns = load_sample_status_columns(sample_status_columns_path)
+    sample_status_columns = resolve_sample_status_columns(
+        sample_status_columns_path,
+        busco_lineages=busco_lineages,
+    )
 
     write_tsv(
         outdir / "validated_samples.tsv",
@@ -566,6 +574,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.metadata,
             args.outdir,
             args.sample_status_columns,
+            busco_lineages=args.busco_lineage,
             defer_genome_fasta_check=args.defer_genome_fasta_check,
         )
     except ValidationError as error:
