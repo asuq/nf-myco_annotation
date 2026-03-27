@@ -18,6 +18,7 @@ process SUMMARISE_16S {
 
     input:
     tuple val(meta), path(rrna_gff), path(rrna_fasta), path(barrnap_log)
+    path metadata
 
     output:
     tuple val(meta), path('best_16S.fna'), path('16S_status.tsv'), emit: sample_summaries
@@ -28,14 +29,13 @@ process SUMMARISE_16S {
     path 'versions.yml', emit: versions
 
     script:
-    def isAtypical = (meta.is_atypical ?: false).toString()
     """
     summarise_16s.py \
         --accession "${meta.accession}" \
         --rrna-gff "${rrna_gff}" \
         --rrna-fasta "${rrna_fasta}" \
         --outdir . \
-        --is-atypical "${isAtypical}"
+        --metadata "${metadata}"
 
     cohort_status="\$(awk -F '\t' 'NR == 2 { print \$2 }' 16S_status.tsv)"
     include_in_all="\$(awk -F '\t' 'NR == 2 { print \$5 }' 16S_status.tsv)"
