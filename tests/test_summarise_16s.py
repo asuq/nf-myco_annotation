@@ -184,6 +184,80 @@ class Summarise16STestCase(unittest.TestCase):
             self.assertEqual(status_row["best_16S_header"], intact_header)
             self.assertEqual(status_row["include_in_all_best_16S"], "false")
 
+    def test_main_keeps_unverified_source_exception_in_intact_cohort(self) -> None:
+        """Keep intact exception samples eligible for the intact cohort output."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 1500, "+")
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                "contig1\tbarrnap\trRNA\t1\t1500\t2.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
+            )
+            fasta = self.write_barrnap_fasta(
+                tmpdir / "rrna.fa",
+                [(intact_header, "A" * 1500)],
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC2C",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                    "--atypical-warnings",
+                    "Unverified source organism",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["16S"], "Yes")
+            self.assertEqual(status_row["include_in_all_best_16S"], "true")
+
+    def test_main_keeps_partial_exception_sample_out_of_intact_cohort(self) -> None:
+        """Keep partial exception samples in the partial cohort only."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            partial_header = self.barrnap_header("16S_rRNA", "KB890753.1", 102, 1222, "+")
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                (
+                    "KB890753.1\tbarrnap\trRNA\t103\t1222\t5.7e-275\t+\t.\t"
+                    "Name=16S_rRNA;product=16S ribosomal RNA (partial);"
+                    "note=aligned only 70 percent of the 16S ribosomal RNA\n"
+                ),
+            )
+            fasta = self.write_barrnap_fasta(
+                tmpdir / "rrna.fa",
+                [(partial_header, "A" * 1120)],
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC2D",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                    "--atypical-warnings",
+                    "unverified source organism",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["16S"], "partial")
+            self.assertEqual(status_row["include_in_all_best_16S"], "false")
+
     def test_main_returns_na_when_gff_has_16s_but_fasta_does_not(self) -> None:
         """Gracefully degrade to NA when a 16S GFF hit is missing from FASTA."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

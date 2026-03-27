@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence, TypeVar
 
+from atypical_helpers import classify_atypical_warning
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -140,10 +142,11 @@ def determine_is_atypical(
     is_atypical_value: str,
     atypical_warnings: str | None,
 ) -> bool:
-    """Resolve atypical status from either the explicit flag or metadata warnings."""
+    """Resolve intact-cohort exclusion from either the explicit flag or metadata."""
     if atypical_warnings is None:
         return normalise_boolean(is_atypical_value)
-    return not is_missing(atypical_warnings)
+    is_atypical, is_exception = classify_atypical_warning(atypical_warnings)
+    return is_atypical and not is_exception
 
 
 def build_match_key(

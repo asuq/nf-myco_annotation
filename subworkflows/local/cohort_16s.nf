@@ -8,9 +8,10 @@ include { SUMMARISE_16S } from '../../modules/local/summarise_16s'
 workflow COHORT_16S {
     take:
     barrnap_outputs
+    metadata
 
     main:
-    SUMMARISE_16S(barrnap_outputs)
+    SUMMARISE_16S(barrnap_outputs.combine(metadata))
 
     cohortManifestHeader = "${projectDir}/assets/tables/headers/16s_status.tsv"
 

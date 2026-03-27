@@ -136,6 +136,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_text = (MODULES_DIR / "summarise_16s.nf").read_text(encoding="utf-8")
 
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
+        self.assertIn("path(metadata)", module_text)
+        self.assertIn('extract_atypical_warning.py \\', module_text)
+        self.assertIn('--metadata "${metadata}"', module_text)
+        self.assertIn('--atypical-warnings "\\${atypical_warnings}"', module_text)
         self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
         self.assertIn("path('cohort_best_16S.fna'), emit: intact_cohort_candidates", module_text)
         self.assertIn(
@@ -150,6 +154,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('[[ "\\${cohort_status}" == "partial" ]]', module_text)
         self.assertIn(": > cohort_intact_manifest_row.tsv", module_text)
         self.assertIn(": > cohort_partial_manifest_row.tsv", module_text)
+        self.assertNotIn("--is-atypical", module_text)
+        self.assertNotIn("meta.is_atypical", module_text)
 
     def test_publish_cohort_16s_exposes_stable_cohort_outputs(self) -> None:
         """Require the cohort 16S publisher to emit the design-spec artefacts."""
@@ -182,8 +188,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         workflow_text = (ROOT / "subworkflows" / "local" / "cohort_16s.nf").read_text(
             encoding="utf-8"
         )
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
 
         self.assertIn("include { PUBLISH_COHORT_16S }", workflow_text)
+        self.assertIn("take:\n    barrnap_outputs\n    metadata", workflow_text)
+        self.assertIn("SUMMARISE_16S(barrnap_outputs.combine(metadata))", workflow_text)
         self.assertIn("collected_all_partial_16S = SUMMARISE_16S.out.partial_cohort_candidates", workflow_text)
         self.assertIn("intact_manifest_rows = SUMMARISE_16S.out.intact_manifest_rows", workflow_text)
         self.assertIn(
@@ -203,6 +212,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn(".concat(partial_manifest_rows)", workflow_text)
         self.assertNotIn("newLine: true", workflow_text)
         self.assertIn("PUBLISH_COHORT_16S(", workflow_text)
+        self.assertIn("COHORT_16S(PER_SAMPLE_QC.out.barrnap, metadata)", main_text)
         self.assertIn("collected_all_best_16S,", workflow_text)
         self.assertIn("collected_all_best_16S_manifest,", workflow_text)
         self.assertIn("collected_all_partial_16S,", workflow_text)
