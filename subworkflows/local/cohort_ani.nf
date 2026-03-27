@@ -36,7 +36,7 @@ workflow COHORT_ANI {
                     .collect { it[1] },
             ]
         }
-        .collectFile(name: 'staged_genomes.tsv', newLine: true)
+        .collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)
 
     staged_fasta_files = staged_genomes
         .map { meta, genome -> genome }

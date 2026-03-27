@@ -3,7 +3,7 @@ include { COLLECT_VERSIONS } from '../../modules/local/collect_versions'
 include { MERGE_ONE_ROW_TSVS as MERGE_CCFINDER_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
 include { MERGE_ONE_ROW_TSVS as MERGE_CHECKM2_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
 include { MERGE_ONE_ROW_TSVS as MERGE_CODETTA_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
-include { MERGE_ONE_ROW_TSVS as MERGE_SIXTEEN_S_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
+include { MERGE_ONE_ROW_TSVS as MERGE_16S_SUMMARIES } from '../../modules/local/merge_one_row_tsvs'
 include { SELECT_ANI_REPRESENTATIVES } from '../../modules/local/select_ani_representatives'
 include { WRITE_SAMPLE_STATUS } from '../../modules/local/write_sample_status'
 
@@ -92,11 +92,11 @@ workflow FINAL_OUTPUTS {
     )
     combined_checkm2 = MERGE_CHECKM2_SUMMARIES.out.merged
 
-    MERGE_SIXTEEN_S_SUMMARIES(
+    MERGE_16S_SUMMARIES(
         sixteenSHeader,
         sixteen_s_summaries.map { meta, best16s, status -> status }.collect(),
     )
-    combined_16s = MERGE_SIXTEEN_S_SUMMARIES.out.merged
+    combined_16s = MERGE_16S_SUMMARIES.out.merged
 
     MERGE_CCFINDER_SUMMARIES(
         ccfinderHeader,
@@ -216,7 +216,7 @@ workflow FINAL_OUTPUTS {
     )
 
     final_versions = MERGE_CHECKM2_SUMMARIES.out.versions
-        .mix(MERGE_SIXTEEN_S_SUMMARIES.out.versions)
+        .mix(MERGE_16S_SUMMARIES.out.versions)
         .mix(MERGE_CCFINDER_SUMMARIES.out.versions)
         .mix(MERGE_CODETTA_SUMMARIES.out.versions)
         .mix(SELECT_ANI_REPRESENTATIVES.out.versions)
