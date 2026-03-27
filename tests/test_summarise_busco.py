@@ -79,6 +79,49 @@ class SummariseBuscoTestCase(unittest.TestCase):
             self.assertEqual(row["busco_status"], "done")
             self.assertEqual(row["warnings"], "")
 
+    def test_main_ignores_unrelated_busco_like_strings_outside_results(self) -> None:
+        """Prefer the true results.one_line_summary over unrelated provenance strings."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            summary = self.write_json(
+                tmpdir / "short_summary.json",
+                {
+                    "provenance": {
+                        "notes": (
+                            "previous run C:1.0%[S:1.0%,D:0.0%],F:2.0%,M:97.0%,n:200"
+                        )
+                    },
+                    "results": {
+                        "one_line_summary": (
+                            "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200"
+                        )
+                    },
+                },
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC1B",
+                    "--summary",
+                    str(summary),
+                    "--lineage",
+                    "bacillota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(
+                row["BUSCO_bacillota_odb12"],
+                "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+            )
+            self.assertEqual(row["busco_status"], "done")
+            self.assertEqual(row["warnings"], "")
+
     def test_main_keeps_both_configured_lineages_in_distinct_columns(self) -> None:
         """Emit stable lineage-specific BUSCO columns for both configured lineages."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -210,6 +253,51 @@ class SummariseBuscoTestCase(unittest.TestCase):
                 "C:96.5%[S:95.0%,D:1.5%],F:2.0%,M:1.5%,n:220",
             )
             self.assertEqual(row["busco_status"], "done")
+
+    def test_main_reconstructs_numeric_summary_from_results_object_only(self) -> None:
+        """Ignore unrelated root-level numeric fields when a results object is present."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            summary = self.write_json(
+                tmpdir / "short_summary.json",
+                {
+                    "Complete percentage": 5.0,
+                    "Single copy percentage": 4.0,
+                    "Duplicated percentage": 1.0,
+                    "Fragmented percentage": 20.0,
+                    "Missing percentage": 75.0,
+                    "n_markers": 20,
+                    "results": {
+                        "Complete percentage": 96.5,
+                        "Single copy percentage": 95.0,
+                        "Duplicated percentage": 1.5,
+                        "Fragmented percentage": 2.0,
+                        "Missing percentage": 1.5,
+                        "n_markers": 220,
+                    },
+                },
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC2B",
+                    "--summary",
+                    str(summary),
+                    "--lineage",
+                    "mycoplasmatota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(
+                row["BUSCO_mycoplasmatota_odb12"],
+                "C:96.5%[S:95.0%,D:1.5%],F:2.0%,M:1.5%,n:220",
+            )
 
     def test_main_marks_missing_json_as_failed(self) -> None:
         """Emit an NA row when the BUSCO summary file is unavailable."""

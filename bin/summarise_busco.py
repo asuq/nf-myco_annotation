@@ -153,24 +153,33 @@ def collect_scalar_values(data: Any) -> dict[str, list[Any]]:
     return collected
 
 
-def find_existing_busco_string(data: Any) -> str | None:
-    """Find an existing BUSCO summary string anywhere in the JSON document."""
+def find_direct_existing_busco_string(data: Any) -> str | None:
+    """Return one direct BUSCO summary string from one candidate summary object."""
     if isinstance(data, str):
         match = BUSCO_STRING_RE.search(data)
+        return None if match is None else match.group(0)
+    if not isinstance(data, dict):
+        return None
+
+    for key, value in data.items():
+        if normalise_key(str(key)) != "onelinesummary":
+            continue
+        if not isinstance(value, str):
+            continue
+        match = BUSCO_STRING_RE.search(value)
         if match is None:
-            return None
+            raise ValueError("BUSCO one_line_summary is present but malformed.")
         return match.group(0)
-    if isinstance(data, dict):
-        for value in data.values():
-            found = find_existing_busco_string(value)
-            if found is not None:
-                return found
-    if isinstance(data, list):
-        for item in data:
-            found = find_existing_busco_string(item)
-            if found is not None:
-                return found
     return None
+
+
+def candidate_summary_object(payload: Any) -> Any:
+    """Return the BUSCO summary object that should be parsed."""
+    if isinstance(payload, dict):
+        results = payload.get("results")
+        if isinstance(results, dict):
+            return results
+    return payload
 
 
 def coerce_float(value: Any) -> float | None:
@@ -270,6 +279,15 @@ def build_busco_string_from_scalars(scalars: dict[str, list[Any]]) -> str:
     )
 
 
+def parse_summary_object(data: Any) -> str:
+    """Parse one BUSCO summary object into the compact one-line summary."""
+    existing_summary = find_direct_existing_busco_string(data)
+    if existing_summary is not None:
+        return existing_summary.replace(" ", "")
+    scalars = collect_scalar_values(data)
+    return build_busco_string_from_scalars(scalars)
+
+
 def parse_summary(path: Path) -> str:
     """Parse a BUSCO JSON summary into the compact one-line summary string."""
     if not path.is_file():
@@ -279,12 +297,7 @@ def parse_summary(path: Path) -> str:
     except json.JSONDecodeError as error:
         raise ValueError(f"Could not parse BUSCO JSON summary: {path}") from error
 
-    existing_summary = find_existing_busco_string(payload)
-    if existing_summary is not None:
-        return existing_summary.replace(" ", "")
-
-    scalars = collect_scalar_values(payload)
-    return build_busco_string_from_scalars(scalars)
+    return parse_summary_object(candidate_summary_object(payload))
 
 
 def write_output(
