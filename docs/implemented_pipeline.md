@@ -340,7 +340,8 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
   accession is kept in tables and published paths; the sanitized internal ID is
   only used for execution-safe filenames and tool prefixes.
 - Barrnap runs for every sample. `SUMMARISE_16S` always emits per-sample status
-  files. `all_best_16S.fna` contains only intact, non-atypical best hits, while
+  files. `all_best_16S.fna` contains intact best hits from non-atypical samples
+  and from the locked atypical exception `unverified source organism`, while
   `all_partial_16S.fna` contains partial-only best hits, including atypical
   partial samples.
 - CheckM2 always runs twice per sample, once with translation table `4` and

@@ -66,7 +66,7 @@ This is a **behaviour-preserving v1 refactor**, not a methodological redesign.
 - Output per-sample `best_16S.fna`.
 - Produce cohort-level `all_best_16S.fna`.
 - Produce cohort-level `all_partial_16S.fna`.
-- If a genome is atypical, still run Barrnap and keep the per-sample result, but **do not include its intact 16S** in `all_best_16S.fna`.
+- If a genome is atypical, still run Barrnap and keep the per-sample result, but include its intact 16S in `all_best_16S.fna` only when the atypical reason is `unverified source organism`.
 - Include all partial-only samples in `all_partial_16S.fna`, including atypical samples.
 - `16S` master-table vocabulary is fixed as:
   - `Yes`
@@ -212,6 +212,7 @@ If the metadata table contains `Atypical_Warnings`, then:
 
 - `is_atypical = true` when `Atypical_Warnings` is non-empty and not `NA`;
 - `is_atypical_exception = true` when `Atypical_Warnings` contains the case-insensitive phrase `unverified source organism`.
+- Wherever the pipeline applies atypical-based exclusion, treat `is_atypical_exception = true` as an inclusion exception.
 
 If `Atypical_Warnings` is absent entirely:
 
@@ -585,7 +586,7 @@ Rules:
 - choose best intact 16S by minimum Barrnap score
 - if no intact hit exists, choose best partial 16S by the same score and tie-break rules
 - tie-break: longest, then first in GFF order
-- include a sample in `all_best_16S.fna` only when `16S = Yes` and the sample is not atypical
+- include a sample in `all_best_16S.fna` only when `16S = Yes` and the sample is not atypical, or is atypical only because of `unverified source organism`
 - include a sample in `all_partial_16S.fna` only when `16S = partial`
 - atypical partial samples are still included in `all_partial_16S.fna`
 
