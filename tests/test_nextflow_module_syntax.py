@@ -137,7 +137,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
         self.assertIn("path(metadata)", module_text)
-        self.assertIn('extract_atypical_warning.py \\', module_text)
+        self.assertIn('python_path="\\$(command -v python3)"', module_text)
+        self.assertIn('extract_script_path="\\$(command -v extract_atypical_warning.py)"', module_text)
+        self.assertIn('summarise_script_path="\\$(command -v summarise_16s.py)"', module_text)
+        self.assertIn('atypical_warnings="\\$("\\${python_path}" "\\${extract_script_path}" \\', module_text)
+        self.assertIn('"\\${python_path}" "\\${summarise_script_path}" \\', module_text)
         self.assertIn('--metadata "${metadata}"', module_text)
         self.assertIn('--atypical-warnings "\\${atypical_warnings}"', module_text)
         self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
@@ -422,9 +426,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             workflow_text,
         )
         self.assertIn("MERGE_CHECKM2_SUMMARIES(", workflow_text)
-        self.assertIn("MERGE_SIXTEEN_S_SUMMARIES(", workflow_text)
+        self.assertIn("MERGE_16S_SUMMARIES(", workflow_text)
         self.assertIn("MERGE_CCFINDER_SUMMARIES(", workflow_text)
         self.assertIn("MERGE_CODETTA_SUMMARIES(", workflow_text)
+        self.assertNotIn("MERGE_SIXTEEN_S_SUMMARIES(", workflow_text)
         self.assertNotIn(".mix(checkm2_summaries.map { meta, summary -> summary })", workflow_text)
         self.assertNotIn(".mix(sixteen_s_summaries.map { meta, best16s, status -> status })", workflow_text)
         self.assertNotIn(".mix(ccfinder_summaries.map { meta, strains, contigs, crisprs -> strains })", workflow_text)
@@ -665,8 +670,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn(".flatMap { rows ->", workflow_text)
         self.assertIn("'accession\\tinternal_id\\tstaged_filename'", workflow_text)
         self.assertIn(".sort { left, right -> left[0] <=> right[0] }", workflow_text)
-        self.assertIn("collectFile(name: 'staged_genomes.tsv', newLine: true)", workflow_text)
-        self.assertNotIn("sort: false", workflow_text)
+        self.assertIn("collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)", workflow_text)
 
     def test_final_outputs_consumes_combined_busco_tables(self) -> None:
         """Require final outputs to consume combined BUSCO lineage tables directly."""
@@ -695,9 +699,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         )
 
         self.assertIn("MERGE_CHECKM2_SUMMARIES.out.merged", workflow_text)
-        self.assertIn("MERGE_SIXTEEN_S_SUMMARIES.out.merged", workflow_text)
+        self.assertIn("MERGE_16S_SUMMARIES.out.merged", workflow_text)
         self.assertIn("MERGE_CCFINDER_SUMMARIES.out.merged", workflow_text)
         self.assertIn("MERGE_CODETTA_SUMMARIES.out.merged", workflow_text)
+        self.assertNotIn("MERGE_SIXTEEN_S_SUMMARIES.out.merged", workflow_text)
         self.assertIn(".map { meta, summary -> summary }.collect()", workflow_text)
         self.assertIn(".map { meta, best16s, status -> status }.collect()", workflow_text)
         self.assertIn(".map { meta, strains, contigs, crisprs -> strains }.collect()", workflow_text)
