@@ -5,8 +5,9 @@ include { ASSIGN_GCODE_AND_QC } from '../../modules/local/assign_gcode_and_qc'
 include { BUSCO } from '../../modules/local/busco'
 
 /*
- * Run the per-sample QC branch limited to Barrnap, paired CheckM2 runs, gcode
- * assignment, and raw BUSCO offline executions across the configured lineages.
+ * Run the per-sample QC branch limited to Barrnap, per-sample 16S summary
+ * generation, paired CheckM2 runs, gcode assignment, and raw BUSCO offline
+ * executions across the configured lineages.
  */
 workflow PER_SAMPLE_QC {
     take:
@@ -54,6 +55,7 @@ workflow PER_SAMPLE_QC {
 
     emit:
     barrnap = BARRNAP.out.results
+    sixteen_s_summaries = BARRNAP.out.sixteen_s_summaries
     checkm2_gcode4 = CHECKM2_GCODE4.out.results
     checkm2_gcode11 = CHECKM2_GCODE11.out.results
     gcode_qc = ASSIGN_GCODE_AND_QC.out.summary

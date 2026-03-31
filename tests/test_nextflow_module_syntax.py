@@ -131,99 +131,67 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("&& !new File(datasetPath).exists()", workflow_text)
         self.assertIn("datasetPath = stubDatasetFallback", workflow_text)
 
-    def test_summarise_16s_publishes_master_table_inputs(self) -> None:
-        """Require the 16S summary module to publish the stable per-sample artefacts."""
-        module_text = (MODULES_DIR / "summarise_16s.nf").read_text(encoding="utf-8")
+    def test_barrnap_publishes_raw_and_16s_outputs(self) -> None:
+        """Require Barrnap to emit raw outputs and the per-sample 16S summaries."""
+        module_text = (MODULES_DIR / "barrnap.nf").read_text(encoding="utf-8")
 
+        self.assertIn('{ "${params.outdir}/samples/${meta.accession}/barrnap" }', module_text)
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
-        self.assertIn("path metadata", module_text)
         self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
-        self.assertIn("path('cohort_best_16S.fna'), emit: intact_cohort_candidates", module_text)
         self.assertIn(
-            "path('cohort_intact_manifest_row.tsv'), emit: intact_manifest_rows",
+            'tuple val(meta), path("${meta.internal_id}_best_16S.fna"), path("${meta.internal_id}_16S_status.tsv"), emit: sixteen_s_summaries',
             module_text,
         )
-        self.assertIn("path('cohort_partial_16S.fna'), emit: partial_cohort_candidates", module_text)
-        self.assertIn(
-            "path('cohort_partial_manifest_row.tsv'), emit: partial_manifest_rows",
-            module_text,
-        )
-        self.assertIn('--metadata "${metadata}"', module_text)
-        self.assertNotIn("meta.is_atypical", module_text)
-        self.assertIn('[[ "\\${cohort_status}" == "partial" ]]', module_text)
-        self.assertIn(": > cohort_intact_manifest_row.tsv", module_text)
-        self.assertIn(": > cohort_partial_manifest_row.tsv", module_text)
+        self.assertIn('python3 "\\${summarise_script}"', module_text)
+        self.assertIn('cp best_16S.fna "${meta.internal_id}_best_16S.fna"', module_text)
+        self.assertIn('cp 16S_status.tsv "${meta.internal_id}_16S_status.tsv"', module_text)
 
-    def test_publish_cohort_16s_exposes_stable_cohort_outputs(self) -> None:
-        """Require the cohort 16S publisher to emit the design-spec artefacts."""
-        module_text = (MODULES_DIR / "publish_cohort_16s.nf").read_text(encoding="utf-8")
+    def test_build_cohort_16s_exposes_stable_cohort_outputs(self) -> None:
+        """Require the cohort 16S builder to emit the design-spec artefacts."""
+        module_text = (MODULES_DIR / "build_cohort_16s.nf").read_text(encoding="utf-8")
 
         self.assertIn('"${params.outdir}/cohort/16s"', module_text)
-        self.assertIn("path cohort_best_fasta, name: 'staged_all_best_16S.fna'", module_text)
-        self.assertIn(
-            "path cohort_best_manifest, name: 'staged_all_best_16S_manifest.tsv'",
-            module_text,
-        )
-        self.assertIn(
-            "path cohort_partial_fasta, name: 'staged_all_partial_16S.fna'",
-            module_text,
-        )
-        self.assertIn(
-            "path cohort_partial_manifest, name: 'staged_all_partial_16S_manifest.tsv'",
-            module_text,
-        )
+        self.assertIn("path best_fastas, stageAs: 'summaries/*'", module_text)
+        self.assertIn("path status_tables, stageAs: 'summaries/*'", module_text)
+        self.assertIn("path metadata", module_text)
+        self.assertIn('printf \'accession\\tstatus_tsv\\tbest_16s_fasta\\n\' > cohort_inputs.tsv', module_text)
+        self.assertIn('python3 "\\${script_path}"', module_text)
+        self.assertIn('--metadata "${metadata}"', module_text)
+        self.assertIn("--cohort-kind intact", module_text)
+        self.assertIn("--cohort-kind partial", module_text)
         self.assertIn("path 'all_best_16S.fna', emit: best_fasta", module_text)
         self.assertIn("path 'all_best_16S_manifest.tsv', emit: best_manifest", module_text)
         self.assertIn("path 'all_partial_16S.fna', emit: partial_fasta", module_text)
-        self.assertIn(
-            "path 'all_partial_16S_manifest.tsv', emit: partial_manifest",
-            module_text,
-        )
+        self.assertIn("path 'all_partial_16S_manifest.tsv', emit: partial_manifest", module_text)
 
-    def test_cohort_16s_publishes_collected_outputs_via_dedicated_module(self) -> None:
-        """Require the cohort 16S workflow to publish collected files via one process."""
+    def test_cohort_16s_builds_outputs_from_per_sample_summaries(self) -> None:
+        """Require the cohort 16S workflow to collect per-sample summaries only."""
         workflow_text = (ROOT / "subworkflows" / "local" / "cohort_16s.nf").read_text(
+            encoding="utf-8"
+        )
+        per_sample_qc_text = (ROOT / "subworkflows" / "local" / "per_sample_qc.nf").read_text(
             encoding="utf-8"
         )
         main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
 
-        self.assertIn("take:\n    barrnap_outputs\n    metadata", workflow_text)
-        self.assertIn("include { PUBLISH_COHORT_16S }", workflow_text)
-        self.assertIn("SUMMARISE_16S(barrnap_outputs, metadata)", workflow_text)
-        self.assertIn("collected_all_partial_16S = SUMMARISE_16S.out.partial_cohort_candidates", workflow_text)
-        self.assertIn("intact_manifest_rows = SUMMARISE_16S.out.intact_manifest_rows", workflow_text)
+        self.assertIn("take:\n    sixteen_s_summaries\n    metadata", workflow_text)
+        self.assertIn("include { BUILD_COHORT_16S }", workflow_text)
+        self.assertIn("collected_best_16s = sixteen_s_summaries", workflow_text)
+        self.assertIn("collected_status_tables = sixteen_s_summaries", workflow_text)
+        self.assertIn(".collect()", workflow_text)
+        self.assertNotIn("SUMMARISE_16S(", workflow_text)
+        self.assertNotIn("collectFile(name: 'all_best_16S.fna')", workflow_text)
+        self.assertIn("BUILD_COHORT_16S(", workflow_text)
+        self.assertIn("sixteen_s_summaries = BARRNAP.out.sixteen_s_summaries", per_sample_qc_text)
         self.assertIn(
-            "partial_manifest_rows = SUMMARISE_16S.out.partial_manifest_rows",
-            workflow_text,
+            'metadata = Channel.value(file(params.metadata, checkIfExists: true))',
+            main_text,
         )
+        self.assertIn("COHORT_16S(PER_SAMPLE_QC.out.sixteen_s_summaries, metadata)", main_text)
         self.assertIn(
-            'cohortManifestHeader = "${projectDir}/assets/tables/headers/16s_status.tsv"',
-            workflow_text,
+            "PER_SAMPLE_QC.out.sixteen_s_summaries,",
+            main_text,
         )
-        self.assertIn(
-            "Channel.fromPath(cohortManifestHeader, checkIfExists: true)",
-            workflow_text,
-        )
-        self.assertIn(".filter { manifestRow -> manifestRow.toFile().length() > 0 }", workflow_text)
-        self.assertIn(".concat(intact_manifest_rows)", workflow_text)
-        self.assertIn(".concat(partial_manifest_rows)", workflow_text)
-        self.assertNotIn("newLine: true", workflow_text)
-        self.assertIn("PUBLISH_COHORT_16S(", workflow_text)
-        self.assertIn("collected_all_best_16S,", workflow_text)
-        self.assertIn("collected_all_best_16S_manifest,", workflow_text)
-        self.assertIn("collected_all_partial_16S,", workflow_text)
-        self.assertIn("collected_all_partial_16S_manifest,", workflow_text)
-        self.assertIn("all_best_16S = PUBLISH_COHORT_16S.out.best_fasta", workflow_text)
-        self.assertIn(
-            "all_best_16S_manifest = PUBLISH_COHORT_16S.out.best_manifest",
-            workflow_text,
-        )
-        self.assertIn("all_partial_16S = PUBLISH_COHORT_16S.out.partial_fasta", workflow_text)
-        self.assertIn(
-            "all_partial_16S_manifest = PUBLISH_COHORT_16S.out.partial_manifest",
-            workflow_text,
-        )
-        self.assertIn("COHORT_16S(PER_SAMPLE_QC.out.barrnap, metadata)", main_text)
 
     def test_download_busco_dataset_preserves_lineage_directory_name(self) -> None:
         """Require downloaded BUSCO datasets to be staged under their lineage names."""

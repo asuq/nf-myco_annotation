@@ -37,7 +37,7 @@ workflow {
     log.warn 'PADLOC and eggNOG outputs are retained in sample folders but are intentionally excluded from master_table.tsv.'
 
     sampleCsv = Channel.fromPath(params.sample_csv, checkIfExists: true)
-    metadata = Channel.fromPath(params.metadata, checkIfExists: true)
+    metadata = Channel.value(file(params.metadata, checkIfExists: true))
     taxdump = Channel.fromPath(params.taxdump, checkIfExists: true)
     checkm2Db = Channel.fromPath(params.checkm2_db, checkIfExists: true)
     codettaDb = Channel.fromPath(params.codetta_db, checkIfExists: true)
@@ -57,7 +57,7 @@ workflow {
         checkm2Db,
         BUSCO_DATASET_PREP.out.datasets,
     )
-    COHORT_16S(PER_SAMPLE_QC.out.barrnap, metadata)
+    COHORT_16S(PER_SAMPLE_QC.out.sixteen_s_summaries, metadata)
     PER_SAMPLE_ANNOTATION(
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
         PER_SAMPLE_QC.out.gcode_qc,
@@ -69,7 +69,7 @@ workflow {
         metadata,
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
         PER_SAMPLE_QC.out.gcode_qc,
-        COHORT_16S.out.sample_summaries,
+        PER_SAMPLE_QC.out.sixteen_s_summaries,
         PER_SAMPLE_QC.out.busco_summaries,
     )
     FINAL_OUTPUTS(
@@ -78,7 +78,7 @@ workflow {
         metadata,
         COHORT_TAXONOMY.out.taxonomy,
         PER_SAMPLE_QC.out.gcode_qc,
-        COHORT_16S.out.sample_summaries,
+        PER_SAMPLE_QC.out.sixteen_s_summaries,
         COHORT_ANI.out.parsed_busco,
         PER_SAMPLE_ANNOTATION.out.codetta_summary,
         PER_SAMPLE_ANNOTATION.out.ccfinder_summary,
