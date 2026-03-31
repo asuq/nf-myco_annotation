@@ -369,7 +369,7 @@ per-sample gated branch (only if gcode = 4 or 11):
   eggnog
 
 cohort branch:
-  summarise_16s (per sample -> cohort all_best_16S.fna and all_partial_16S.fna)
+  build_cohort_16s (cohort all_best_16S.fna and all_partial_16S.fna)
   build_fastani_inputs
   fastani_all_vs_all
   cluster_ani
@@ -572,8 +572,6 @@ Purpose:
 
 - derive the sample-level `16S` status
 - select `best_16S.fna`
-- build cohort-level `all_best_16S.fna`
-- build cohort-level `all_partial_16S.fna`
 
 Rules:
 
@@ -581,22 +579,24 @@ Rules:
 - classify:
   - `No` = no 16S hit
   - `partial` = 16S exists but all hits are partial
-  - `Yes` = at least one intact 16S hit
+- `Yes` = at least one intact 16S hit
 - choose best intact 16S by minimum Barrnap score
 - if no intact hit exists, choose best partial 16S by the same score and tie-break rules
 - tie-break: longest, then first in GFF order
-- include a sample in `all_best_16S.fna` only when `16S = Yes` and the sample is not atypical, or is atypical only because of `unverified source organism`
-- include a sample in `all_partial_16S.fna` only when `16S = partial`
-- atypical partial samples are still included in `all_partial_16S.fna`
 
 Required outputs:
 
 - per-sample `best_16S.fna`
 - per-sample `16S_status.tsv`
-- cohort-level `all_best_16S.fna`
-- optional `all_best_16S_manifest.tsv`
-- cohort-level `all_partial_16S.fna`
-- optional `all_partial_16S_manifest.tsv`
+
+Implementation note:
+
+- cohort-level `all_best_16S.fna`, `all_best_16S_manifest.tsv`,
+  `all_partial_16S.fna`, and `all_partial_16S_manifest.tsv` are built in the
+  cohort 16S branch from the per-sample Barrnap summaries
+- intact cohort inclusion is applied there from metadata `Atypical_Warnings`
+  using the locked `unverified source organism` exception
+- partial cohort inclusion is applied there from `16S = partial`
 
 ## 8.6 `checkm2`
 

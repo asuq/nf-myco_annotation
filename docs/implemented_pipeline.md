@@ -91,12 +91,13 @@ main.nf
      -> TAXONOMY_EXPAND
   -> PER_SAMPLE_QC
      -> BARRNAP
+     -> per-sample `best_16S.fna` and `16S_status.tsv`
      -> CHECKM2 (ttable 4)
      -> CHECKM2 (ttable 11)
      -> ASSIGN_GCODE_AND_QC
      -> BUSCO (each configured lineage)
   -> COHORT_16S
-     -> SUMMARISE_16S
+     -> BUILD_COHORT_16S
      -> all_best_16S.fna
      -> all_partial_16S.fna
   -> PER_SAMPLE_ANNOTATION
@@ -339,10 +340,11 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
 - Original accession and internal ID are handled separately. The original
   accession is kept in tables and published paths; the sanitized internal ID is
   only used for execution-safe filenames and tool prefixes.
-- Barrnap runs for every sample. `SUMMARISE_16S` always emits per-sample status
-  files. `all_best_16S.fna` contains intact best hits from non-atypical
-  samples plus the locked `unverified source organism` atypical exception,
-  while `all_partial_16S.fna` contains partial-only best hits, including
+- Barrnap runs for every sample and also emits the per-sample `best_16S.fna`
+  and `16S_status.tsv` artefacts used by downstream ANI and reporting. The
+  cohort 16S branch builds `all_best_16S.fna` from intact hits that are
+  non-atypical or atypical only because of `unverified source organism`, and
+  builds `all_partial_16S.fna` from every partial-only sample, including
   atypical partial samples.
 - CheckM2 always runs twice per sample, once with translation table `4` and
   once with `11`. `summarise_checkm2.py` applies `params.gcode_rule` and emits
