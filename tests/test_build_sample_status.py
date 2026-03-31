@@ -169,9 +169,9 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 tmpdir / "16s.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC1\tYes\th1\t1500\ttrue\t",
-                        "ACC2\tNo\tNA\tNA\tfalse\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC1\tYes\th1\t1500\t",
+                        "ACC2\tNo\tNA\tNA\t",
                     ]
                 )
                 + "\n",
@@ -362,7 +362,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             status_16s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\nACC1\tYes\th1\t1500\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",
@@ -456,7 +456,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             status_16s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\nACC1\tYes\th1\t1500\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",
@@ -550,7 +550,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             status_16s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\nACC1\tYes\th1\t1500\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",
@@ -670,9 +670,9 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 tmpdir / "16s.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC1\tYes\th1\t1500\ttrue\t",
-                        "ACC2\tYes\th2\t1500\ttrue\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC1\tYes\th1\t1500\t",
+                        "ACC2\tYes\th2\t1500\t",
                     ]
                 )
                 + "\n",
@@ -867,8 +867,8 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             status_16s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\n"
-                "ACC1\tYes\th1\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\n"
+                "ACC1\tYes\th1\t1500\t\n",
             )
             busco_custom = self.write_text_file(
                 tmpdir / "busco_custom.tsv",
@@ -950,7 +950,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             status_16s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\nACC1\tYes\th1\t1500\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",
@@ -1029,7 +1029,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             status_16s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\nACC1\tYes\th1\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\nACC1\tYes\th1\t1500\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",

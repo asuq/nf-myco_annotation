@@ -87,9 +87,9 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
                 tmpdir / "16s.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC1\tYes\th1\t1500\ttrue\t",
-                        "ACC2\tYes\th2\t1490\tfalse\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC1\tYes\th1\t1500\t",
+                        "ACC2\tYes\th2\t1490\t",
                     ]
                 )
                 + "\n",
@@ -187,8 +187,8 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             )
             sixteen_s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\n"
-                "ACC3\tpartial\th3\t900\tfalse\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\n"
+                "ACC3\tpartial\th3\t900\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",
@@ -260,8 +260,8 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             )
             sixteen_s = self.write_text_file(
                 tmpdir / "16s.tsv",
-                "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings\n"
-                "ACC4\tYes\th4\t1500\ttrue\t\n",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\n"
+                "ACC4\tYes\th4\t1500\t\n",
             )
             busco = self.write_text_file(
                 tmpdir / "busco.tsv",

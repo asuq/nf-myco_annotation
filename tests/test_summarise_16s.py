@@ -1,4 +1,4 @@
-"""Tests for Barrnap-derived 16S summarisation."""
+"""Tests for Barrnap-derived 16S summarisation and cohort concatenation."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def read_tsv_rows(path: Path) -> list[dict[str, str]]:
 
 
 class Summarise16STestCase(unittest.TestCase):
-    """Test status calling and best-hit selection."""
+    """Test Barrnap-only 16S status calling and best-hit selection."""
 
     def write_text_file(self, path: Path, content: str) -> Path:
         """Write a UTF-8 text file and return its path."""
@@ -103,15 +103,19 @@ class Summarise16STestCase(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(
+                tuple(status_row),
+                ("accession", "16S", "best_16S_header", "best_16S_length", "warnings"),
+            )
             self.assertEqual(status_row["16S"], "Yes")
             self.assertEqual(status_row["best_16S_header"], best_header)
             self.assertEqual(status_row["best_16S_length"], "141")
-            self.assertEqual(status_row["include_in_all_best_16S"], "true")
+            self.assertEqual(status_row["warnings"], "")
             best_fasta = (outdir / "best_16S.fna").read_text(encoding="utf-8")
             self.assertTrue(best_fasta.startswith(f">{best_header}\n"))
 
     def test_main_reports_partial_when_only_partial_hits_exist(self) -> None:
-        """Emit `partial` and keep the sample out of the intact cohort."""
+        """Emit `partial` when all 16S hits are partial."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             partial_header = self.barrnap_header("16S_rRNA", "KB890753.1", 102, 1222, "+")
@@ -146,278 +150,9 @@ class Summarise16STestCase(unittest.TestCase):
             status_row = read_status_row(outdir / "16S_status.tsv")
             self.assertEqual(status_row["16S"], "partial")
             self.assertEqual(status_row["best_16S_header"], partial_header)
-            self.assertEqual(status_row["include_in_all_best_16S"], "false")
-
-    def test_main_uses_atypical_warnings_to_exclude_from_cohort(self) -> None:
-        """Derive atypical exclusion from the design-spec Atypical_Warnings field."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 1500, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t1\t1500\t2.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(intact_header, "A" * 1500)],
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC2B",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                    "--atypical-warnings",
-                    "cell culture adapted",
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["16S"], "Yes")
-            self.assertEqual(status_row["best_16S_header"], intact_header)
-            self.assertEqual(status_row["include_in_all_best_16S"], "false")
-
-    def test_main_allows_unverified_source_exception_in_intact_cohort(self) -> None:
-        """Keep the locked unverified-source exception in the intact cohort."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 1500, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t1\t1500\t2.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(intact_header, "A" * 1500)],
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC2C",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                    "--atypical-warnings",
-                    "Unverified source organism",
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["include_in_all_best_16S"], "true")
-
-    def test_main_uses_metadata_lookup_for_intact_exception(self) -> None:
-        """Resolve the intact-cohort exception from CSV metadata when requested."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 1500, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t1\t1500\t2.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(intact_header, "A" * 1500)],
-            )
-            metadata = self.write_text_file(
-                tmpdir / "metadata.csv",
-                "Accession,Atypical_Warnings\nACC2D,unverified source organism\n",
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC2D",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                    "--metadata",
-                    str(metadata),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["include_in_all_best_16S"], "true")
-
-    def test_main_prefers_explicit_warnings_over_metadata_lookup(self) -> None:
-        """Honour explicit atypical warnings before the metadata lookup."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 1500, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t1\t1500\t2.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(intact_header, "A" * 1500)],
-            )
-            metadata = self.write_text_file(
-                tmpdir / "metadata.tsv",
-                "Accession\tAtypical_Warnings\nACC2E\tunverified source organism\n",
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC2E",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                    "--metadata",
-                    str(metadata),
-                    "--atypical-warnings",
-                    "cell culture adapted",
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["include_in_all_best_16S"], "false")
-
-    def test_main_falls_back_when_metadata_does_not_resolve_sample(self) -> None:
-        """Treat the sample as non-atypical when metadata lookup finds no row."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            intact_header = self.barrnap_header("16S_rRNA", "contig1", 0, 1500, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t1\t1500\t2.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(intact_header, "A" * 1500)],
-            )
-            metadata = self.write_text_file(
-                tmpdir / "metadata.tsv",
-                "Accession\tAtypical_Warnings\nOTHER\tcell culture adapted\n",
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC2F",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                    "--metadata",
-                    str(metadata),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["include_in_all_best_16S"], "true")
-
-    def test_main_returns_na_when_gff_has_16s_but_fasta_does_not(self) -> None:
-        """Gracefully degrade to NA when a 16S GFF hit is missing from FASTA."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "\n".join(
-                    [
-                        "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA",
-                        "contig1\tbarrnap\trRNA\t120\t220\t7.0\t+\t.\tName=23S_rRNA;product=23S ribosomal RNA",
-                    ]
-                )
-                + "\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(self.barrnap_header("23S_rRNA", "contig1", 119, 220, "+"), "C" * 101)],
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC3",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["16S"], "NA")
-            self.assertEqual(status_row["warnings"], "invalid_barrnap_output")
-            self.assertEqual(
-                (outdir / "best_16S.fna").read_text(encoding="utf-8"),
-                "",
-            )
-
-    def test_main_uses_gff_order_as_final_tie_break(self) -> None:
-        """Prefer the first GFF hit when score and length remain tied."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            first_header = self.barrnap_header("16S_rRNA", "contig1", 0, 100, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "\n".join(
-                    [
-                        "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA",
-                        "contig1\tbarrnap\trRNA\t200\t299\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA",
-                    ]
-                )
-                + "\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [
-                    (first_header, "A" * 100),
-                    (self.barrnap_header("16S_rRNA", "contig1", 199, 299, "+"), "C" * 100),
-                ],
-            )
-            outdir = tmpdir / "out"
-
-            summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC4",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                ]
-            )
-
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["best_16S_header"], first_header)
 
     def test_main_reports_no_when_no_16s_hits_exist(self) -> None:
-        """Emit `No` and no cohort inclusion when Barrnap found only non-16S rRNA."""
+        """Emit `No` when Barrnap found only non-16S rRNA."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             gff = self.write_text_file(
@@ -446,7 +181,39 @@ class Summarise16STestCase(unittest.TestCase):
             status_row = read_status_row(outdir / "16S_status.tsv")
             self.assertEqual(status_row["16S"], "No")
             self.assertEqual(status_row["best_16S_header"], "NA")
-            self.assertEqual(status_row["include_in_all_best_16S"], "false")
+
+    def test_main_returns_na_when_gff_and_fasta_do_not_match(self) -> None:
+        """Gracefully degrade to NA when Barrnap 16S GFF and FASTA differ."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            gff = self.write_text_file(
+                tmpdir / "rrna.gff",
+                "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
+            )
+            fasta = self.write_barrnap_fasta(
+                tmpdir / "rrna.fa",
+                [(self.barrnap_header("23S_rRNA", "contig1", 0, 100, "+"), "A" * 100)],
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = summarise_16s.main(
+                [
+                    "--accession",
+                    "ACC6",
+                    "--rrna-gff",
+                    str(gff),
+                    "--rrna-fasta",
+                    str(fasta),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            status_row = read_status_row(outdir / "16S_status.tsv")
+            self.assertEqual(status_row["16S"], "NA")
+            self.assertEqual(status_row["warnings"], "invalid_barrnap_output")
+            self.assertEqual((outdir / "best_16S.fna").read_text(encoding="utf-8"), "")
 
     def test_main_matches_mixed_rrna_order_by_key(self) -> None:
         """Match 16S records by Barrnap key even when mixed rRNA order differs."""
@@ -479,57 +246,6 @@ class Summarise16STestCase(unittest.TestCase):
             exit_code = summarise_16s.main(
                 [
                     "--accession",
-                    "ACC6",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["16S"], "Yes")
-            self.assertEqual(status_row["best_16S_header"], best_header)
-            best_fasta = (outdir / "best_16S.fna").read_text(encoding="utf-8")
-            self.assertTrue(best_fasta.startswith(f">{best_header}\n"))
-
-    def test_main_prefers_intact_hit_over_better_scoring_partial(self) -> None:
-        """Prefer any intact 16S hit over a partial hit with a better score."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            intact_header = self.barrnap_header("16S_rRNA", "contig1", 1999, 3500, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "\n".join(
-                    [
-                        (
-                            "contig1\tbarrnap\trRNA\t103\t1222\t1.0\t+\t.\t"
-                            "Name=16S_rRNA;product=16S ribosomal RNA (partial);"
-                            "note=aligned only 70 percent of the 16S ribosomal RNA"
-                        ),
-                        (
-                            "contig1\tbarrnap\trRNA\t2000\t3500\t9.0\t+\t.\t"
-                            "Name=16S_rRNA;product=16S ribosomal RNA"
-                        ),
-                    ]
-                )
-                + "\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [
-                    (self.barrnap_header("16S_rRNA", "contig1", 102, 1222, "+"), "A" * 1120),
-                    (intact_header, "C" * 1501),
-                ],
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
                     "ACC7",
                     "--rrna-gff",
                     str(gff),
@@ -543,165 +259,76 @@ class Summarise16STestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             status_row = read_status_row(outdir / "16S_status.tsv")
             self.assertEqual(status_row["16S"], "Yes")
-            self.assertEqual(status_row["best_16S_header"], intact_header)
-            self.assertEqual(status_row["include_in_all_best_16S"], "true")
+            self.assertEqual(status_row["best_16S_header"], best_header)
 
-    def test_main_accepts_negative_strand_barrnap_header(self) -> None:
-        """Parse a Barrnap negative-strand 16S header and match it to GFF."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            minus_header = self.barrnap_header("16S_rRNA", "contig2", 499, 1650, "-")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                (
-                    "contig2\tbarrnap\trRNA\t500\t1650\t2.0\t-\t.\t"
-                    "Name=16S_rRNA;product=16S ribosomal RNA\n"
-                ),
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(minus_header, "G" * 1151)],
-            )
-            outdir = tmpdir / "out"
 
-            exit_code = summarise_16s.main(
+class ConcatBest16STestCase(unittest.TestCase):
+    """Test cohort-level 16S concatenation and atypical inclusion rules."""
+
+    def write_text_file(self, path: Path, content: str) -> Path:
+        """Write a UTF-8 text file and return the path."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def write_status_and_fasta(
+        self,
+        base_dir: Path,
+        *,
+        accession: str,
+        status_value: str,
+        header: str,
+        length: int,
+        warnings: str = "",
+    ) -> tuple[Path, Path]:
+        """Write one per-sample 16S status file and best FASTA."""
+        status_path = self.write_text_file(
+            base_dir / "16S_status.tsv",
+            "\n".join(
                 [
-                    "--accession",
-                    "ACC8",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
+                    "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                    f"{accession}\t{status_value}\t{header}\t{length}\t{warnings}",
                 ]
             )
+            + "\n",
+        )
+        best_fasta = self.write_text_file(
+            base_dir / "best_16S.fna",
+            f">{header}\n" + "A" * length + "\n",
+        )
+        return status_path, best_fasta
 
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["16S"], "Yes")
-            self.assertEqual(status_row["best_16S_header"], minus_header)
+    def write_cohort_inputs(
+        self,
+        path: Path,
+        rows: list[tuple[str, Path, Path]],
+    ) -> Path:
+        """Write one cohort input manifest."""
+        lines = ["accession\tstatus_tsv\tbest_16s_fasta"]
+        for accession, status_path, best_fasta in rows:
+            lines.append(f"{accession}\t{status_path}\t{best_fasta}")
+        return self.write_text_file(path, "\n".join(lines) + "\n")
 
-    def test_main_returns_na_when_fasta_has_16s_but_gff_does_not(self) -> None:
-        """Gracefully degrade to NA when a 16S FASTA record is missing from GFF."""
+    def test_concat_best_16s_includes_non_atypical_intact_rows(self) -> None:
+        """Build the intact cohort from ordinary non-atypical samples."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t120\t220\t7.0\t+\t.\tName=23S_rRNA;product=23S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [(self.barrnap_header("16S_rRNA", "contig1", 0, 100, "+"), "A" * 100)],
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC9",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["16S"], "NA")
-            self.assertEqual(status_row["warnings"], "invalid_barrnap_output")
-            self.assertEqual((outdir / "best_16S.fna").read_text(encoding="utf-8"), "")
-
-    def test_main_returns_na_on_duplicate_barrnap_fasta_key(self) -> None:
-        """Gracefully degrade to NA when Barrnap FASTA contains duplicate keys."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-            duplicate_header = self.barrnap_header("16S_rRNA", "contig1", 0, 100, "+")
-            gff = self.write_text_file(
-                tmpdir / "rrna.gff",
-                "contig1\tbarrnap\trRNA\t1\t100\t5.0\t+\t.\tName=16S_rRNA;product=16S ribosomal RNA\n",
-            )
-            fasta = self.write_barrnap_fasta(
-                tmpdir / "rrna.fa",
-                [
-                    (duplicate_header, "A" * 100),
-                    (duplicate_header, "C" * 100),
-                ],
-            )
-            outdir = tmpdir / "out"
-
-            exit_code = summarise_16s.main(
-                [
-                    "--accession",
-                    "ACC10",
-                    "--rrna-gff",
-                    str(gff),
-                    "--rrna-fasta",
-                    str(fasta),
-                    "--outdir",
-                    str(outdir),
-                ]
-            )
-
-            self.assertEqual(exit_code, 0)
-            status_row = read_status_row(outdir / "16S_status.tsv")
-            self.assertEqual(status_row["16S"], "NA")
-            self.assertEqual(status_row["warnings"], "invalid_barrnap_output")
-            self.assertEqual((outdir / "best_16S.fna").read_text(encoding="utf-8"), "")
-
-    def test_concat_best_16s_excludes_partial_rows_from_intact_cohort(self) -> None:
-        """Build the intact cohort from complete, explicitly included rows only."""
-        with tempfile.TemporaryDirectory() as tmpdir_name:
-            tmpdir = Path(tmpdir_name)
-
             include_dir = tmpdir / "include"
-            exclude_dir = tmpdir / "partial"
             include_dir.mkdir()
-            exclude_dir.mkdir()
-
-            include_status = self.write_text_file(
-                include_dir / "16S_status.tsv",
-                "\n".join(
-                    [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_OK\tYes\thit_ok\t100\ttrue\t",
-                    ]
-                )
-                + "\n",
+            status_path, best_fasta = self.write_status_and_fasta(
+                include_dir,
+                accession="ACC_OK",
+                status_value="Yes",
+                header="hit_ok",
+                length=100,
             )
-            include_best = self.write_text_file(
-                include_dir / "best_16S.fna",
-                ">hit_ok\n" + "A" * 100 + "\n",
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_OK\tNA\n",
             )
-
-            exclude_status = self.write_text_file(
-                exclude_dir / "16S_status.tsv",
-                "\n".join(
-                    [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_PART\tpartial\thit_partial\t90\tfalse\t",
-                    ]
-                )
-                + "\n",
-            )
-            exclude_best = self.write_text_file(
-                exclude_dir / "best_16S.fna",
-                ">hit_partial\n" + "C" * 90 + "\n",
-            )
-
-            cohort_inputs = self.write_text_file(
+            cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                "\n".join(
-                    [
-                        "accession\tstatus_tsv\tbest_16s_fasta",
-                        f"ACC_OK\t{include_status}\t{include_best}",
-                        f"ACC_PART\t{exclude_status}\t{exclude_best}",
-                    ]
-                )
-                + "\n",
+                [("ACC_OK", status_path, best_fasta)],
             )
             output_fasta = tmpdir / "all_best_16S.fna"
             output_manifest = tmpdir / "all_best_16S_manifest.tsv"
@@ -710,6 +337,8 @@ class Summarise16STestCase(unittest.TestCase):
                 [
                     "--inputs",
                     str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
                     "--output-fasta",
                     str(output_fasta),
                     "--output-manifest",
@@ -718,115 +347,157 @@ class Summarise16STestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(
-                output_fasta.read_text(encoding="utf-8"),
-                ">hit_ok\n" + "A" * 100 + "\n",
-            )
+            self.assertEqual(output_fasta.read_text(encoding="utf-8"), ">hit_ok\n" + "A" * 100 + "\n")
             manifest_rows = read_tsv_rows(output_manifest)
-            self.assertEqual(len(manifest_rows), 1)
             self.assertEqual(manifest_rows[0]["accession"], "ACC_OK")
+            self.assertEqual(manifest_rows[0]["include_in_all_best_16S"], "true")
 
-    def test_concat_best_16s_builds_partial_cohort_including_atypical_samples(self) -> None:
-        """Build the partial cohort from all partial rows, including atypical ones."""
+    def test_concat_best_16s_allows_unverified_source_exception(self) -> None:
+        """Keep the locked unverified-source exception in the intact cohort."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
-
-            intact_dir = tmpdir / "intact"
-            partial_dir = tmpdir / "partial"
-            atypical_partial_dir = tmpdir / "atypical_partial"
-            intact_dir.mkdir()
-            partial_dir.mkdir()
-            atypical_partial_dir.mkdir()
-
-            intact_status = self.write_text_file(
-                intact_dir / "16S_status.tsv",
-                "\n".join(
-                    [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_OK\tYes\thit_ok\t100\ttrue\t",
-                    ]
-                )
-                + "\n",
+            sample_dir = tmpdir / "sample"
+            sample_dir.mkdir()
+            status_path, best_fasta = self.write_status_and_fasta(
+                sample_dir,
+                accession="ACC_EXCEPTION",
+                status_value="Yes",
+                header="hit_exception",
+                length=90,
             )
-            intact_best = self.write_text_file(
-                intact_dir / "best_16S.fna",
-                ">hit_ok\n" + "A" * 100 + "\n",
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_EXCEPTION\tUnverified source organism\n",
             )
-
-            partial_status = self.write_text_file(
-                partial_dir / "16S_status.tsv",
-                "\n".join(
-                    [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_PART\tpartial\thit_partial\t90\tfalse\t",
-                    ]
-                )
-                + "\n",
-            )
-            partial_best = self.write_text_file(
-                partial_dir / "best_16S.fna",
-                ">hit_partial\n" + "C" * 90 + "\n",
-            )
-
-            atypical_partial_status = self.write_text_file(
-                atypical_partial_dir / "16S_status.tsv",
-                "\n".join(
-                    [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_ATYP_PART\tpartial\thit_atyp_partial\t80\tfalse\tatypical",
-                    ]
-                )
-                + "\n",
-            )
-            atypical_partial_best = self.write_text_file(
-                atypical_partial_dir / "best_16S.fna",
-                ">hit_atyp_partial\n" + "G" * 80 + "\n",
-            )
-
-            cohort_inputs = self.write_text_file(
+            cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                "\n".join(
-                    [
-                        "accession\tstatus_tsv\tbest_16s_fasta",
-                        f"ACC_OK\t{intact_status}\t{intact_best}",
-                        f"ACC_PART\t{partial_status}\t{partial_best}",
-                        (
-                            "ACC_ATYP_PART\t"
-                            f"{atypical_partial_status}\t{atypical_partial_best}"
-                        ),
-                    ]
-                )
-                + "\n",
+                [("ACC_EXCEPTION", status_path, best_fasta)],
             )
-            output_fasta = tmpdir / "all_partial_16S.fna"
-            output_manifest = tmpdir / "all_partial_16S_manifest.tsv"
 
             exit_code = concat_best_16s.main(
                 [
                     "--inputs",
                     str(cohort_inputs),
-                    "--cohort-kind",
-                    "partial",
+                    "--metadata",
+                    str(metadata),
                     "--output-fasta",
-                    str(output_fasta),
+                    str(tmpdir / "all_best_16S.fna"),
                     "--output-manifest",
-                    str(output_manifest),
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
                 ]
             )
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(
-                output_fasta.read_text(encoding="utf-8"),
-                ">hit_partial\n"
-                + "C" * 90
-                + "\n>hit_atyp_partial\n"
-                + "G" * 80
+            manifest_rows = read_tsv_rows(tmpdir / "all_best_16S_manifest.tsv")
+            self.assertEqual([row["accession"] for row in manifest_rows], ["ACC_EXCEPTION"])
+
+    def test_concat_best_16s_excludes_other_atypical_intact_rows(self) -> None:
+        """Exclude intact 16S rows when the atypical reason is not the exception."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            sample_dir = tmpdir / "sample"
+            sample_dir.mkdir()
+            status_path, best_fasta = self.write_status_and_fasta(
+                sample_dir,
+                accession="ACC_ATYP",
+                status_value="Yes",
+                header="hit_atyp",
+                length=80,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_ATYP\tcell culture adapted\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [("ACC_ATYP", status_path, best_fasta)],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual((tmpdir / "all_best_16S.fna").read_text(encoding="utf-8"), "")
+            self.assertEqual(read_tsv_rows(tmpdir / "all_best_16S_manifest.tsv"), [])
+
+    def test_concat_best_16s_builds_partial_cohort_including_atypical_samples(self) -> None:
+        """Build the partial cohort from all partial rows, including atypical ones."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            partial_dir = tmpdir / "partial"
+            atypical_partial_dir = tmpdir / "atypical_partial"
+            partial_dir.mkdir()
+            atypical_partial_dir.mkdir()
+
+            partial_status, partial_best = self.write_status_and_fasta(
+                partial_dir,
+                accession="ACC_PART",
+                status_value="partial",
+                header="hit_partial",
+                length=90,
+            )
+            atypical_partial_status, atypical_partial_best = self.write_status_and_fasta(
+                atypical_partial_dir,
+                accession="ACC_ATYP_PART",
+                status_value="partial",
+                header="hit_atyp_partial",
+                length=80,
+                warnings="atypical",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tAtypical_Warnings",
+                        "ACC_PART\tNA",
+                        "ACC_ATYP_PART\tcell culture adapted",
+                    ]
+                )
                 + "\n",
             )
-            manifest_rows = read_tsv_rows(output_manifest)
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [
+                    ("ACC_PART", partial_status, partial_best),
+                    ("ACC_ATYP_PART", atypical_partial_status, atypical_partial_best),
+                ],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--cohort-kind",
+                    "partial",
+                    "--output-fasta",
+                    str(tmpdir / "all_partial_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_partial_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            manifest_rows = read_tsv_rows(tmpdir / "all_partial_16S_manifest.tsv")
             self.assertEqual(
                 [row["accession"] for row in manifest_rows],
                 ["ACC_PART", "ACC_ATYP_PART"],
+            )
+            self.assertTrue(
+                (tmpdir / "all_partial_16S.fna").read_text(encoding="utf-8").startswith(
+                    ">hit_partial\n"
+                )
             )
 
     def test_concat_best_16s_fails_when_included_fasta_is_empty(self) -> None:
@@ -837,28 +508,28 @@ class Summarise16STestCase(unittest.TestCase):
                 tmpdir / "16S_status.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC_BAD\tYes\thit_bad\t100\ttrue\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC_BAD\tYes\thit_bad\t100\t",
                     ]
                 )
                 + "\n",
             )
             best_fasta = self.write_text_file(tmpdir / "best_16S.fna", "")
-            cohort_inputs = self.write_text_file(
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_BAD\tNA\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                "\n".join(
-                    [
-                        "accession\tstatus_tsv\tbest_16s_fasta",
-                        f"ACC_BAD\t{status_path}\t{best_fasta}",
-                    ]
-                )
-                + "\n",
+                [("ACC_BAD", status_path, best_fasta)],
             )
 
             exit_code = concat_best_16s.main(
                 [
                     "--inputs",
                     str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
                     "--output-fasta",
                     str(tmpdir / "all_best_16S.fna"),
                     "--output-manifest",

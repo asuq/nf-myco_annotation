@@ -20,12 +20,8 @@ STATUS_COLUMNS = (
     "16S",
     "best_16S_header",
     "best_16S_length",
-    "include_in_all_best_16S",
     "warnings",
 )
-TRUE_TOKENS = {"true", "t", "yes", "y", "1"}
-FALSE_TOKENS = {"false", "f", "no", "n", "0"}
-MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 SIXTEEN_S_NAME = "16S_rRNA"
 FASTA_HEADER_RE = re.compile(
     r"^(?P<rrna_name>[^:]+)::(?P<contig>.+):(?P<start0>\d+)-(?P<end0>\d+)\((?P<strand>[+-])\)$"
@@ -99,176 +95,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Directory for 16S summary outputs.",
     )
-    parser.add_argument(
-        "--metadata",
-        type=Path,
-        help="Optional metadata table used to resolve Atypical_Warnings for the sample.",
-    )
-    parser.add_argument(
-        "--is-atypical",
-        default="false",
-        help="Whether the sample is atypical and should be excluded from cohort 16S.",
-    )
-    parser.add_argument(
-        "--atypical-warnings",
-        help=(
-            "Optional metadata Atypical_Warnings value. When provided, it overrides "
-            "--is-atypical using the design-spec atypical rule."
-        ),
-    )
     return parser.parse_args(argv)
 
 
 def configure_logging() -> None:
     """Configure process logging."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-
-def normalise_boolean(value: str) -> bool:
-    """Parse a boolean-like CLI argument."""
-    token = value.strip().lower()
-    if token in TRUE_TOKENS:
-        return True
-    if token in FALSE_TOKENS:
-        return False
-    raise ValueError(f"Invalid boolean value: {value!r}")
-
-
-def is_missing(value: str | None) -> bool:
-    """Return True when a metadata-like scalar should be treated as missing."""
-    if value is None:
-        return True
-    return value.strip().lower() in MISSING_VALUE_TOKENS
-
-
-def normalise_key(value: str) -> str:
-    """Normalise one header-like token for case-insensitive matching."""
-    return "".join(character for character in value.casefold() if character.isalnum())
-
-
-def sniff_delimiter(path: Path) -> str:
-    """Detect whether a metadata table is CSV or TSV."""
-    sample = path.read_text(encoding="utf-8").splitlines()
-    if not sample:
-        raise ValueError(f"Metadata table is empty: {path}")
-    sample_text = "\n".join(sample[:5])
-    try:
-        return csv.Sniffer().sniff(sample_text, delimiters=",\t").delimiter
-    except csv.Error:
-        if "\t" in sample_text:
-            return "\t"
-        if "," in sample_text:
-            return ","
-        raise ValueError(f"Could not detect delimiter for metadata table: {path}")
-
-
-def read_table(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    """Read a CSV or TSV into header and row dictionaries."""
-    if not path.is_file():
-        raise ValueError(f"Missing metadata table: {path}")
-
-    delimiter = sniff_delimiter(path)
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.reader(handle, delimiter=delimiter)
-        rows = [row for row in reader if any(cell.strip() for cell in row)]
-
-    if not rows:
-        raise ValueError(f"Metadata table is empty: {path}")
-
-    header = [column.strip() for column in rows[0]]
-    if any(not column for column in header):
-        raise ValueError(f"Metadata table has an empty header name: {path}")
-    if len(set(header)) != len(header):
-        raise ValueError(f"Metadata table contains duplicate headers: {path}")
-
-    records: list[dict[str, str]] = []
-    for line_number, values in enumerate(rows[1:], start=2):
-        if len(values) != len(header):
-            raise ValueError(
-                f"Metadata table {path} has {len(values)} columns on line {line_number}, "
-                f"expected {len(header)}."
-            )
-        records.append(
-            {column: value.strip() for column, value in zip(header, values, strict=True)}
-        )
-    return header, records
-
-
-def detect_key_column(header: Sequence[str], aliases: Sequence[str]) -> str:
-    """Detect the accession column in a metadata-like table."""
-    matching_columns = [
-        column
-        for column in header
-        if normalise_key(column) in {normalise_key(alias) for alias in aliases}
-    ]
-    if len(matching_columns) > 1:
-        raise ValueError(f"Metadata table contains multiple accession columns: {matching_columns}")
-    if not matching_columns:
-        raise ValueError(
-            "Metadata table is missing a required accession column. "
-            f"Expected one of: {aliases}"
-        )
-    return matching_columns[0]
-
-
-def find_column_by_normalised_name(
-    header: Sequence[str],
-    column_name: str,
-) -> str | None:
-    """Find one column in a header by case-insensitive normalised name."""
-    expected = normalise_key(column_name)
-    matches = [column for column in header if normalise_key(column) == expected]
-    if len(matches) > 1:
-        raise ValueError(f"Metadata table contains duplicate {column_name!r} columns.")
-    if not matches:
-        return None
-    return matches[0]
-
-
-def classify_atypical_warnings(atypical_warnings: str) -> tuple[bool, bool]:
-    """Classify atypical status and the locked unverified-source exception."""
-    if is_missing(atypical_warnings):
-        return False, False
-    lowered = atypical_warnings.casefold()
-    return True, "unverified source organism" in lowered
-
-
-def lookup_metadata_atypical_warnings(
-    metadata_path: Path,
-    accession: str,
-) -> str | None:
-    """Return one accession's raw Atypical_Warnings value from metadata."""
-    header, rows = read_table(metadata_path)
-    accession_column = detect_key_column(header, ("Accession", "accession"))
-    atypical_column = find_column_by_normalised_name(header, "Atypical_Warnings")
-    if atypical_column is None:
-        return None
-
-    matched_warning: str | None = None
-    for row in rows:
-        if row.get(accession_column, "").strip() == accession:
-            if matched_warning is not None:
-                raise ValueError(
-                    f"Metadata table contains duplicate accession {accession!r}."
-                )
-            matched_warning = row.get(atypical_column, "")
-    return matched_warning
-
-
-def resolve_atypical_flags(
-    accession: str,
-    is_atypical_value: str,
-    atypical_warnings: str | None,
-    metadata_path: Path | None,
-) -> tuple[bool, bool]:
-    """Resolve atypical status with explicit-warning, metadata, then boolean precedence."""
-    if atypical_warnings is not None:
-        return classify_atypical_warnings(atypical_warnings)
-    if metadata_path is not None:
-        metadata_warning = lookup_metadata_atypical_warnings(metadata_path, accession)
-        if metadata_warning is not None:
-            return classify_atypical_warnings(metadata_warning)
-    return normalise_boolean(is_atypical_value), False
 
 
 def build_match_key(
@@ -539,20 +371,6 @@ def write_status(path: Path, row: dict[str, str]) -> None:
         writer.writerow(row)
 
 
-def should_include_in_all_best_16s(
-    status: str,
-    best_hit: RrnaHit | None,
-    is_atypical: bool,
-    is_atypical_exception: bool,
-) -> bool:
-    """Return True only for intact cohort members allowed by the atypical rule."""
-    return (
-        status == "Yes"
-        and best_hit is not None
-        and (not is_atypical or is_atypical_exception)
-    )
-
-
 def build_invalid_output_row(accession: str, warnings: Sequence[str]) -> dict[str, str]:
     """Build the soft-fail output row for invalid Barrnap outputs."""
     return {
@@ -560,7 +378,6 @@ def build_invalid_output_row(accession: str, warnings: Sequence[str]) -> dict[st
         "16S": "NA",
         "best_16S_header": "NA",
         "best_16S_length": "NA",
-        "include_in_all_best_16S": "false",
         "warnings": ";".join(warnings),
     }
 
@@ -570,8 +387,6 @@ def summarise_hits(
     rrna_gff: Path,
     rrna_fasta: Path,
     outdir: Path,
-    is_atypical: bool,
-    is_atypical_exception: bool,
 ) -> None:
     """Summarise one sample's Barrnap outputs into 16S status files."""
     warnings: list[str] = []
@@ -602,12 +417,6 @@ def summarise_hits(
     else:
         status = "partial"
 
-    include_in_all = should_include_in_all_best_16s(
-        status=status,
-        best_hit=best_hit,
-        is_atypical=is_atypical,
-        is_atypical_exception=is_atypical_exception,
-    )
     row = {
         "accession": accession,
         "16S": status,
@@ -615,7 +424,6 @@ def summarise_hits(
         "best_16S_length": (
             str(len(best_hit.record.sequence)) if best_hit is not None else "NA"
         ),
-        "include_in_all_best_16S": "true" if include_in_all else "false",
         "warnings": "",
     }
 
@@ -627,19 +435,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the 16S summarisation CLI."""
     args = parse_args(argv)
     configure_logging()
-    is_atypical, is_atypical_exception = resolve_atypical_flags(
-        accession=args.accession,
-        is_atypical_value=args.is_atypical,
-        atypical_warnings=args.atypical_warnings,
-        metadata_path=args.metadata,
-    )
     summarise_hits(
         accession=args.accession,
         rrna_gff=args.rrna_gff,
         rrna_fasta=args.rrna_fasta,
         outdir=args.outdir,
-        is_atypical=is_atypical,
-        is_atypical_exception=is_atypical_exception,
     )
     LOGGER.info("Wrote 16S summary for %s.", args.accession)
     return 0

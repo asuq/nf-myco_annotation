@@ -87,9 +87,9 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 tmpdir / "16s.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC1\tYes\th1\t1500\ttrue\t",
-                        "ACC2\tNo\tNA\tNA\tfalse\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC1\tYes\th1\t1500\t",
+                        "ACC2\tNo\tNA\tNA\t",
                     ]
                 )
                 + "\n",
@@ -300,9 +300,9 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 tmpdir / "16s.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC2\tpartial\th2\t1200\tfalse\t",
-                        "ACC1\tYes\th1\t1500\ttrue\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC2\tpartial\th2\t1200\t",
+                        "ACC1\tYes\th1\t1500\t",
                     ]
                 )
                 + "\n",
@@ -411,9 +411,9 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 tmpdir / "16s.tsv",
                 "\n".join(
                     [
-                        "accession\t16S\tbest_16S_header\tbest_16S_length\tinclude_in_all_best_16S\twarnings",
-                        "ACC1\tYes\th1\t1500\ttrue\t",
-                        "ACC2\tYes\th2\t1490\ttrue\t",
+                        "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings",
+                        "ACC1\tYes\th1\t1500\t",
+                        "ACC2\tYes\th2\t1490\t",
                     ]
                 )
                 + "\n",
