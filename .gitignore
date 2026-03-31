@@ -58,6 +58,7 @@ temp/
 *.tmp
 *.swp
 *.bak
+.untracked/
 
 # Local real-data smoke tests
 assets/testdata/local/
