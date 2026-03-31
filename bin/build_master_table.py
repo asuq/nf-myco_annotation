@@ -23,6 +23,12 @@ VALIDATED_SAMPLE_REQUIRED_COLUMNS = (
     "genome_fasta",
     "internal_id",
 )
+VALIDATED_SAMPLE_SUPPLEMENTAL_EXCLUSIONS = (
+    "accession",
+    "is_new",
+    "genome_fasta",
+    "internal_id",
+)
 TAXONOMY_COLUMNS = tuple(master_table_contract.TAXONOMY_COLUMNS)
 CHECKM2_COLUMNS = tuple(master_table_contract.CHECKM2_COLUMNS) + ("Gcode", "Low_quality")
 CODETTA_COLUMNS = tuple(master_table_contract.CODETTA_COLUMNS)
@@ -312,7 +318,7 @@ def build_supplemental_metadata_map(sample_row: dict[str, str]) -> dict[str, str
     """Map validated sample extras onto normalised metadata-style names."""
     supplemental: dict[str, str] = {}
     for column, value in sample_row.items():
-        if column in VALIDATED_SAMPLE_REQUIRED_COLUMNS:
+        if column in VALIDATED_SAMPLE_SUPPLEMENTAL_EXCLUSIONS:
             continue
         if not value or value == "NA":
             continue

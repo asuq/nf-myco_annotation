@@ -524,6 +524,47 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_rows[0]["BUSCO_bacillota_odb12"], "NA")
             self.assertEqual(master_rows[0]["CRISPRS"], "NA")
 
+    def test_main_preserves_new_sample_assembly_level_in_metadata_block(self) -> None:
+        """Map manifest assembly_level into Assembly_Level when metadata row is absent."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\torganism_name\tinternal_id",
+                        "ACC_NEW\ttrue\tComplete Genome\t/path/new.fna\tNovel isolate\tnew_id",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tAtypical_Warnings\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(APPEND_COLUMNS_ASSET),
+                    "--output",
+                    str(master_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, master_rows = read_tsv_rows(master_output)
+
+            self.assertEqual(master_rows[0]["Accession"], "ACC_NEW")
+            self.assertEqual(master_rows[0]["Organism_Name"], "Novel isolate")
+            self.assertEqual(master_rows[0]["Assembly_Level"], "Complete Genome")
+            self.assertEqual(master_rows[0]["Atypical_Warnings"], "NA")
+
     def test_main_rejects_duplicate_accessions_in_validated_manifest(self) -> None:
         """Fail when validated_samples.tsv contains duplicate accession rows."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
