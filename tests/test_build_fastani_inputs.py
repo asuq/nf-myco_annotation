@@ -303,6 +303,73 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             self.assertEqual(exclusion_rows[0]["ani_included"], "true")
             self.assertEqual(exclusion_rows[0]["ani_exclusion_reason"], "")
 
+    def test_excludes_existing_sample_with_missing_assembly_level(self) -> None:
+        """Exclude an existing genome when metadata does not provide Assembly_Level."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            staged = self.write_text_file(tmpdir / "ACC5.fasta", ">a\nACGT\n")
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\n"
+                f"ACC5\tfalse\tNA\t{staged}\tACC5\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\n"
+                "ACC5\tGenome Five\tNA\t50000\t2\t800000\tNA\n",
+            )
+            staged_manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC5\tACC5\tACC5.fasta\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tGcode\tLow_quality\n"
+                "ACC5\tNA\t95\tNA\t1\t11\tfalse\n",
+            )
+            sixteen_s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\n"
+                "ACC5\tYes\th5\t1500\t\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\n"
+                "ACC5\tbacillota_odb12\tC:99.0%[S:99.0%,D:0.0%],F:0.0%,M:1.0%,n:200\tdone\t\n",
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = build_fastani_inputs.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--staged-manifest",
+                    str(staged_manifest),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(sixteen_s),
+                    "--busco",
+                    str(busco),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(read_tsv(outdir / "ani_metadata.tsv"), [])
+            exclusion_rows = read_tsv(outdir / "ani_exclusions.tsv")
+            self.assertEqual(exclusion_rows[0]["ani_included"], "false")
+            self.assertEqual(
+                exclusion_rows[0]["ani_exclusion_reason"],
+                "missing_assembly_level",
+            )
+            self.assertEqual(list((outdir / "fastani_inputs").iterdir()), [])
+
     def test_falls_back_to_copy_when_hardlinks_are_unavailable(self) -> None:
         """Copy the staged FASTA when the filesystem rejects hard links."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

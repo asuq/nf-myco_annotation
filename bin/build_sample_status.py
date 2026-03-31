@@ -428,6 +428,7 @@ def derive_ani_decision(
     gcode_value: str,
     low_quality_value: str,
     sixteen_s_value: str,
+    assembly_level_value: str,
     metadata_row: dict[str, str],
     assembly_metrics: EffectiveAssemblyMetrics,
     ani_index: dict[str, dict[str, str]],
@@ -460,6 +461,8 @@ def derive_ani_decision(
 
     if table_helpers.is_missing(primary_busco_value):
         exclusion_reasons.append("missing_primary_busco")
+    if table_helpers.is_missing(assembly_level_value):
+        exclusion_reasons.append("missing_assembly_level")
     if table_helpers.is_missing(assembly_metrics.n50):
         exclusion_reasons.append("missing_n50")
     if table_helpers.is_missing(assembly_metrics.scaffolds):
@@ -743,6 +746,7 @@ def build_status_row(
     primary_busco_value = "NA"
     if primary_busco_column is not None:
         primary_busco_value = busco_values.get(primary_busco_column, "NA")
+    assembly_level_value = table_helpers.choose_assembly_level(sample_row, metadata_row)
     assembly_metrics = EffectiveAssemblyMetrics(
         n50=table_helpers.resolve_assembly_metric_value(
             metadata_row,
@@ -766,6 +770,7 @@ def build_status_row(
         gcode_value=gcode_value,
         low_quality_value=low_quality_value,
         sixteen_s_value=sixteen_s_value,
+        assembly_level_value=assembly_level_value,
         metadata_row=metadata_row,
         assembly_metrics=assembly_metrics,
         ani_index=ani_index,

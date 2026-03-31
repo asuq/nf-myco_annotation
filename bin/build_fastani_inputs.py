@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Sequence
 
 from build_master_table import (
+    choose_assembly_level,
     detect_key_column,
     find_column_by_normalised_name,
     is_missing,
@@ -222,14 +223,6 @@ def detect_atypical_flags(metadata_row: dict[str, str]) -> tuple[bool, bool]:
         return False, False
     lowered = atypical_value.casefold()
     return True, "unverified source organism" in lowered
-
-
-def choose_assembly_level(sample_row: dict[str, str], metadata_row: dict[str, str]) -> str:
-    """Choose the ANI assembly level, using the sample manifest for new genomes."""
-    if sample_row.get("is_new") == "true":
-        value = sample_row.get("assembly_level", MISSING_VALUE)
-        return MISSING_VALUE if is_missing(value) else value
-    return detect_metadata_value(metadata_row, "Assembly_Level")
 
 
 def choose_checkm2_fields(sample_row: dict[str, str]) -> tuple[str, str, str]:

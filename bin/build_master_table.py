@@ -523,6 +523,14 @@ def detect_metadata_value(metadata_row: dict[str, str], column_name: str) -> str
     return "NA" if is_missing(value) else value
 
 
+def choose_assembly_level(sample_row: dict[str, str], metadata_row: dict[str, str]) -> str:
+    """Choose the ANI assembly level, using the sample manifest for new genomes."""
+    if sample_row.get("is_new") == "true":
+        value = sample_row.get("assembly_level", "NA")
+        return "NA" if is_missing(value) else value
+    return detect_metadata_value(metadata_row, "Assembly_Level")
+
+
 def build_master_row(
     sample_row: dict[str, str],
     metadata_header: Sequence[str],

@@ -127,8 +127,8 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 tmpdir / "metadata.tsv",
                 "\n".join(
                     [
-                        "Accession\tTax_ID\tOrganism_Name\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
-                        "ACC1\t123\tKnown one\tNA\tNA\tNA\tNA",
+                        "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                        "ACC1\t123\tKnown one\tScaffold\tNA\tNA\tNA\tNA",
                     ]
                 )
                 + "\n",
@@ -637,9 +637,9 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 tmpdir / "metadata.tsv",
                 "\n".join(
                     [
-                        "Accession\tTax_ID\tOrganism_Name\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
-                        "ACC1\t123\tOne\tNA\tNA\tNA\tunverified source organism",
-                        "ACC2\t456\tTwo\tNA\tNA\tNA\tmultiple source names",
+                        "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                        "ACC1\t123\tOne\tScaffold\tNA\tNA\tNA\tunverified source organism",
+                        "ACC2\t456\tTwo\tContig\tNA\tNA\tNA\tmultiple source names",
                     ]
                 )
                 + "\n",
@@ -857,8 +857,8 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             metadata = self.write_text_file(
                 tmpdir / "metadata.tsv",
-                "Accession\tTax_ID\tOrganism_Name\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\n"
-                "ACC1\t123\tKnown one\t50000\t2\t800000\tNA\n",
+                "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\n"
+                "ACC1\t123\tKnown one\tScaffold\t50000\t2\t800000\tNA\n",
             )
             checkm2 = self.write_text_file(
                 tmpdir / "checkm2.tsv",
@@ -1070,6 +1070,79 @@ class BuildSampleStatusTestCase(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             self.assertFalse(output.exists())
+
+    def test_main_excludes_missing_assembly_level_without_hard_fail(self) -> None:
+        """Treat missing ANI assembly level as an exclusion, not a missing-ANI crash."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\nACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status_rows = [
+                self.make_initial_status_row(
+                    accession="ACC1",
+                    internal_id="id_1",
+                    is_new="false",
+                )
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [row for row in initial_status_rows[0]],
+                initial_status_rows,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings\n"
+                "ACC1\t123\tOne\tNA\t50000\t2\t800000\tNA\n",
+            )
+            checkm2 = self.write_text_file(
+                tmpdir / "checkm2.tsv",
+                "accession\tCompleteness_gcode4\tCompleteness_gcode11\tContamination_gcode4\tContamination_gcode11\tCoding_Density_gcode4\tCoding_Density_gcode11\tAverage_Gene_Length_gcode4\tAverage_Gene_Length_gcode11\tTotal_Coding_Sequences_gcode4\tTotal_Coding_Sequences_gcode11\tGcode\tLow_quality\tcheckm2_status\twarnings\nACC1\t80\t95\t3\t1\t0.8\t0.95\t800\t950\t700\t920\t11\tfalse\tdone\t\n",
+            )
+            status_16s = self.write_text_file(
+                tmpdir / "16s.tsv",
+                "accession\t16S\tbest_16S_header\tbest_16S_length\twarnings\nACC1\tYes\th1\t1500\t\n",
+            )
+            busco = self.write_text_file(
+                tmpdir / "busco.tsv",
+                "accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings\nACC1\tbacillota_odb12\tC:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t\n",
+            )
+            ani = self.write_text_file(
+                tmpdir / "ani.tsv",
+                "Accession\tCluster_ID\tIs_Representative\tANI_to_Representative\tScore\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--checkm2",
+                    str(checkm2),
+                    "--16s-status",
+                    str(status_16s),
+                    "--busco",
+                    str(busco),
+                    "--ani",
+                    str(ani),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--columns",
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _, rows = read_tsv_rows(output)
+            self.assertEqual(rows[0]["ani_included"], "false")
+            self.assertEqual(rows[0]["ani_exclusion_reason"], "missing_assembly_level")
 
 
 if __name__ == "__main__":
