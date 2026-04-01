@@ -44,8 +44,8 @@ process BUILD_COHORT_16S {
         fi
         printf '%s\t%s\t%s\n' \
             "\${accession}" \
-            "${PWD}/\${status_table}" \
-            "${PWD}/\${best_fasta}" \
+            "\$(pwd)/\${status_table}" \
+            "\$(pwd)/\${best_fasta}" \
             >> cohort_inputs.tsv
     done
 

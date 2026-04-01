@@ -187,6 +187,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         )
         self.assertIn("withName: CLUSTER_ANI {\n        container = params.python_container", config_text)
         self.assertIn("withName: SELECT_ANI_REPRESENTATIVES {\n        container = params.python_container", config_text)
+        self.assertIn("withName: SUMMARISE_16S {\n        container = params.python_container", config_text)
         self.assertIn("withName: WRITE_SAMPLE_STATUS {\n        container = params.python_container", config_text)
 
     def test_seqtk_helper_processes_are_pinned_explicitly(self) -> None:

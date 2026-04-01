@@ -131,18 +131,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("&& !new File(datasetPath).exists()", workflow_text)
         self.assertIn("datasetPath = stubDatasetFallback", workflow_text)
 
-    def test_barrnap_publishes_raw_and_16s_outputs(self) -> None:
-        """Require Barrnap to emit raw outputs and the per-sample 16S summaries."""
+    def test_barrnap_publishes_only_raw_outputs(self) -> None:
+        """Require Barrnap to stay tool-only and publish just its raw outputs."""
         module_text = (MODULES_DIR / "barrnap.nf").read_text(encoding="utf-8")
 
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/barrnap" }', module_text)
+        self.assertNotIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
+        self.assertNotIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
+        self.assertNotIn("emit: sixteen_s_summaries", module_text)
+        self.assertNotIn("summarise_16s.py", module_text)
+        self.assertNotIn('python3 "\\${summarise_script}"', module_text)
+
+    def test_summarise_16s_publishes_per_sample_outputs(self) -> None:
+        """Require the Python helper module to publish the 16S summary artefacts."""
+        module_text = (MODULES_DIR / "summarise_16s.nf").read_text(encoding="utf-8")
+
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
         self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
+        self.assertIn("tuple val(meta), path(rrna_gff), path(rrna_fasta), path(barrnap_log)", module_text)
         self.assertIn(
-            'tuple val(meta), path("${meta.internal_id}_best_16S.fna"), path("${meta.internal_id}_16S_status.tsv"), emit: sixteen_s_summaries',
+            'tuple val(meta), path("${meta.internal_id}_best_16S.fna"), path("${meta.internal_id}_16S_status.tsv"), emit: summaries',
             module_text,
         )
-        self.assertIn('python3 "\\${summarise_script}"', module_text)
+        self.assertIn('summarise_16s.py \\', module_text)
         self.assertIn('cp best_16S.fna "${meta.internal_id}_best_16S.fna"', module_text)
         self.assertIn('cp 16S_status.tsv "${meta.internal_id}_16S_status.tsv"', module_text)
 
@@ -159,6 +170,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('--metadata "${metadata}"', module_text)
         self.assertIn("--cohort-kind intact", module_text)
         self.assertIn("--cohort-kind partial", module_text)
+        self.assertIn('"\\$(pwd)/\\${status_table}"', module_text)
+        self.assertIn('"\\$(pwd)/\\${best_fasta}"', module_text)
+        self.assertNotIn('"${PWD}/\\${status_table}"', module_text)
+        self.assertNotIn('"${PWD}/\\${best_fasta}"', module_text)
         self.assertIn("path 'all_best_16S.fna', emit: best_fasta", module_text)
         self.assertIn("path 'all_best_16S_manifest.tsv', emit: best_manifest", module_text)
         self.assertIn("path 'all_partial_16S.fna', emit: partial_fasta", module_text)
@@ -182,7 +197,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn("SUMMARISE_16S(", workflow_text)
         self.assertNotIn("collectFile(name: 'all_best_16S.fna')", workflow_text)
         self.assertIn("BUILD_COHORT_16S(", workflow_text)
-        self.assertIn("sixteen_s_summaries = BARRNAP.out.sixteen_s_summaries", per_sample_qc_text)
+        self.assertIn("include { SUMMARISE_16S }", per_sample_qc_text)
+        self.assertIn("SUMMARISE_16S(BARRNAP.out.results)", per_sample_qc_text)
+        self.assertIn("sixteen_s_summaries = SUMMARISE_16S.out.summaries", per_sample_qc_text)
         self.assertIn(
             'metadata = Channel.value(file(params.metadata, checkIfExists: true))',
             main_text,

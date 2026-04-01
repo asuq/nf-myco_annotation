@@ -1,4 +1,5 @@
 include { BARRNAP } from '../../modules/local/barrnap'
+include { SUMMARISE_16S } from '../../modules/local/summarise_16s'
 include { CHECKM2 as CHECKM2_GCODE4 } from '../../modules/local/checkm2'
 include { CHECKM2 as CHECKM2_GCODE11 } from '../../modules/local/checkm2'
 include { ASSIGN_GCODE_AND_QC } from '../../modules/local/assign_gcode_and_qc'
@@ -17,6 +18,7 @@ workflow PER_SAMPLE_QC {
 
     main:
     BARRNAP(sample_genomes)
+    SUMMARISE_16S(BARRNAP.out.results)
 
     CHECKM2_GCODE4(sample_genomes.combine(checkm2_db), Channel.value(4))
     CHECKM2_GCODE11(sample_genomes.combine(checkm2_db), Channel.value(11))
@@ -48,6 +50,7 @@ workflow PER_SAMPLE_QC {
     BUSCO(busco_jobs)
 
     versions = BARRNAP.out.versions
+        .mix(SUMMARISE_16S.out.versions)
         .mix(CHECKM2_GCODE4.out.versions)
         .mix(CHECKM2_GCODE11.out.versions)
         .mix(ASSIGN_GCODE_AND_QC.out.versions)
@@ -55,7 +58,7 @@ workflow PER_SAMPLE_QC {
 
     emit:
     barrnap = BARRNAP.out.results
-    sixteen_s_summaries = BARRNAP.out.sixteen_s_summaries
+    sixteen_s_summaries = SUMMARISE_16S.out.summaries
     checkm2_gcode4 = CHECKM2_GCODE4.out.results
     checkm2_gcode11 = CHECKM2_GCODE11.out.results
     gcode_qc = ASSIGN_GCODE_AND_QC.out.summary
