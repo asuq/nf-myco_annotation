@@ -337,8 +337,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_path = MODULES_DIR / "collect_versions.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
+        self.assertIn("path version_files, stageAs: 'version_files/versions??.yml'", module_text)
         self.assertIn('script_path="\\$(command -v collect_versions.py)"', module_text)
         self.assertIn('python3 "\\${script_path}"', module_text)
+        self.assertIn("--version-dir version_files", module_text)
+        self.assertNotIn("versionArgs", module_text)
 
     def test_summarise_codetta_runs_helper_via_python3(self) -> None:
         """Require the Codetta helper summariser to resolve the staged script explicitly."""
@@ -716,12 +719,13 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("configuredEggnogOnlyAccessions = parseConfiguredAccessions.call(params.eggnog_only_accessions)", final_outputs_text)
         self.assertIn("eggnog_short_circuit", final_outputs_text)
 
-    def test_collect_versions_stages_unique_input_names(self) -> None:
-        """Require unique staged names for collected version files."""
+    def test_collect_versions_stages_version_files_in_a_directory(self) -> None:
+        """Require collected version files to be staged into one directory input."""
         module_path = MODULES_DIR / "collect_versions.nf"
         module_text = module_path.read_text(encoding="utf-8")
 
-        self.assertIn("path version_files, name: 'version_files/versions??.yml'", module_text)
+        self.assertIn("path version_files, stageAs: 'version_files/versions??.yml'", module_text)
+        self.assertNotIn("name: 'version_files/versions??.yml'", module_text)
 
     def test_runtime_database_prep_modules_escape_shell_command_substitutions(self) -> None:
         """Require parser-safe escaping in the new runtime DB prep modules."""

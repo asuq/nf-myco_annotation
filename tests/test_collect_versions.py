@@ -326,6 +326,165 @@ class CollectVersionsTestCase(unittest.TestCase):
             self.assertEqual(len(eggnog_rows), 1)
             self.assertEqual(eggnog_rows[0]["version"], "2.1.13")
 
+    def test_collects_canonical_process_rows_from_version_dir(self) -> None:
+        """Keep one canonical row set when a process reports identical versions repeatedly."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            version_dir = tmpdir / "version_files"
+            self.write_text_file(
+                version_dir / "versions01.yml",
+                '\n'.join(
+                    [
+                        '"PER_SAMPLE_QC:BARRNAP":',
+                        '  barrnap: "0.9"',
+                    ]
+                )
+                + "\n",
+            )
+            self.write_text_file(
+                version_dir / "versions02.yml",
+                '\n'.join(
+                    [
+                        '"PER_SAMPLE_QC:BARRNAP":',
+                        '  barrnap: "0.9"',
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-dir",
+                    str(version_dir),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            rows = read_tsv(output)
+            barrnap_rows = [
+                row
+                for row in rows
+                if row["component"] == "barrnap"
+                and row["notes"] == "reported by PER_SAMPLE_QC:BARRNAP"
+            ]
+            self.assertEqual(len(barrnap_rows), 1)
+
+    def test_version_dir_conflicts_fail_for_one_process(self) -> None:
+        """Fail when the same process reports conflicting version rows."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            version_dir = tmpdir / "version_files"
+            self.write_text_file(
+                version_dir / "versions01.yml",
+                '\n'.join(
+                    [
+                        '"PER_SAMPLE_QC:BARRNAP":',
+                        '  barrnap: "0.9"',
+                    ]
+                )
+                + "\n",
+            )
+            self.write_text_file(
+                version_dir / "versions02.yml",
+                '\n'.join(
+                    [
+                        '"PER_SAMPLE_QC:BARRNAP":',
+                        '  barrnap: "0.10"',
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-dir",
+                    str(version_dir),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_version_dir_malformed_file_still_fails(self) -> None:
+        """Keep malformed staged versions files as hard failures."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            version_dir = tmpdir / "version_files"
+            self.write_text_file(
+                version_dir / "versions01.yml",
+                '\n'.join(
+                    [
+                        '    "COHORT_16S:BUILD_COHORT_16S":',
+                        '      python: "3.12.13"',
+                        '    EOF',
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-dir",
+                    str(version_dir),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(output.exists())
+
+    def test_supports_mixed_version_file_and_version_dir_inputs(self) -> None:
+        """Allow one-off version files to be combined with a staged versions directory."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            version_dir = tmpdir / "version_files"
+            direct_file = self.write_text_file(
+                tmpdir / "direct_versions.yml",
+                '\n'.join(
+                    [
+                        '"INPUT_VALIDATION_AND_STAGING:VALIDATE_INPUTS":',
+                        '  python: "3.12.13"',
+                    ]
+                )
+                + "\n",
+            )
+            self.write_text_file(
+                version_dir / "versions01.yml",
+                '\n'.join(
+                    [
+                        '"PER_SAMPLE_QC:BARRNAP":',
+                        '  barrnap: "0.9"',
+                    ]
+                )
+                + "\n",
+            )
+            output = tmpdir / "tool_and_db_versions.tsv"
+
+            exit_code = collect_versions.main(
+                [
+                    "--version-file",
+                    str(direct_file),
+                    "--version-dir",
+                    str(version_dir),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            rows = read_tsv(output)
+            components = {row["component"] for row in rows}
+            self.assertIn("python", components)
+            self.assertIn("barrnap", components)
+
     def test_invalid_container_ref_fails(self) -> None:
         """Fail cleanly when a container reference is not name=value."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

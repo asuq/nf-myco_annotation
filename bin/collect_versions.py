@@ -37,6 +37,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Path to one process versions.yml file. May be supplied multiple times.",
     )
     parser.add_argument(
+        "--version-dir",
+        action="append",
+        default=[],
+        type=Path,
+        help="Directory containing staged process versions.yml files.",
+    )
+    parser.add_argument(
         "--container-ref",
         action="append",
         default=[],
@@ -201,28 +208,31 @@ def parse_versions_entry(line: str, path: Path) -> tuple[str, str]:
     return name.strip(), raw_value.strip().strip("'\"")
 
 
-def parse_versions_file(path: Path) -> list[dict[str, str]]:
-    """Parse one simple Nextflow versions.yml file into row dictionaries."""
+def parse_versions_sections(path: Path) -> dict[str, list[dict[str, str]]]:
+    """Parse one versions file into per-process row groups."""
     if not path.is_file():
         raise CollectVersionsError(f"Missing versions file: {path}")
 
-    rows: list[dict[str, str]] = []
-    current_source = "unknown"
+    sections: dict[str, list[dict[str, str]]] = {}
+    current_source: str | None = None
     with path.open("r", encoding="utf-8") as handle:
         for raw_line in handle:
             line = raw_line.rstrip("\n")
             stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped == "EOF":
+            if not stripped or stripped == "EOF":
                 continue
             if not line.startswith((" ", "\t")):
                 current_source = parse_versions_header(line, path)
+                sections.setdefault(current_source, [])
                 continue
+            if current_source is None:
+                raise CollectVersionsError(
+                    f"Malformed versions.yml entry without a header in {path}: {line.rstrip()!r}"
+                )
             clean_name, clean_value = parse_versions_entry(line, path)
             kind = VERSION_KIND_KEYS.get(clean_name, "tool")
             if clean_name == "script":
-                rows.append(
+                sections[current_source].append(
                     build_row(
                         component=current_source,
                         kind=kind,
@@ -233,7 +243,7 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
                 )
                 continue
             if clean_name == "transform":
-                rows.append(
+                sections[current_source].append(
                     build_row(
                         component=current_source,
                         kind=kind,
@@ -243,7 +253,7 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
                     )
                 )
                 continue
-            rows.append(
+            sections[current_source].append(
                 build_row(
                     component=clean_name,
                     kind=kind,
@@ -251,6 +261,14 @@ def parse_versions_file(path: Path) -> list[dict[str, str]]:
                     notes=f"reported by {current_source}",
                 )
             )
+    return sections
+
+
+def parse_versions_file(path: Path) -> list[dict[str, str]]:
+    """Parse one simple Nextflow versions.yml file into row dictionaries."""
+    rows: list[dict[str, str]] = []
+    for section_rows in parse_versions_sections(path).values():
+        rows.extend(section_rows)
     return rows
 
 
@@ -313,6 +331,60 @@ def build_runtime_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     return rows
 
 
+def discover_version_files(
+    version_files: Sequence[Path], version_dirs: Sequence[Path]
+) -> list[Path]:
+    """Collect direct version files and staged directory contents in stable order."""
+    discovered = list(version_files)
+    for version_dir in version_dirs:
+        if not version_dir.exists():
+            raise CollectVersionsError(f"Missing versions directory: {version_dir}")
+        if not version_dir.is_dir():
+            raise CollectVersionsError(f"Versions path is not a directory: {version_dir}")
+        discovered.extend(sorted(version_dir.glob("*.yml")))
+    return discovered
+
+
+def build_process_signature(rows: Sequence[dict[str, str]]) -> tuple[tuple[str, ...], ...]:
+    """Build a comparable signature for one process row set."""
+    return tuple(
+        (
+            row["component"],
+            row["kind"],
+            row["version"],
+            row["image_or_path"],
+            row["notes"],
+        )
+        for row in rows
+    )
+
+
+def collect_canonical_version_rows(version_files: Sequence[Path]) -> list[dict[str, str]]:
+    """Keep one canonical parsed row set per process header."""
+    canonical_rows: dict[str, list[dict[str, str]]] = {}
+    canonical_sources: dict[str, Path] = {}
+    canonical_signatures: dict[str, tuple[tuple[str, ...], ...]] = {}
+
+    for version_file in version_files:
+        for process_name, rows in parse_versions_sections(version_file).items():
+            signature = build_process_signature(rows)
+            if process_name not in canonical_signatures:
+                canonical_signatures[process_name] = signature
+                canonical_sources[process_name] = version_file
+                canonical_rows[process_name] = rows
+                continue
+            if canonical_signatures[process_name] != signature:
+                raise CollectVersionsError(
+                    "Conflicting versions.yml entries for process "
+                    f"{process_name!r}: {canonical_sources[process_name]} != {version_file}"
+                )
+
+    rows: list[dict[str, str]] = []
+    for process_name in sorted(canonical_rows):
+        rows.extend(canonical_rows[process_name])
+    return rows
+
+
 def deduplicate_rows(rows: Sequence[dict[str, str]]) -> list[dict[str, str]]:
     """Deduplicate rows while keeping a stable, category-aware order."""
     seen: set[tuple[str, str, str, str, str]] = set()
@@ -361,8 +433,8 @@ def write_tsv(path: Path, rows: Sequence[dict[str, str]]) -> None:
 def run_collect_versions(args: argparse.Namespace) -> None:
     """Build the final tool and database versions TSV."""
     rows = build_runtime_rows(args)
-    for version_file in args.version_file:
-        rows.extend(parse_versions_file(version_file))
+    version_files = discover_version_files(args.version_file, args.version_dir)
+    rows.extend(collect_canonical_version_rows(version_files))
     write_tsv(args.output, deduplicate_rows(rows))
 
 

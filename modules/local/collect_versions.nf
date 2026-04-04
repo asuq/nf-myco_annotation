@@ -14,7 +14,7 @@ process COLLECT_VERSIONS {
     )
 
     input:
-    path version_files, name: 'version_files/versions??.yml'
+    path version_files, stageAs: 'version_files/versions??.yml'
     val nextflow_version
     val pipeline_version
     val git_commit
@@ -24,8 +24,6 @@ process COLLECT_VERSIONS {
     path 'tool_and_db_versions.tsv', emit: versions_table
 
     script:
-    def versionFileList = version_files instanceof Collection ? version_files : [version_files]
-    def versionArgs = versionFileList.collect { "--version-file \"${it}\"" }.join(' \\\n        ')
     def lineageArgs = (params.busco_lineages as List<String>).collect {
         "--busco-lineage \"${it}\""
     }.join(' \\\n        ')
@@ -48,7 +46,7 @@ process COLLECT_VERSIONS {
     """
     script_path="\$(command -v collect_versions.py)"
     python3 "\${script_path}" \
-        ${versionArgs} \
+        --version-dir version_files \
         --nextflow-version "${nextflow_version}" \
         --pipeline-version "${pipeline_version}" \
         --git-commit "${git_commit}" \
