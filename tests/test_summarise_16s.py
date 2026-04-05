@@ -301,12 +301,12 @@ class ConcatBest16STestCase(unittest.TestCase):
     def write_cohort_inputs(
         self,
         path: Path,
-        rows: list[tuple[str, Path, Path]],
+        rows: list[tuple[str, str, Path, Path]],
     ) -> Path:
         """Write one cohort input manifest."""
-        lines = ["accession\tstatus_tsv\tbest_16s_fasta"]
-        for accession, status_path, best_fasta in rows:
-            lines.append(f"{accession}\t{status_path}\t{best_fasta}")
+        lines = ["accession\tinternal_id\tstatus_tsv\tbest_16s_fasta"]
+        for accession, internal_id, status_path, best_fasta in rows:
+            lines.append(f"{accession}\t{internal_id}\t{status_path}\t{best_fasta}")
         return self.write_text_file(path, "\n".join(lines) + "\n")
 
     def test_concat_best_16s_includes_non_atypical_intact_rows(self) -> None:
@@ -328,7 +328,7 @@ class ConcatBest16STestCase(unittest.TestCase):
             )
             cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                [("ACC_OK", status_path, best_fasta)],
+                [("ACC_OK", "acc_ok_id", status_path, best_fasta)],
             )
             output_fasta = tmpdir / "all_best_16S.fna"
             output_manifest = tmpdir / "all_best_16S_manifest.tsv"
@@ -347,9 +347,13 @@ class ConcatBest16STestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(output_fasta.read_text(encoding="utf-8"), ">hit_ok\n" + "A" * 100 + "\n")
+            self.assertEqual(
+                output_fasta.read_text(encoding="utf-8"),
+                ">acc_ok_id\n" + "A" * 100 + "\n",
+            )
             manifest_rows = read_tsv_rows(output_manifest)
             self.assertEqual(manifest_rows[0]["accession"], "ACC_OK")
+            self.assertEqual(manifest_rows[0]["best_16S_header"], "hit_ok")
             self.assertEqual(manifest_rows[0]["include_in_all_best_16S"], "true")
 
     def test_concat_best_16s_allows_unverified_source_exception(self) -> None:
@@ -371,7 +375,7 @@ class ConcatBest16STestCase(unittest.TestCase):
             )
             cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                [("ACC_EXCEPTION", status_path, best_fasta)],
+                [("ACC_EXCEPTION", "acc_exception_id", status_path, best_fasta)],
             )
 
             exit_code = concat_best_16s.main(
@@ -410,7 +414,7 @@ class ConcatBest16STestCase(unittest.TestCase):
             )
             cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                [("ACC_ATYP", status_path, best_fasta)],
+                [("ACC_ATYP", "acc_atyp_id", status_path, best_fasta)],
             )
 
             exit_code = concat_best_16s.main(
@@ -468,8 +472,13 @@ class ConcatBest16STestCase(unittest.TestCase):
             cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
                 [
-                    ("ACC_PART", partial_status, partial_best),
-                    ("ACC_ATYP_PART", atypical_partial_status, atypical_partial_best),
+                    ("ACC_PART", "acc_part_id", partial_status, partial_best),
+                    (
+                        "ACC_ATYP_PART",
+                        "acc_atyp_part_id",
+                        atypical_partial_status,
+                        atypical_partial_best,
+                    ),
                 ],
             )
 
@@ -494,10 +503,12 @@ class ConcatBest16STestCase(unittest.TestCase):
                 [row["accession"] for row in manifest_rows],
                 ["ACC_PART", "ACC_ATYP_PART"],
             )
-            self.assertTrue(
-                (tmpdir / "all_partial_16S.fna").read_text(encoding="utf-8").startswith(
-                    ">hit_partial\n"
-                )
+            fasta_text = (tmpdir / "all_partial_16S.fna").read_text(encoding="utf-8")
+            self.assertTrue(fasta_text.startswith(">acc_part_id\n"))
+            self.assertIn(">acc_atyp_part_id\n", fasta_text)
+            self.assertEqual(
+                [row["best_16S_header"] for row in manifest_rows],
+                ["hit_partial", "hit_atyp_partial"],
             )
 
     def test_concat_best_16s_fails_when_included_fasta_is_empty(self) -> None:
@@ -521,7 +532,48 @@ class ConcatBest16STestCase(unittest.TestCase):
             )
             cohort_inputs = self.write_cohort_inputs(
                 tmpdir / "cohort_inputs.tsv",
-                [("ACC_BAD", status_path, best_fasta)],
+                [("ACC_BAD", "acc_bad_id", status_path, best_fasta)],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_concat_best_16s_fails_when_internal_id_column_is_missing(self) -> None:
+        """Fail when the cohort input manifest lacks the internal_id column."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            status_path, best_fasta = self.write_status_and_fasta(
+                tmpdir,
+                accession="ACC_BAD",
+                status_value="Yes",
+                header="hit_bad",
+                length=100,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_BAD\tNA\n",
+            )
+            cohort_inputs = self.write_text_file(
+                tmpdir / "cohort_inputs.tsv",
+                "\n".join(
+                    [
+                        "accession\tstatus_tsv\tbest_16s_fasta",
+                        f"ACC_BAD\t{status_path}\t{best_fasta}",
+                    ]
+                )
+                + "\n",
             )
 
             exit_code = concat_best_16s.main(

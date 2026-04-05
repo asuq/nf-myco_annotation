@@ -169,11 +169,19 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("path best_fastas, stageAs: 'summaries/*'", module_text)
         self.assertIn("path status_tables, stageAs: 'summaries/*'", module_text)
         self.assertIn("path metadata", module_text)
-        self.assertIn('printf \'accession\\tstatus_tsv\\tbest_16s_fasta\\n\' > cohort_inputs.tsv', module_text)
+        self.assertIn(
+            'printf \'accession\\tinternal_id\\tstatus_tsv\\tbest_16s_fasta\\n\' > cohort_inputs.tsv',
+            module_text,
+        )
+        self.assertNotIn(
+            'printf \'accession\\tstatus_tsv\\tbest_16s_fasta\\n\' > cohort_inputs.tsv',
+            module_text,
+        )
         self.assertIn('python3 "\\${script_path}"', module_text)
         self.assertIn('--metadata "${metadata}"', module_text)
         self.assertIn("--cohort-kind intact", module_text)
         self.assertIn("--cohort-kind partial", module_text)
+        self.assertIn('internal_id="\\${stem}"', module_text)
         self.assertIn('"\\$(pwd)/\\${status_table}"', module_text)
         self.assertIn('"\\$(pwd)/\\${best_fasta}"', module_text)
         self.assertNotIn('"${PWD}/\\${status_table}"', module_text)

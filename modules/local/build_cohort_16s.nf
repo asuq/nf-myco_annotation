@@ -27,11 +27,12 @@ process BUILD_COHORT_16S {
     script:
     """
     script_path="\$(command -v concat_best_16s.py)"
-    printf 'accession\tstatus_tsv\tbest_16s_fasta\n' > cohort_inputs.tsv
+    printf 'accession\tinternal_id\tstatus_tsv\tbest_16s_fasta\n' > cohort_inputs.tsv
 
     shopt -s nullglob
     for status_table in summaries/*_16S_status.tsv; do
         stem="\$(basename "\${status_table}" _16S_status.tsv)"
+        internal_id="\${stem}"
         best_fasta="summaries/\${stem}_best_16S.fna"
         if [[ ! -f "\${best_fasta}" ]]; then
             printf 'Missing matching best_16S FASTA for %s\n' "\${status_table}" >&2
@@ -42,8 +43,13 @@ process BUILD_COHORT_16S {
             printf 'Missing accession in %s\n' "\${status_table}" >&2
             exit 1
         fi
-        printf '%s\t%s\t%s\n' \
+        if [[ -z "\${internal_id}" ]]; then
+            printf 'Missing internal ID in %s\n' "\${status_table}" >&2
+            exit 1
+        fi
+        printf '%s\t%s\t%s\t%s\n' \
             "\${accession}" \
+            "\${internal_id}" \
             "\$(pwd)/\${status_table}" \
             "\$(pwd)/\${best_fasta}" \
             >> cohort_inputs.tsv
@@ -74,7 +80,7 @@ process BUILD_COHORT_16S {
     stub:
     '''
     cat <<'EOF' > all_best_16S.fna
-    >sample_a 16S ribosomal RNA
+    >sample_a
     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     EOF
     cat <<'EOF' > all_best_16S_manifest.tsv

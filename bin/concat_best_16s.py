@@ -13,7 +13,7 @@ from typing import Sequence
 
 LOGGER = logging.getLogger(__name__)
 
-REQUIRED_INPUT_COLUMNS = ("accession", "status_tsv", "best_16s_fasta")
+REQUIRED_INPUT_COLUMNS = ("accession", "internal_id", "status_tsv", "best_16s_fasta")
 REQUIRED_STATUS_COLUMNS = (
     "accession",
     "16S",
@@ -46,7 +46,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--inputs",
         required=True,
         type=Path,
-        help="TSV listing accession, status_tsv, and best_16s_fasta paths.",
+        help="TSV listing accession, internal_id, status_tsv, and best_16s_fasta paths.",
     )
     parser.add_argument(
         "--metadata",
@@ -261,8 +261,13 @@ def load_metadata_atypical_index(metadata_path: Path | None) -> dict[str, str]:
     return index
 
 
-def append_fasta_content(output_handle, fasta_path: Path) -> None:
-    """Append a non-empty FASTA file to the cohort output handle."""
+def append_fasta_content(
+    output_handle,
+    fasta_path: Path,
+    *,
+    internal_id: str,
+) -> None:
+    """Append one non-empty FASTA file with its record header rewritten."""
     if not fasta_path.is_file():
         raise Cohort16SError(f"Missing best 16S FASTA file: {fasta_path}")
     content = fasta_path.read_text(encoding="utf-8")
@@ -270,7 +275,13 @@ def append_fasta_content(output_handle, fasta_path: Path) -> None:
         raise Cohort16SError(
             f"Included cohort FASTA file is empty but marked for inclusion: {fasta_path}"
         )
-    output_handle.write(content if content.endswith("\n") else content + "\n")
+    lines = content.splitlines()
+    if not lines or not lines[0].startswith(">"):
+        raise Cohort16SError(f"Best 16S FASTA file is malformed: {fasta_path}")
+    output_handle.write(f">{internal_id}\n")
+    if len(lines) > 1:
+        output_handle.write("\n".join(lines[1:]))
+        output_handle.write("\n")
 
 
 def should_include_in_cohort(
@@ -343,11 +354,16 @@ def build_cohort_fasta(
         for cohort_row in cohort_rows:
             status_path = Path(cohort_row["status_tsv"]).expanduser()
             best_fasta_path = Path(cohort_row["best_16s_fasta"]).expanduser()
+            internal_id = cohort_row["internal_id"].strip()
             status_row = load_status_row(status_path)
             if status_row["accession"] != cohort_row["accession"]:
                 raise Cohort16SError(
                     "Cohort input accession does not match the status TSV accession "
                     f"for {status_path}."
+                )
+            if not internal_id:
+                raise Cohort16SError(
+                    f"Cohort input row is missing internal_id for {status_path}."
                 )
             if not should_include_in_cohort(
                 status_row=status_row,
@@ -355,7 +371,11 @@ def build_cohort_fasta(
                 metadata_atypical_index=metadata_atypical_index,
             ):
                 continue
-            append_fasta_content(fasta_handle, best_fasta_path)
+            append_fasta_content(
+                fasta_handle,
+                best_fasta_path,
+                internal_id=internal_id,
+            )
             manifest_rows.append(
                 build_manifest_row(status_row, cohort_kind=cohort_kind)
             )
