@@ -97,6 +97,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("process.resourceLimits = [", oist_text)
         self.assertIn("withLabel: process_medium", oist_text)
         self.assertIn("withLabel: process_high", oist_text)
+        self.assertNotIn("errorStrategy", oist_text)
         self.assertNotIn("params.slurm_account", oist_text)
         self.assertNotIn("beforeScript", oist_text)
 
@@ -179,8 +180,18 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             "params.standardMaxRetries = { Math.max((params.task_attempts as int) - 1, 0) }",
             config_text,
         )
+        self.assertIn(
+            "def retryThenFinish = { retries ->\n"
+            "    return {\n"
+            "        final resolvedRetries = retries instanceof Closure ? retries() : retries\n"
+            "        task.attempt <= resolvedRetries ? 'retry' : 'finish'\n"
+            "    }\n"
+            "}",
+            config_text,
+        )
         self.assertNotIn("soft_fail_attempts", config_text)
-        self.assertIn("errorStrategy = 'retry'", config_text)
+        self.assertNotIn("errorStrategy = 'retry'", config_text)
+        self.assertIn("errorStrategy = retryThenFinish(params.standardMaxRetries)", config_text)
         self.assertIn(
             "maxRetries = { params.standardMaxRetries instanceof Closure ? params.standardMaxRetries() : params.standardMaxRetries }",
             config_text,
@@ -206,11 +217,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            "withName: DOWNLOAD_BUSCO_DATASET {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.busco_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_codetta_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            config_text,
+        )
+        self.assertIn(
+            "withLabel: prep_codetta_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
             config_text,
         )
         self.assertIn(
@@ -223,15 +238,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         )
         self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.2", config_text)
         self.assertIn(
-            "withLabel: download_checkm2_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.checkm2_container",
+            "withLabel: download_checkm2_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.checkm2_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_busco_databases {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.busco_container",
+            "withLabel: download_busco_databases {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.busco_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_eggnog_database {\n        errorStrategy = 'retry'\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.eggnog_container",
+            "withLabel: download_eggnog_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.eggnog_container",
             config_text,
         )
         self.assertNotIn("withName: PREP_TAXDUMP_DATABASE", config_text)
@@ -260,6 +275,12 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("container = params.ccfinder_container", config_text)
         self.assertIn("--platform linux/amd64", config_text)
         self.assertIn("['aarch64', 'arm64']", config_text)
+
+    def test_slurm_profile_inherits_shared_error_strategy(self) -> None:
+        """Keep SLURM runtime profiles on the shared retry-then-finish policy."""
+        slurm_text = SLURM_CONFIG.read_text(encoding="utf-8")
+
+        self.assertNotIn("errorStrategy", slurm_text)
 
     def test_local_profile_caps_memory_for_workstation_runs(self) -> None:
         """Keep local acceptance runs within a typical workstation memory budget."""
