@@ -248,6 +248,81 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
 
         return mock.Mock(side_effect=_run)
 
+    def write_single_sample_rescue_fixture(
+        self,
+        tmpdir: Path,
+        *,
+        include_staged_fasta: bool,
+        barrnap_mode: str = "partial",
+    ) -> tuple[Path, Path, Path]:
+        """Create one minimal rescue fixture tree and return its main paths."""
+        source_outdir = tmpdir / "source_results"
+        rescue_outdir = tmpdir / "rescued_results"
+        metadata = self.write_text_file(
+            tmpdir / "metadata.tsv",
+            "\n".join(
+                [
+                    "Accession\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings",
+                    "ACC1\tGenome One\tScaffold\tNA\tNA\tNA\tNA",
+                ]
+            )
+            + "\n",
+        )
+        genome_fasta = tmpdir / "raw" / "ACC1.fasta"
+        validated_rows = [
+            {
+                "accession": "ACC1",
+                "is_new": "false",
+                "assembly_level": "NA",
+                "genome_fasta": str(genome_fasta),
+                "internal_id": "ID1",
+            }
+        ]
+        self.write_tsv_rows(
+            source_outdir / "tables" / "validated_samples.tsv",
+            ("accession", "is_new", "assembly_level", "genome_fasta", "internal_id"),
+            validated_rows,
+        )
+        self.write_tsv_rows(
+            source_outdir / "tables" / "sample_status.tsv",
+            SAMPLE_STATUS_COLUMNS,
+            [self.make_initial_status_row(accession="ACC1", internal_id="ID1")],
+        )
+        self.write_text_file(genome_fasta, ">ACC1\nACGTACGTACGT\n")
+        if include_staged_fasta:
+            self.write_staged_fasta(source_outdir, accession="ACC1", internal_id="ID1")
+        self.write_barrnap_outputs(source_outdir, accession="ACC1", mode=barrnap_mode)
+        self.write_checkm2_report(
+            source_outdir,
+            accession="ACC1",
+            translation_table=4,
+            completeness="80",
+            contamination="2",
+        )
+        self.write_checkm2_report(
+            source_outdir,
+            accession="ACC1",
+            translation_table=11,
+            completeness="95",
+            contamination="1",
+        )
+        complete_payload = (
+            '{"results": {"C": 98.0, "S": 98.0, "D": 0.0, "F": 1.0, "M": 1.0, "n": 200}}'
+        )
+        self.write_busco_summary(
+            source_outdir,
+            accession="ACC1",
+            lineage="bacillota_odb12",
+            payload=complete_payload,
+        )
+        self.write_busco_summary(
+            source_outdir,
+            accession="ACC1",
+            lineage="mycoplasmatota_odb12",
+            payload=complete_payload,
+        )
+        return source_outdir, rescue_outdir, metadata
+
     def test_parse_command_prefix_supports_container_wrappers(self) -> None:
         """Split a wrapped FastANI command into argv tokens."""
         self.assertEqual(
@@ -312,6 +387,83 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
 
         self.assertEqual(excinfo.exception.code, 2)
         self.assertIn("--busco-lineage may only be supplied once.", stderr.getvalue())
+
+    def test_main_logs_startup_configuration_for_rescue_run(self) -> None:
+        """Log the resolved rescue sources, options, and tools before execution."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            log_text = stderr.getvalue()
+            self.assertIn("Rescue configuration: source_outdir=", log_text)
+            self.assertIn("Rescue sources: validated_samples=", log_text)
+            self.assertIn(
+                "Rescue options: busco_lineages=bacillota_odb12,mycoplasmatota_odb12",
+                log_text,
+            )
+            self.assertIn("Rescue tools: fastani_binary=fastANI seqtk_binary=seqtk.", log_text)
+            self.assertIn("Loaded 1 validated sample(s)", log_text)
+
+    def test_main_logs_genome_fasta_fallback_resolution(self) -> None:
+        """Log when rescue uses genome_fasta instead of a published staged FASTA."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=False,
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            log_text = stderr.getvalue()
+            self.assertIn("Resolved sample ACC1:", log_text)
+            self.assertIn("source=genome_fasta_fallback", log_text)
+            self.assertIn("Resolved 1 sample(s); genome_fasta_fallback=1.", log_text)
 
     @unittest.skipUnless(SCIPY_AVAILABLE, "SciPy is required for ANI rescue integration tests.")
     def test_main_recovers_ani_outputs_and_partial_final_tables(self) -> None:
@@ -435,35 +587,54 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                     payload=busco_payload_b,
                 )
 
-            with mock.patch.object(
-                rescue_ani_from_results,
-                "run_subprocess",
-                self.fake_run_subprocess(
-                    {
-                        "ACC1": ("50000", "2", "800000"),
-                        "ACC2": ("45000", "3", "780000"),
-                        "ACC3": ("42000", "4", "760000"),
-                        "ACC4": ("47000", "2", "790000"),
-                    }
-                ),
-            ):
-                exit_code = rescue_ani_from_results.main(
-                    [
-                        "--source-outdir",
-                        str(source_outdir),
-                        "--metadata",
-                        str(metadata),
-                        "--outdir",
-                        str(rescue_outdir),
-                        "--busco-lineage",
-                        "bacillota_odb12",
-                        "mycoplasmatota_odb12",
-                        "--fastani-binary",
-                        "fake-fastani",
-                    ]
-                )
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    self.fake_run_subprocess(
+                        {
+                            "ACC1": ("50000", "2", "800000"),
+                            "ACC2": ("45000", "3", "780000"),
+                            "ACC3": ("42000", "4", "760000"),
+                            "ACC4": ("47000", "2", "790000"),
+                        }
+                    ),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                            "--fastani-binary",
+                            "fake-fastani",
+                        ]
+                    )
 
             self.assertEqual(exit_code, 0)
+            log_text = stderr.getvalue()
+            self.assertIn("Recovered 16S for ACC2:", log_text)
+            self.assertIn("Recovered CheckM2 for ACC3:", log_text)
+            self.assertIn(
+                "Recovered BUSCO for ACC4: lineage=bacillota_odb12 value=98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200 status=done",
+                log_text,
+            )
+            self.assertIn("ANI gating for ACC1: included=true reason=none.", log_text)
+            self.assertIn("ANI gating for ACC2: included=false reason=partial_16s.", log_text)
+            self.assertIn("ANI gating for ACC3: included=false reason=low_quality.", log_text)
+            self.assertIn("ANI exclusion reasons: low_quality=1; partial_16s=1.", log_text)
+            self.assertIn(
+                "ANI cluster outputs: cluster_path=",
+                log_text,
+            )
+            self.assertIn("cluster_rows=2 cluster_count=1 representative_count=1.", log_text)
+            self.assertIn("ANI representatives ready: output=", log_text)
 
             _sixteen_s_header, sixteen_s_rows = read_tsv_rows(
                 rescue_outdir / "tables" / "16s_statuses.tsv"

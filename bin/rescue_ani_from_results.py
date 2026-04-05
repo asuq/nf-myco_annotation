@@ -29,6 +29,8 @@ LOGGER = logging.getLogger(__name__)
 
 ASSUMED_SOURCE_COMMIT = "595edef"
 CLUSTER_TABLE_COLUMNS = ("Accession", "Cluster_ID", "Matrix_Name")
+PUBLISHED_STAGED_SOURCE = "published_staged"
+GENOME_FASTA_FALLBACK_SOURCE = "genome_fasta_fallback"
 
 
 class RescueAniError(RuntimeError):
@@ -45,6 +47,7 @@ class ResolvedSample:
     is_new: str
     assembly_level: str
     staged_fasta: Path
+    staged_source: str
 
 
 class SingleUseLineageAction(argparse.Action):
@@ -199,6 +202,19 @@ def copy_source_table(source: Path, destination: Path) -> Path:
     return destination
 
 
+def count_tsv_rows(path: Path) -> int:
+    """Return the number of data rows in one TSV."""
+    _header, rows = read_tsv_rows(path)
+    return len(rows)
+
+
+def format_count_pairs(pairs: Sequence[tuple[str, int]]) -> str:
+    """Format ordered key-count pairs for one log line."""
+    if not pairs:
+        return "none"
+    return "; ".join(f"{key}={count}" for key, count in pairs)
+
+
 def resolve_validated_samples_path(args: argparse.Namespace) -> Path:
     """Resolve the validated-samples source path."""
     return args.validated_samples or args.source_outdir / "tables" / "validated_samples.tsv"
@@ -230,7 +246,7 @@ def load_validated_samples(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def resolve_staged_fasta(source_outdir: Path, sample_row: dict[str, str]) -> Path:
+def resolve_staged_fasta(source_outdir: Path, sample_row: dict[str, str]) -> tuple[Path, str]:
     """Resolve the staged FASTA for one sample or fall back to genome_fasta."""
     accession = sample_row["accession"]
     internal_id = sample_row["internal_id"]
@@ -238,11 +254,11 @@ def resolve_staged_fasta(source_outdir: Path, sample_row: dict[str, str]) -> Pat
         source_outdir / "samples" / accession / "staged" / f"{internal_id}.fasta"
     )
     if staged_candidate.is_file():
-        return staged_candidate.resolve()
+        return staged_candidate.resolve(), PUBLISHED_STAGED_SOURCE
 
     fallback = Path(sample_row["genome_fasta"]).expanduser()
     if fallback.is_file():
-        return fallback.resolve()
+        return fallback.resolve(), GENOME_FASTA_FALLBACK_SOURCE
 
     raise RescueAniError(
         "Could not resolve staged FASTA for accession "
@@ -257,6 +273,7 @@ def build_resolved_samples(
     """Build the resolved sample list used by all rescue stages."""
     resolved: list[ResolvedSample] = []
     for row in validated_rows:
+        staged_fasta, staged_source = resolve_staged_fasta(source_outdir, row)
         resolved.append(
             ResolvedSample(
                 accession=row["accession"],
@@ -264,10 +281,63 @@ def build_resolved_samples(
                 genome_fasta=row["genome_fasta"],
                 is_new=row["is_new"],
                 assembly_level=row["assembly_level"],
-                staged_fasta=resolve_staged_fasta(source_outdir, row),
+                staged_fasta=staged_fasta,
+                staged_source=staged_source,
             )
         )
     return resolved
+
+
+def log_startup_configuration(
+    args: argparse.Namespace,
+    *,
+    validated_samples_source: Path,
+    initial_status_source: Path,
+) -> None:
+    """Log the resolved rescue configuration before execution."""
+    LOGGER.info(
+        "Rescue configuration: source_outdir=%s rescue_outdir=%s metadata=%s.",
+        args.source_outdir,
+        args.outdir,
+        args.metadata,
+    )
+    LOGGER.info(
+        "Rescue sources: validated_samples=%s initial_status=%s.",
+        validated_samples_source,
+        initial_status_source,
+    )
+    LOGGER.info(
+        "Rescue options: busco_lineages=%s gcode_rule=%s ani_threshold=%s ani_score_profile=%s.",
+        ",".join(args.busco_lineage),
+        args.gcode_rule,
+        args.ani_threshold,
+        args.ani_score_profile,
+    )
+    LOGGER.info(
+        "Rescue tools: fastani_binary=%s seqtk_binary=%s.",
+        args.fastani_binary,
+        args.seqtk_binary,
+    )
+
+
+def log_resolved_samples(samples: Sequence[ResolvedSample]) -> None:
+    """Log the resolved staged FASTA origin for each sample."""
+    fallback_count = 0
+    for sample in samples:
+        if sample.staged_source == GENOME_FASTA_FALLBACK_SOURCE:
+            fallback_count += 1
+        LOGGER.info(
+            "Resolved sample %s: internal_id=%s staged_fasta=%s source=%s.",
+            sample.accession,
+            sample.internal_id,
+            sample.staged_fasta,
+            sample.staged_source,
+        )
+    LOGGER.info(
+        "Resolved %d sample(s); genome_fasta_fallback=%d.",
+        len(samples),
+        fallback_count,
+    )
 
 
 def recover_sixteen_s(
@@ -286,10 +356,20 @@ def recover_sixteen_s(
             rrna_fasta=source_dir / "rrna.fa",
             outdir=output_dir,
         )
-        rows.append(read_single_row(output_dir / "16S_status.tsv"))
+        status_path = output_dir / "16S_status.tsv"
+        status_row = read_single_row(status_path)
+        rows.append(status_row)
+        LOGGER.info(
+            "Recovered 16S for %s: barrnap_dir=%s status=%s output=%s.",
+            sample.accession,
+            source_dir,
+            status_row.get("16S", "NA"),
+            status_path,
+        )
 
     combined_path = rescue_outdir / "tables" / "16s_statuses.tsv"
     write_tsv(combined_path, summarise_16s.STATUS_COLUMNS, rows)
+    LOGGER.info("Wrote combined 16S summary to %s with %d row(s).", combined_path, len(rows))
     return combined_path
 
 
@@ -324,10 +404,24 @@ def recover_checkm2(
             output=output_path,
             gcode_rule=gcode_rule,
         )
-        rows.append(read_single_row(output_path))
+        summary_row = read_single_row(output_path)
+        rows.append(summary_row)
+        LOGGER.info(
+            "Recovered CheckM2 for %s: gcode_rule=%s Gcode=%s Low_quality=%s output=%s.",
+            sample.accession,
+            gcode_rule,
+            summary_row.get("Gcode", "NA"),
+            summary_row.get("Low_quality", "NA"),
+            output_path,
+        )
 
     combined_path = rescue_outdir / "tables" / "checkm2_summaries.tsv"
     write_tsv(combined_path, summarise_checkm2.OUTPUT_COLUMNS, rows)
+    LOGGER.info(
+        "Wrote combined CheckM2 summary to %s with %d row(s).",
+        combined_path,
+        len(rows),
+    )
     return combined_path
 
 
@@ -342,6 +436,7 @@ def recover_busco_lineage(
     rows: list[dict[str, str]] = []
     busco_column = summarise_busco.busco_column_name(lineage)
     header = ("accession", "lineage", busco_column, "busco_status", "warnings")
+    LOGGER.info("Rebuilding BUSCO lineage %s for %d sample(s).", lineage, len(samples))
 
     for sample in samples:
         summary_path = (
@@ -383,10 +478,29 @@ def recover_busco_lineage(
             warnings=warnings,
             output=output_path,
         )
-        rows.append(read_single_row(output_path))
+        summary_row = read_single_row(output_path)
+        rows.append(summary_row)
+        LOGGER.info(
+            "Recovered BUSCO for %s: lineage=%s value=%s status=%s output=%s.",
+            sample.accession,
+            lineage,
+            summary_row.get(busco_column, "NA"),
+            summary_row.get("busco_status", "NA"),
+            output_path,
+        )
 
     combined_path = rescue_outdir / "tables" / f"busco_summary_{lineage}.tsv"
     write_tsv(combined_path, header, rows)
+    done_count = sum(1 for row in rows if row.get("busco_status", "") == "done")
+    failed_count = sum(1 for row in rows if row.get("busco_status", "") == "failed")
+    LOGGER.info(
+        "Wrote combined BUSCO summary for %s to %s with %d row(s); done=%d failed=%d.",
+        lineage,
+        combined_path,
+        len(rows),
+        done_count,
+        failed_count,
+    )
     return combined_path
 
 
@@ -405,6 +519,7 @@ def write_staged_manifest(
         for sample in samples
     ]
     write_tsv(manifest_path, ("accession", "internal_id", "staged_filename"), rows)
+    LOGGER.info("Wrote staged manifest to %s with %d row(s).", manifest_path, len(rows))
     return manifest_path
 
 
@@ -476,6 +591,12 @@ def run_calculate_assembly_stats(
     """Run the existing assembly-stat helper over the resolved staged genomes."""
     script_path = Path(__file__).resolve().parent / "calculate_assembly_stats.sh"
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    LOGGER.info(
+        "Running assembly stats: seqtk_binary=%s staged_manifest=%s output=%s.",
+        seqtk_binary,
+        staged_manifest,
+        output_path,
+    )
     with tempfile.TemporaryDirectory(prefix="seqtk_wrapper_", dir=output_path.parent) as tmpdir_name:
         env = build_tool_wrapper_env(
             seqtk_binary,
@@ -495,6 +616,7 @@ def run_calculate_assembly_stats(
         )
     if not output_path.is_file():
         raise RescueAniError(f"Assembly stats output was not created: {output_path}")
+    LOGGER.info("Wrote assembly stats to %s with %d row(s).", output_path, count_tsv_rows(output_path))
     return output_path
 
 
@@ -525,6 +647,84 @@ def normalise_fastani_outputs(fastani_dir: Path) -> None:
     shutil.copy2(candidate, matrix_output)
 
 
+def summarise_ani_exclusions(
+    path: Path,
+) -> tuple[list[dict[str, str]], int, int, list[tuple[str, int]]]:
+    """Return ANI inclusion counts and grouped exclusion reasons."""
+    _header, rows = read_tsv_rows(path)
+    included_count = 0
+    excluded_count = 0
+    reason_counts: dict[str, int] = {}
+    for row in rows:
+        if row.get("ani_included", "").strip() == "true":
+            included_count += 1
+            continue
+        excluded_count += 1
+        reason = row.get("ani_exclusion_reason", "").strip() or "unspecified"
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    return rows, included_count, excluded_count, sorted(reason_counts.items())
+
+
+def log_ani_preparation(fastani_dir: Path) -> None:
+    """Log ANI inclusion, exclusion, and reason summaries."""
+    ani_metadata_path = fastani_dir / "ani_metadata.tsv"
+    ani_exclusions_path = fastani_dir / "ani_exclusions.tsv"
+    exclusion_rows, included_count, excluded_count, reason_counts = summarise_ani_exclusions(
+        ani_exclusions_path
+    )
+    LOGGER.info(
+        "Built ANI inputs under %s: ani_metadata_rows=%d ani_exclusion_rows=%d.",
+        fastani_dir,
+        count_tsv_rows(ani_metadata_path),
+        len(exclusion_rows),
+    )
+    LOGGER.info(
+        "ANI eligibility summary: included=%d excluded=%d.",
+        included_count,
+        excluded_count,
+    )
+    for row in exclusion_rows:
+        reason = row.get("ani_exclusion_reason", "").strip() or "none"
+        LOGGER.info(
+            "ANI gating for %s: included=%s reason=%s.",
+            row.get("accession", ""),
+            row.get("ani_included", ""),
+            reason,
+        )
+    LOGGER.info("ANI exclusion reasons: %s.", format_count_pairs(reason_counts))
+
+
+def summarise_cluster_outputs(cluster_path: Path, representative_path: Path) -> tuple[int, int, int]:
+    """Return cluster row, unique cluster, and representative counts."""
+    _cluster_header, cluster_rows = read_tsv_rows(cluster_path)
+    _representative_header, representative_rows = read_tsv_rows(representative_path)
+    cluster_count = len(
+        {row.get("Cluster_ID", "").strip() for row in cluster_rows if row.get("Cluster_ID", "").strip()}
+    )
+    return len(cluster_rows), cluster_count, len(representative_rows)
+
+
+def log_cluster_outputs(cluster_path: Path, ani_summary_path: Path, representative_path: Path) -> None:
+    """Log cluster and representative output sizes."""
+    cluster_rows, cluster_count, representative_count = summarise_cluster_outputs(
+        cluster_path,
+        representative_path,
+    )
+    LOGGER.info(
+        "ANI cluster outputs: cluster_path=%s ani_summary=%s cluster_rows=%d cluster_count=%d representative_count=%d.",
+        cluster_path,
+        ani_summary_path,
+        cluster_rows,
+        cluster_count,
+        representative_count,
+    )
+    LOGGER.info(
+        "ANI representatives ready: output=%s count=%d.",
+        representative_path,
+        representative_count,
+    )
+
+
 def run_fastani(
     *,
     fastani_binary: str,
@@ -539,6 +739,12 @@ def run_fastani(
     fastani_log = fastani_dir / "fastani.log"
     matrix_output = fastani_dir / "fastani.matrix"
     fastani_command = parse_command_prefix(fastani_binary)
+    LOGGER.info(
+        "Running FastANI: command=%s cwd=%s path_list=%s.",
+        shlex.join(fastani_command),
+        fastani_dir,
+        path_list,
+    )
 
     result = run_subprocess(
         [
@@ -573,6 +779,12 @@ def run_fastani(
             "FastANI did not produce a matrix for the rescued eligible inputs. "
             f"See {fastani_log}."
         )
+    LOGGER.info(
+        "FastANI outputs ready: tsv=%s log=%s matrix=%s.",
+        fastani_tsv,
+        fastani_log,
+        matrix_output,
+    )
     return matrix_output
 
 
@@ -677,6 +889,7 @@ def build_partial_master_table(
     exit_code = build_master_table.main(command)
     if exit_code != 0:
         raise RescueAniError("build_master_table.py failed during rescue.")
+    LOGGER.info("Rescued master table ready: output=%s.", output_path)
     return output_path
 
 
@@ -722,6 +935,7 @@ def build_partial_sample_status(
     exit_code = build_sample_status.main(command)
     if exit_code != 0:
         raise RescueAniError("build_sample_status.py failed during rescue.")
+    LOGGER.info("Rescued sample status ready: output=%s.", output_path)
     return output_path
 
 
@@ -786,6 +1000,15 @@ def write_rescue_provenance(
             }
         ],
     )
+    LOGGER.info(
+        "Rescue provenance ready: output=%s validated=%d ani_included=%d ani_excluded=%d cluster_rows=%d representative_rows=%d.",
+        provenance_path,
+        sample_count,
+        included_samples,
+        excluded_samples,
+        len(cluster_rows),
+        len(representative_rows),
+    )
     return provenance_path
 
 
@@ -794,11 +1017,22 @@ def run_rescue(args: argparse.Namespace) -> None:
     validate_outdirs(args.source_outdir, args.outdir)
     validated_samples_source = resolve_validated_samples_path(args)
     initial_status_source = resolve_initial_status_path(args)
+    log_startup_configuration(
+        args,
+        validated_samples_source=validated_samples_source,
+        initial_status_source=initial_status_source,
+    )
     if not args.metadata.is_file():
         raise RescueAniError(f"Metadata table does not exist: {args.metadata}")
 
     validated_rows = load_validated_samples(validated_samples_source)
+    LOGGER.info(
+        "Loaded %d validated sample(s) from %s.",
+        len(validated_rows),
+        validated_samples_source,
+    )
     samples = build_resolved_samples(args.source_outdir, validated_rows)
+    log_resolved_samples(samples)
 
     tables_dir = args.outdir / "tables"
     copied_validated_samples = copy_source_table(
@@ -851,6 +1085,7 @@ def run_rescue(args: argparse.Namespace) -> None:
         assembly_stats=assembly_stats,
         outdir=fastani_dir,
     )
+    log_ani_preparation(fastani_dir)
 
     cluster_dir = args.outdir / "cohort" / "ani_clusters"
     if table_has_rows(fastani_dir / "ani_metadata.tsv"):
@@ -867,14 +1102,17 @@ def run_rescue(args: argparse.Namespace) -> None:
             ani_score_profile=args.ani_score_profile,
         )
     else:
-        LOGGER.info("No ANI-eligible samples remained after rescue gating.")
+        LOGGER.info(
+            "No ANI-eligible samples remained after rescue gating; writing empty ANI outputs."
+        )
         (fastani_dir / "fastani.tsv").write_text("", encoding="utf-8")
         (fastani_dir / "fastani.log").write_text("", encoding="utf-8")
         (fastani_dir / "fastani.matrix").write_text("", encoding="utf-8")
         cluster_path, ani_summary, ani_representatives = write_empty_ani_outputs(cluster_dir)
+    log_cluster_outputs(cluster_path, ani_summary, ani_representatives)
 
     LOGGER.info("Building partial rescued final tables.")
-    build_partial_master_table(
+    master_table_path = build_partial_master_table(
         validated_samples=copied_validated_samples,
         metadata=args.metadata,
         busco_lineages=args.busco_lineage,
@@ -885,7 +1123,7 @@ def run_rescue(args: argparse.Namespace) -> None:
         assembly_stats=assembly_stats,
         output_path=tables_dir / "master_table.tsv",
     )
-    build_partial_sample_status(
+    sample_status_path = build_partial_sample_status(
         validated_samples=copied_validated_samples,
         initial_status=copied_initial_status,
         metadata=args.metadata,
@@ -897,7 +1135,7 @@ def run_rescue(args: argparse.Namespace) -> None:
         assembly_stats=assembly_stats,
         output_path=tables_dir / "sample_status.tsv",
     )
-    write_rescue_provenance(
+    provenance_path = write_rescue_provenance(
         rescue_outdir=args.outdir,
         source_outdir=args.source_outdir,
         metadata=args.metadata,
@@ -909,6 +1147,12 @@ def run_rescue(args: argparse.Namespace) -> None:
         ani_exclusions_path=fastani_dir / "ani_exclusions.tsv",
         cluster_path=cluster_path,
         representative_path=ani_representatives,
+    )
+    LOGGER.info(
+        "Rescue outputs ready: master_table=%s sample_status=%s provenance=%s.",
+        master_table_path,
+        sample_status_path,
+        provenance_path,
     )
 
 
