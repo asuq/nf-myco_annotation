@@ -178,6 +178,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("path 'all_best_16S_manifest.tsv', emit: best_manifest", module_text)
         self.assertIn("path 'all_partial_16S.fna', emit: partial_fasta", module_text)
         self.assertIn("path 'all_partial_16S_manifest.tsv', emit: partial_manifest", module_text)
+        self.assertIn('python_version="\\$(python3 --version 2>&1 | sed \'s/^Python //\')"', module_text)
+        self.assertIn("printf '\"%s\":\\n  python: \"%s\"\\n  script: \"%s\"\\n' \\", module_text)
+        self.assertNotIn('cat <<EOF > versions.yml', module_text)
 
     def test_cohort_16s_builds_outputs_from_per_sample_summaries(self) -> None:
         """Require the cohort 16S workflow to collect per-sample summaries only."""

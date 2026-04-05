@@ -63,11 +63,12 @@ process BUILD_COHORT_16S {
         --output-fasta all_partial_16S.fna \
         --output-manifest all_partial_16S_manifest.tsv
 
-    cat <<EOF > versions.yml
-    "${task.process}":
-      python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
-      script: "bin/concat_best_16s.py"
-    EOF
+    python_version="\$(python3 --version 2>&1 | sed 's/^Python //')"
+    printf '"%s":\n  python: "%s"\n  script: "%s"\n' \
+        "${task.process}" \
+        "\${python_version}" \
+        "bin/concat_best_16s.py" \
+        > versions.yml
     """
 
     stub:
