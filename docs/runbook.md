@@ -189,6 +189,63 @@ nextflow run . -profile test -stub-run
 This validates the DSL wiring, channel contracts, publish locations, and final
 table/version outputs without requiring external databases or tool containers.
 
+## Rescue ANI from published results
+
+Use `bin/rescue_ani_from_results.py` when an older run already published
+per-sample Barrnap, CheckM2, and BUSCO outputs, but the ANI branch needs to be
+rebuilt without rerunning the heavy per-sample tools.
+
+- `--source-outdir` must point to the failed run's published results tree
+- `--outdir` must be a different fresh rescue directory
+- `--busco-lineage` must be supplied once with the original run order as
+  whitespace-separated values because the first lineage remains the primary
+  ANI-scoring BUSCO column
+
+Example:
+
+```bash
+uv run bin/rescue_ani_from_results.py \
+  --source-outdir /path/to/failed-results \
+  --metadata /path/to/metadata.tsv \
+  --outdir /path/to/rescued-ani \
+  --busco-lineage bacillota_odb12 mycoplasmatota_odb12
+```
+
+If FastANI is only available through a container wrapper, pass the wrapper as a
+quoted command prefix:
+
+```bash
+uv run bin/rescue_ani_from_results.py \
+  --source-outdir /path/to/failed-results \
+  --metadata /path/to/metadata.tsv \
+  --outdir /path/to/rescued-ani \
+  --busco-lineage bacillota_odb12 mycoplasmatota_odb12 \
+  --fastani-binary "singularity exec /path/to/fastani.sif fastANI"
+```
+
+If `seqtk` is also only available through a container wrapper, pass that
+wrapper the same way:
+
+```bash
+uv run bin/rescue_ani_from_results.py \
+  --source-outdir /path/to/failed-results \
+  --metadata /path/to/metadata.tsv \
+  --outdir /path/to/rescued-ani \
+  --busco-lineage bacillota_odb12 mycoplasmatota_odb12 \
+  --seqtk-binary "singularity exec /path/to/seqtk.sif seqtk" \
+  --fastani-binary "singularity exec /path/to/fastani.sif fastANI"
+```
+
+The rescue command rebuilds:
+
+- per-sample `best_16S.fna` and `16S_status.tsv`
+- per-sample `checkm2_summary.tsv`
+- per-lineage BUSCO summary TSVs
+- `cohort/fastani/` ANI inputs, exclusions, matrix, and logs
+- `cohort/ani_clusters/` cluster, ANI summary, and representative tables
+- partial `tables/master_table.tsv` and `tables/sample_status.tsv`
+- `tables/rescue_provenance.tsv`
+
 ## Small-cohort server validation
 
 For the recommended first real server validation path, use the tracked small
