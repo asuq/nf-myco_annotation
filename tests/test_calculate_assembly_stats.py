@@ -157,6 +157,37 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                 ],
             )
 
+    def test_accepts_crlf_manifest_rows(self) -> None:
+        """Handle CRLF line endings in the staged manifest without losing file paths."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC4.fasta", ">contig1\nAACCGGTT\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\r\nACC4\tid_4\tACC4.fasta\r\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                read_tsv(output),
+                [
+                    {
+                        "accession": "ACC4",
+                        "n50": "8",
+                        "scaffolds": "1",
+                        "genome_size": "8",
+                    }
+                ],
+            )
+
     def test_fails_for_invalid_or_empty_fasta(self) -> None:
         """Fail cleanly when seqtk cannot produce contig lengths."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

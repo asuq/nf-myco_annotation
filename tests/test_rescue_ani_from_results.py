@@ -65,6 +65,50 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 writer.writerow(row)
         return path
 
+    def install_fake_seqtk(self, directory: Path) -> Path:
+        """Install a fake seqtk executable that supports `seqtk comp`."""
+        seqtk_path = directory / "seqtk"
+        seqtk_path.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import sys",
+                    "from pathlib import Path",
+                    "",
+                    "def read_fasta(path: Path):",
+                    "    header = None",
+                    "    chunks = []",
+                    "    for raw_line in path.read_text(encoding=\"utf-8\").splitlines():",
+                    "        line = raw_line.strip()",
+                    "        if not line:",
+                    "            continue",
+                    "        if line.startswith(\">\"):",
+                    "            if header is not None:",
+                    "                yield header, \"\".join(chunks)",
+                    "            header = line[1:]",
+                    "            chunks = []",
+                    "            continue",
+                    "        if header is None:",
+                    "            print(\"invalid FASTA\", file=sys.stderr)",
+                    "            return",
+                    "        chunks.append(line)",
+                    "    if header is not None:",
+                    "        yield header, \"\".join(chunks)",
+                    "",
+                    "if len(sys.argv) != 3 or sys.argv[1] != \"comp\":",
+                    "    print(\"unsupported arguments\", file=sys.stderr)",
+                    "    sys.exit(1)",
+                    "",
+                    "for name, sequence in read_fasta(Path(sys.argv[2])):",
+                    "    print(f\"{name}\\t{len(sequence)}\\t0\\t0\\t0\\t0\")",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        seqtk_path.chmod(0o755)
+        return seqtk_path
+
     def make_initial_status_row(
         self,
         *,
@@ -464,6 +508,51 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             self.assertIn("Resolved sample ACC1:", log_text)
             self.assertIn("source=genome_fasta_fallback", log_text)
             self.assertIn("Resolved 1 sample(s); genome_fasta_fallback=1.", log_text)
+
+    def test_main_writes_lf_only_staged_manifest_for_real_assembly_stats(self) -> None:
+        """Write an LF-only staged manifest that the real shell helper can consume."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+                barrnap_mode="partial",
+            )
+            self.install_fake_seqtk(tmpdir)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{tmpdir}{os.pathsep}{environment['PATH']}"
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.dict(os.environ, environment, clear=True):
+                    with mock.patch.object(
+                        rescue_ani_from_results,
+                        "run_subprocess",
+                        wraps=rescue_ani_from_results.run_subprocess,
+                    ):
+                        exit_code = rescue_ani_from_results.main(
+                            [
+                                "--source-outdir",
+                                str(source_outdir),
+                                "--metadata",
+                                str(metadata),
+                                "--outdir",
+                                str(rescue_outdir),
+                                "--busco-lineage",
+                                "bacillota_odb12",
+                                "mycoplasmatota_odb12",
+                            ]
+                        )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            staged_manifest = rescue_outdir / "cohort" / "staged_genomes.tsv"
+            self.assertTrue(staged_manifest.is_file())
+            self.assertNotIn(b"\r\n", staged_manifest.read_bytes())
+            assembly_stats = rescue_outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv"
+            self.assertTrue(assembly_stats.is_file())
+            _header, rows = read_tsv_rows(assembly_stats)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["accession"], "ACC1")
 
     @unittest.skipUnless(SCIPY_AVAILABLE, "SciPy is required for ANI rescue integration tests.")
     def test_main_recovers_ani_outputs_and_partial_final_tables(self) -> None:

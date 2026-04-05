@@ -593,7 +593,12 @@ def write_tsv(path: Path, header: Sequence[str], rows: Sequence[dict[str, str]])
     """Write a TSV with a fixed header."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(header), delimiter="\t")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(header),
+            delimiter="\t",
+            lineterminator="\n",
+        )
         writer.writeheader()
         for row in rows:
             writer.writerow(row)

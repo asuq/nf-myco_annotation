@@ -366,7 +366,12 @@ def write_status(path: Path, row: dict[str, str]) -> None:
     """Write the one-row 16S status TSV."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(STATUS_COLUMNS), delimiter="\t")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(STATUS_COLUMNS),
+            delimiter="\t",
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerow(row)
 

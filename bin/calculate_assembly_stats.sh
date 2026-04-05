@@ -195,7 +195,7 @@ main() {
             fi
 
             printf '%s\t%s\n' "${accession}" "${stats_line}"
-        done < <(tail -n +2 "${staged_manifest}")
+        done < <(tail -n +2 "${staged_manifest}" | tr -d '\r')
     } > "${output}"
 }
 
