@@ -11,9 +11,13 @@ process SUMMARISE_16S {
         mode: 'copy',
         overwrite: true,
         saveAs: { filename ->
-            filename in ['16S_status.tsv', 'best_16S.fna']
-                ? filename
-                : null
+            if (filename == "${meta.internal_id}_best_16S.fna") {
+                return 'best_16S.fna'
+            }
+            if (filename == "${meta.internal_id}_16S_status.tsv") {
+                return '16S_status.tsv'
+            }
+            return null
         },
     )
 

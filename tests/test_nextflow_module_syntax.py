@@ -147,12 +147,16 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_text = (MODULES_DIR / "summarise_16s.nf").read_text(encoding="utf-8")
 
         self.assertIn('{ "${params.outdir}/samples/${meta.accession}/16s" }', module_text)
-        self.assertIn("filename in ['16S_status.tsv', 'best_16S.fna']", module_text)
         self.assertIn("tuple val(meta), path(rrna_gff), path(rrna_fasta), path(barrnap_log)", module_text)
         self.assertIn(
             'tuple val(meta), path("${meta.internal_id}_best_16S.fna"), path("${meta.internal_id}_16S_status.tsv"), emit: summaries',
             module_text,
         )
+        self.assertIn('if (filename == "${meta.internal_id}_best_16S.fna") {', module_text)
+        self.assertIn("return 'best_16S.fna'", module_text)
+        self.assertIn('if (filename == "${meta.internal_id}_16S_status.tsv") {', module_text)
+        self.assertIn("return '16S_status.tsv'", module_text)
+        self.assertIn("return null", module_text)
         self.assertIn('summarise_16s.py \\', module_text)
         self.assertIn('cp best_16S.fna "${meta.internal_id}_best_16S.fna"', module_text)
         self.assertIn('cp 16S_status.tsv "${meta.internal_id}_16S_status.tsv"', module_text)
