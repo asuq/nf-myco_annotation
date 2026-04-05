@@ -25,6 +25,7 @@ process CALCULATE_ASSEMBLY_STATS {
     """
     calculate_assembly_stats.sh \
         --staged-manifest "${staged_manifest}" \
+        --jobs "${task.cpus}" \
         --output assembly_stats.tsv
 
     seqtk_version="\$(command -v seqtk >/dev/null 2>&1 && seqtk 2>&1 | awk '/^Version:/ { print \$2; exit }' || true)"

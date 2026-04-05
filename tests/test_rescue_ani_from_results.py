@@ -237,8 +237,9 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             command_name = Path(str(command[0])).name
             if command_name == "calculate_assembly_stats.sh":
                 _ = env
-                manifest_path = Path(str(command[2]))
-                output_path = Path(str(command[4]))
+                command_parts = [str(part) for part in command]
+                manifest_path = Path(command_parts[command_parts.index("--staged-manifest") + 1])
+                output_path = Path(command_parts[command_parts.index("--output") + 1])
                 _header, rows = read_tsv_rows(manifest_path)
                 stats_rows = [
                     {
@@ -409,6 +410,26 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
 
         self.assertEqual(args.busco_lineage, ["bacillota_odb12", "mycoplasmatota_odb12"])
 
+    def test_parse_args_accepts_assembly_stats_jobs_override(self) -> None:
+        """Accept an explicit rescue worker count for assembly stats."""
+        args = rescue_ani_from_results.parse_args(
+            [
+                "--source-outdir",
+                "/tmp/source",
+                "--metadata",
+                "/tmp/metadata.tsv",
+                "--outdir",
+                "/tmp/rescued",
+                "--busco-lineage",
+                "bacillota_odb12",
+                "mycoplasmatota_odb12",
+                "--assembly-stats-jobs",
+                "8",
+            ]
+        )
+
+        self.assertEqual(args.assembly_stats_jobs, 8)
+
     def test_parse_args_rejects_repeated_busco_lineage_option(self) -> None:
         """Fail clearly when the BUSCO lineage option is repeated."""
         stderr = io.StringIO()
@@ -470,7 +491,10 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 "Rescue options: busco_lineages=bacillota_odb12,mycoplasmatota_odb12",
                 log_text,
             )
-            self.assertIn("Rescue tools: fastani_binary=fastANI seqtk_binary=seqtk.", log_text)
+            self.assertIn(
+                "Rescue tools: fastani_binary=fastANI seqtk_binary=seqtk assembly_stats_jobs=1.",
+                log_text,
+            )
             self.assertIn("Loaded 1 validated sample(s)", log_text)
 
     def test_main_logs_genome_fasta_fallback_resolution(self) -> None:
@@ -541,6 +565,8 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                                 "--busco-lineage",
                                 "bacillota_odb12",
                                 "mycoplasmatota_odb12",
+                                "--assembly-stats-jobs",
+                                "3",
                             ]
                         )
 
@@ -553,6 +579,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             _header, rows = read_tsv_rows(assembly_stats)
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["accession"], "ACC1")
+            self.assertIn("Running assembly stats: jobs=3 seqtk_binary=seqtk", stderr.getvalue())
 
     @unittest.skipUnless(SCIPY_AVAILABLE, "SciPy is required for ANI rescue integration tests.")
     def test_main_recovers_ani_outputs_and_partial_final_tables(self) -> None:
@@ -703,6 +730,8 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                             "mycoplasmatota_odb12",
                             "--fastani-binary",
                             "fake-fastani",
+                            "--assembly-stats-jobs",
+                            "2",
                         ]
                     )
 
@@ -718,6 +747,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             self.assertIn("ANI gating for ACC2: included=false reason=partial_16s.", log_text)
             self.assertIn("ANI gating for ACC3: included=false reason=low_quality.", log_text)
             self.assertIn("ANI exclusion reasons: low_quality=1; partial_16s=1.", log_text)
+            self.assertIn("Running assembly stats: jobs=2", log_text)
             self.assertIn(
                 "ANI cluster outputs: cluster_path=",
                 log_text,

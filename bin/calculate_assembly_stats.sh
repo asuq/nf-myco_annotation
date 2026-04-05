@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: calculate_assembly_stats.sh --staged-manifest PATH --output PATH
+Usage: calculate_assembly_stats.sh --staged-manifest PATH --output PATH [--jobs INT]
 
 Compute in-house assembly statistics from staged FASTA files using seqtk.
 The staged manifest must contain accession and staged_filename columns.
@@ -41,6 +41,26 @@ resolve_genome_path() {
         return 0
     fi
     printf '%s/%s\n' "${manifest_dir}" "${staged_filename}"
+}
+
+validate_jobs() {
+    local jobs="$1"
+
+    if ! [[ "${jobs}" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "--jobs must be a positive integer."
+        return 1
+    fi
+}
+
+resolve_script_path() {
+    local invocation="$1"
+
+    if [[ "${invocation}" == */* ]]; then
+        printf '%s\n' "${invocation}"
+        return 0
+    fi
+
+    command -v "${invocation}"
 }
 
 compute_assembly_stats() {
@@ -94,9 +114,75 @@ compute_assembly_stats() {
     printf '%s\t%s\t%s\n' "${n50}" "${scaffolds}" "${genome_size}"
 }
 
+run_worker() {
+    local row_index="$1"
+    local accession="$2"
+    local fasta_path="$3"
+    local worker_dir="$4"
+    local result_path error_path stats_line
+
+    result_path="${worker_dir}/results/${row_index}.tsv"
+    error_path="${worker_dir}/errors/${row_index}.log"
+
+    if ! stats_line="$(compute_assembly_stats "${fasta_path}")"; then
+        printf '%s\n' "Failed to calculate assembly statistics for ${accession}." > "${error_path}"
+        return 255
+    fi
+
+    printf '%s\t%s\n' "${accession}" "${stats_line}" > "${result_path}"
+}
+
+collect_worker_error() {
+    local worker_dir="$1"
+    local task_count="$2"
+    local row_index error_path
+
+    for ((row_index = 1; row_index <= task_count; row_index++)); do
+        error_path="${worker_dir}/errors/${row_index}.log"
+        if [[ -s "${error_path}" ]]; then
+            cat "${error_path}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+merge_worker_results() {
+    local worker_dir="$1"
+    local task_count="$2"
+    local output_path="$3"
+    local output_tmp row_index result_path
+
+    output_tmp="${worker_dir}/assembly_stats.tsv"
+    {
+        printf 'accession\tn50\tscaffolds\tgenome_size\n'
+        for ((row_index = 1; row_index <= task_count; row_index++)); do
+            result_path="${worker_dir}/results/${row_index}.tsv"
+            if [[ ! -f "${result_path}" ]]; then
+                log_error "Assembly-stat worker did not produce row ${row_index}."
+                return 1
+            fi
+            cat "${result_path}"
+        done
+    } > "${output_tmp}"
+
+    mv "${output_tmp}" "${output_path}"
+}
+
 main() {
-    local staged_manifest="" output="" manifest_dir header_line duplicate_accessions=""
+    local staged_manifest="" output="" jobs="1" manifest_dir header_line duplicate_accessions=""
     local accession_index staged_filename_index
+
+    if [[ "${1:-}" == "--worker" ]]; then
+        shift
+        if (($# != 4)); then
+            log_error "Worker mode expects row index, accession, FASTA path, and worker dir."
+            return 1
+        fi
+        run_worker "$1" "$2" "$3" "$4"
+        return $?
+    fi
 
     while (($# > 0)); do
         case "$1" in
@@ -106,6 +192,10 @@ main() {
                 ;;
             --output)
                 output="$2"
+                shift 2
+                ;;
+            --jobs)
+                jobs="$2"
                 shift 2
                 ;;
             -h|--help)
@@ -123,6 +213,9 @@ main() {
     if [[ -z "${staged_manifest}" || -z "${output}" ]]; then
         log_error "--staged-manifest and --output are required."
         usage >&2
+        return 1
+    fi
+    if ! validate_jobs "${jobs}"; then
         return 1
     fi
     if [[ ! -f "${staged_manifest}" ]]; then
@@ -162,44 +255,68 @@ main() {
     fi
 
     mkdir -p "$(dirname "${output}")"
-    {
-        printf 'accession\tn50\tscaffolds\tgenome_size\n'
-        while IFS=$'\t' read -r -a fields; do
-            local accession staged_filename fasta_path stats_line
+    local worker_dir task_file worker_script task_count
+    worker_dir="$(mktemp -d)"
+    CLEANUP_DIRS+=("${worker_dir}")
+    mkdir -p "${worker_dir}/results" "${worker_dir}/errors"
+    task_file="${worker_dir}/tasks.nul"
+    worker_script="$(resolve_script_path "$0")"
+    task_count=0
 
-            if ((${#fields[@]} <= staged_filename_index)) || ((${#fields[@]} <= accession_index)); then
-                log_error "Staged manifest row is missing required fields."
-                return 1
-            fi
+    while IFS=$'\t' read -r -a fields; do
+        local accession staged_filename fasta_path
 
-            accession="${fields[accession_index]}"
-            staged_filename="${fields[staged_filename_index]}"
-            if [[ -z "${accession}" ]]; then
-                log_error "Staged manifest contains an empty accession."
-                return 1
-            fi
-            if [[ -z "${staged_filename}" ]]; then
-                log_error "Staged manifest contains an empty staged_filename for ${accession}."
-                return 1
-            fi
+        if ((${#fields[@]} <= staged_filename_index)) || ((${#fields[@]} <= accession_index)); then
+            log_error "Staged manifest row is missing required fields."
+            return 1
+        fi
 
-            fasta_path="$(resolve_genome_path "${manifest_dir}" "${staged_filename}")"
-            if [[ ! -f "${fasta_path}" ]]; then
-                log_error "Missing staged FASTA for ${accession}: ${fasta_path}"
-                return 1
-            fi
+        accession="${fields[accession_index]}"
+        staged_filename="${fields[staged_filename_index]}"
+        if [[ -z "${accession}" ]]; then
+            log_error "Staged manifest contains an empty accession."
+            return 1
+        fi
+        if [[ -z "${staged_filename}" ]]; then
+            log_error "Staged manifest contains an empty staged_filename for ${accession}."
+            return 1
+        fi
 
-            if ! stats_line="$(compute_assembly_stats "${fasta_path}")"; then
-                log_error "Failed to calculate assembly statistics for ${accession}."
-                return 1
-            fi
+        fasta_path="$(resolve_genome_path "${manifest_dir}" "${staged_filename}")"
+        if [[ ! -f "${fasta_path}" ]]; then
+            log_error "Missing staged FASTA for ${accession}: ${fasta_path}"
+            return 1
+        fi
 
-            printf '%s\t%s\n' "${accession}" "${stats_line}"
-        done < <(tail -n +2 "${staged_manifest}" | tr -d '\r')
-    } > "${output}"
+        task_count=$((task_count + 1))
+        printf '%s\0%s\0%s\0%s\0' \
+            "${task_count}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "${worker_dir}" \
+            >> "${task_file}"
+    done < <(tail -n +2 "${staged_manifest}" | tr -d '\r')
+
+    if [[ -s "${task_file}" ]]; then
+        if ! xargs -0 -n 4 -P "${jobs}" bash "${worker_script}" --worker < "${task_file}"; then
+            local worker_error
+            worker_error="$(collect_worker_error "${worker_dir}" "${task_count}" || true)"
+            if [[ -n "${worker_error}" ]]; then
+                log_error "${worker_error}"
+            else
+                log_error "Assembly-stat worker execution failed."
+            fi
+            return 1
+        fi
+    fi
+
+    if ! merge_worker_results "${worker_dir}" "${task_count}" "${output}"; then
+        return 1
+    fi
 }
 
 CLEANUP_FILES=()
-trap 'if ((${#CLEANUP_FILES[@]} > 0)); then rm -f "${CLEANUP_FILES[@]}"; fi' EXIT
+CLEANUP_DIRS=()
+trap 'if ((${#CLEANUP_FILES[@]} > 0)); then rm -f "${CLEANUP_FILES[@]}"; fi; if ((${#CLEANUP_DIRS[@]} > 0)); then rm -rf "${CLEANUP_DIRS[@]}"; fi' EXIT
 
 main "$@"

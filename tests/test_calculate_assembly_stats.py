@@ -80,12 +80,22 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
         staged_manifest: Path,
         output: Path,
         path_prefix: Path,
+        jobs: int = 1,
     ) -> subprocess.CompletedProcess[str]:
         """Run the helper script with a controlled PATH."""
         environment = os.environ.copy()
         environment["PATH"] = f"{path_prefix}:{environment['PATH']}"
         return subprocess.run(
-            ["bash", str(SCRIPT), "--staged-manifest", str(staged_manifest), "--output", str(output)],
+            [
+                "bash",
+                str(SCRIPT),
+                "--staged-manifest",
+                str(staged_manifest),
+                "--jobs",
+                str(jobs),
+                "--output",
+                str(output),
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -187,6 +197,89 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                     }
                 ],
             )
+
+    def test_parallel_jobs_preserve_manifest_order(self) -> None:
+        """Emit deterministic row order while processing multiple genomes in parallel."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC2.fasta", ">contig1\nAAAAAAAAAA\n")
+            self.write_text_file(tmpdir / "ACC1.fasta", ">contig1\nAAAA\n")
+            self.write_text_file(tmpdir / "ACC3.fasta", ">contig1\nAAAAAAA\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                (
+                    "accession\tinternal_id\tstaged_filename\n"
+                    "ACC2\tid_2\tACC2.fasta\n"
+                    "ACC1\tid_1\tACC1.fasta\n"
+                    "ACC3\tid_3\tACC3.fasta\n"
+                ),
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+                jobs=2,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                [row["accession"] for row in read_tsv(output)],
+                ["ACC2", "ACC1", "ACC3"],
+            )
+
+    def test_parallel_jobs_report_failing_accession(self) -> None:
+        """Fail the stage when one parallel worker cannot derive contig lengths."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC1.fasta", ">contig1\nAACCGGTT\n")
+            self.write_text_file(tmpdir / "ACC2.fasta", "not-a-fasta\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                (
+                    "accession\tinternal_id\tstaged_filename\n"
+                    "ACC1\tid_1\tACC1.fasta\n"
+                    "ACC2\tid_2\tACC2.fasta\n"
+                ),
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+                jobs=2,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Failed to calculate assembly statistics for ACC2", result.stderr)
+
+    def test_parallel_jobs_accept_paths_with_spaces(self) -> None:
+        """Pass FASTA paths with spaces safely through the worker queue."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            fasta_dir = tmpdir / "with spaces"
+            fasta_dir.mkdir(parents=True, exist_ok=True)
+            self.write_text_file(fasta_dir / "ACC 5.fasta", ">contig1\nAACCGGTTAA\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC5\tid_5\twith spaces/ACC 5.fasta\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+                jobs=2,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(read_tsv(output)[0]["accession"], "ACC5")
 
     def test_fails_for_invalid_or_empty_fasta(self) -> None:
         """Fail cleanly when seqtk cannot produce contig lengths."""

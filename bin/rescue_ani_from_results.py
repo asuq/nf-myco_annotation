@@ -151,6 +151,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             '"singularity exec seqtk.sif seqtk".'
         ),
     )
+    parser.add_argument(
+        "--assembly-stats-jobs",
+        type=int,
+        default=1,
+        help="Worker count for rescued assembly-stat calculation. Default: 1.",
+    )
     return parser.parse_args(argv)
 
 
@@ -319,9 +325,10 @@ def log_startup_configuration(
         args.ani_score_profile,
     )
     LOGGER.info(
-        "Rescue tools: fastani_binary=%s seqtk_binary=%s.",
+        "Rescue tools: fastani_binary=%s seqtk_binary=%s assembly_stats_jobs=%d.",
         args.fastani_binary,
         args.seqtk_binary,
+        args.assembly_stats_jobs,
     )
 
 
@@ -592,12 +599,14 @@ def run_calculate_assembly_stats(
     output_path: Path,
     *,
     seqtk_binary: str,
+    jobs: int,
 ) -> Path:
     """Run the existing assembly-stat helper over the resolved staged genomes."""
     script_path = Path(__file__).resolve().parent / "calculate_assembly_stats.sh"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     LOGGER.info(
-        "Running assembly stats: seqtk_binary=%s staged_manifest=%s output=%s.",
+        "Running assembly stats: jobs=%d seqtk_binary=%s staged_manifest=%s output=%s.",
+        jobs,
         seqtk_binary,
         staged_manifest,
         output_path,
@@ -609,7 +618,15 @@ def run_calculate_assembly_stats(
             wrapper_dir=Path(tmpdir_name),
         )
         result = run_subprocess(
-            [script_path, "--staged-manifest", staged_manifest, "--output", output_path],
+            [
+                script_path,
+                "--staged-manifest",
+                staged_manifest,
+                "--jobs",
+                str(jobs),
+                "--output",
+                output_path,
+            ],
             cwd=Path(__file__).resolve().parents[1],
             env=env,
         )
@@ -1075,6 +1092,7 @@ def run_rescue(args: argparse.Namespace) -> None:
         staged_manifest,
         args.outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv",
         seqtk_binary=args.seqtk_binary,
+        jobs=args.assembly_stats_jobs,
     )
 
     LOGGER.info("Building rescued ANI eligibility and FastANI inputs.")
