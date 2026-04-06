@@ -13,6 +13,7 @@ from typing import Sequence
 
 import build_master_table as table_helpers
 import master_table_contract
+import validate_inputs
 
 
 LOGGER = logging.getLogger(__name__)
@@ -225,11 +226,36 @@ def load_initial_status(
             raise SampleStatusError(
                 f"initial sample-status table disagrees on internal_id for accession {accession!r}."
             )
-        if status_row.get("is_new", "") != sample_row["is_new"]:
+        status_is_new = normalise_is_new_value(
+            status_row.get("is_new", ""),
+            accession=accession,
+            table_name="initial sample-status table",
+        )
+        sample_is_new = normalise_is_new_value(
+            sample_row["is_new"],
+            accession=accession,
+            table_name="validated_samples.tsv",
+        )
+        if status_is_new != sample_is_new:
             raise SampleStatusError(
                 f"initial sample-status table disagrees on is_new for accession {accession!r}."
             )
     return status_index
+
+
+def normalise_is_new_value(
+    value: str,
+    *,
+    accession: str,
+    table_name: str,
+) -> str:
+    """Normalise one `is_new` value or raise a table-specific status error."""
+    try:
+        return validate_inputs.normalise_boolean(value)
+    except validate_inputs.ValidationError as error:
+        raise SampleStatusError(
+            f"{table_name} contains invalid is_new value {value!r} for accession {accession!r}."
+        ) from error
 
 
 def load_annotation_manifest(

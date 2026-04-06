@@ -24,6 +24,7 @@ import select_ani_representatives
 import summarise_16s
 import summarise_busco
 import summarise_checkm2
+import validate_inputs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -231,9 +232,9 @@ def resolve_validated_samples_path(args: argparse.Namespace) -> Path:
     return args.validated_samples or args.source_outdir / "tables" / "validated_samples.tsv"
 
 
-def resolve_initial_status_path(args: argparse.Namespace) -> Path:
-    """Resolve the initial-status source path."""
-    return args.initial_status or args.source_outdir / "tables" / "sample_status.tsv"
+def resolve_validation_warnings_path(source_outdir: Path) -> Path:
+    """Resolve the validation-warnings source path."""
+    return source_outdir / "tables" / "validation_warnings.tsv"
 
 
 def validate_outdirs(source_outdir: Path, rescue_outdir: Path) -> None:
@@ -303,7 +304,7 @@ def log_startup_configuration(
     args: argparse.Namespace,
     *,
     validated_samples_source: Path,
-    initial_status_source: Path,
+    validation_warnings_source: Path,
 ) -> None:
     """Log the resolved rescue configuration before execution."""
     LOGGER.info(
@@ -312,11 +313,18 @@ def log_startup_configuration(
         args.outdir,
         args.metadata,
     )
-    LOGGER.info(
-        "Rescue sources: validated_samples=%s initial_status=%s.",
-        validated_samples_source,
-        initial_status_source,
-    )
+    if args.initial_status is not None:
+        LOGGER.info(
+            "Rescue sources: validated_samples=%s initial_status_override=%s.",
+            validated_samples_source,
+            args.initial_status,
+        )
+    else:
+        LOGGER.info(
+            "Rescue sources: validated_samples=%s validation_warnings=%s initial_status=rebuild.",
+            validated_samples_source,
+            validation_warnings_source,
+        )
     LOGGER.info(
         "Rescue options: busco_lineages=%s gcode_rule=%s ani_threshold=%s ani_score_profile=%s.",
         ",".join(args.busco_lineage),
@@ -349,6 +357,93 @@ def log_resolved_samples(samples: Sequence[ResolvedSample]) -> None:
         "Resolved %d sample(s); genome_fasta_fallback=%d.",
         len(samples),
         fallback_count,
+    )
+
+
+def load_validation_warnings(
+    path: Path,
+) -> list[validate_inputs.ValidationWarning]:
+    """Load published validation warnings when available."""
+    if not path.is_file():
+        LOGGER.warning(
+            "Validation warnings table is missing at %s; rebuilding the initial-status seed without validation warnings.",
+            path,
+        )
+        return []
+
+    header, rows = read_tsv_rows(path)
+    build_master_table.require_columns(
+        header,
+        validate_inputs.VALIDATION_WARNING_COLUMNS,
+        "validation_warnings.tsv",
+    )
+    return [
+        validate_inputs.ValidationWarning(
+            accession=row["accession"],
+            warning_code=row["warning_code"],
+            message=row["message"],
+        )
+        for row in rows
+    ]
+
+
+def rebuild_initial_status_seed(
+    *,
+    validated_rows: Sequence[dict[str, str]],
+    validation_warnings_path: Path,
+    busco_lineages: Sequence[str],
+    output_path: Path,
+) -> Path:
+    """Rebuild the validation-time sample-status seed for rescue."""
+    sample_status_columns = validate_inputs.resolve_sample_status_columns(
+        busco_lineages=busco_lineages,
+    )
+    warnings = load_validation_warnings(validation_warnings_path)
+    records = [
+        validate_inputs.SampleRecord(
+            values=dict(row),
+            internal_id=row["internal_id"],
+            metadata_present=False,
+        )
+        for row in validated_rows
+    ]
+    rows = validate_inputs.build_initial_sample_status_rows(
+        records=records,
+        warnings=warnings,
+        sample_status_columns=sample_status_columns,
+    )
+    write_tsv(output_path, sample_status_columns, rows)
+    LOGGER.info(
+        "Rebuilt rescue initial-status seed from validated_samples and validation_warnings: warnings_source=%s output=%s row_count=%d.",
+        validation_warnings_path,
+        output_path,
+        len(rows),
+    )
+    return output_path
+
+
+def prepare_initial_status_seed(
+    *,
+    args: argparse.Namespace,
+    validated_rows: Sequence[dict[str, str]],
+    validation_warnings_path: Path,
+    output_path: Path,
+) -> Path:
+    """Write the initial-status seed that rescue will pass into final reporting."""
+    if args.initial_status is not None:
+        copied_path = copy_source_table(args.initial_status, output_path)
+        LOGGER.info(
+            "Using explicit rescue initial-status override: source=%s output=%s.",
+            args.initial_status,
+            copied_path,
+        )
+        return copied_path
+
+    return rebuild_initial_status_seed(
+        validated_rows=validated_rows,
+        validation_warnings_path=validation_warnings_path,
+        busco_lineages=args.busco_lineage,
+        output_path=output_path,
     )
 
 
@@ -1038,11 +1133,11 @@ def run_rescue(args: argparse.Namespace) -> None:
     """Run the full ANI rescue workflow."""
     validate_outdirs(args.source_outdir, args.outdir)
     validated_samples_source = resolve_validated_samples_path(args)
-    initial_status_source = resolve_initial_status_path(args)
+    validation_warnings_source = resolve_validation_warnings_path(args.source_outdir)
     log_startup_configuration(
         args,
         validated_samples_source=validated_samples_source,
-        initial_status_source=initial_status_source,
+        validation_warnings_source=validation_warnings_source,
     )
     if not args.metadata.is_file():
         raise RescueAniError(f"Metadata table does not exist: {args.metadata}")
@@ -1060,8 +1155,11 @@ def run_rescue(args: argparse.Namespace) -> None:
     copied_validated_samples = copy_source_table(
         validated_samples_source, tables_dir / "validated_samples.tsv"
     )
-    copied_initial_status = copy_source_table(
-        initial_status_source, tables_dir / "source_sample_status.tsv"
+    copied_initial_status = prepare_initial_status_seed(
+        args=args,
+        validated_rows=validated_rows,
+        validation_warnings_path=validation_warnings_source,
+        output_path=tables_dir / "source_sample_status.tsv",
     )
 
     LOGGER.info("Rebuilding per-sample 16S summaries for %d sample(s).", len(samples))
@@ -1190,6 +1288,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         build_fastani_inputs.FastAniInputError,
         build_master_table.MasterTableError,
         build_sample_status.SampleStatusError,
+        validate_inputs.ValidationError,
         OSError,
     ) as error:
         LOGGER.error(str(error))

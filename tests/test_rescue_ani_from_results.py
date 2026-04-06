@@ -115,6 +115,9 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         accession: str,
         internal_id: str,
         is_new: str = "false",
+        warnings: str = "",
+        notes: str = "",
+        **overrides: str,
     ) -> dict[str, str]:
         """Build one seed status row matching the locked sample-status contract."""
         row: dict[str, str] = {}
@@ -129,7 +132,22 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         row["internal_id"] = internal_id
         row["is_new"] = is_new
         row["validation_status"] = "done"
+        row["warnings"] = warnings
+        row["notes"] = notes
+        row.update(overrides)
         return row
+
+    def write_validation_warnings(
+        self,
+        source_outdir: Path,
+        rows: Sequence[dict[str, str]],
+    ) -> Path:
+        """Write one published validation-warnings table."""
+        return self.write_tsv_rows(
+            source_outdir / "tables" / "validation_warnings.tsv",
+            ("accession", "warning_code", "message"),
+            rows,
+        )
 
     def barrnap_header(
         self,
@@ -299,6 +317,8 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         *,
         include_staged_fasta: bool,
         barrnap_mode: str = "partial",
+        source_status_rows: Sequence[dict[str, str]] | None = None,
+        validation_warning_rows: Sequence[dict[str, str]] | None = None,
     ) -> tuple[Path, Path, Path]:
         """Create one minimal rescue fixture tree and return its main paths."""
         source_outdir = tmpdir / "source_results"
@@ -331,8 +351,12 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         self.write_tsv_rows(
             source_outdir / "tables" / "sample_status.tsv",
             SAMPLE_STATUS_COLUMNS,
-            [self.make_initial_status_row(accession="ACC1", internal_id="ID1")],
+            list(source_status_rows)
+            if source_status_rows is not None
+            else [self.make_initial_status_row(accession="ACC1", internal_id="ID1")],
         )
+        if validation_warning_rows is not None:
+            self.write_validation_warnings(source_outdir, validation_warning_rows)
         self.write_text_file(genome_fasta, ">ACC1\nACGTACGTACGT\n")
         if include_staged_fasta:
             self.write_staged_fasta(source_outdir, accession="ACC1", internal_id="ID1")
@@ -486,7 +510,11 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             log_text = stderr.getvalue()
             self.assertIn("Rescue configuration: source_outdir=", log_text)
-            self.assertIn("Rescue sources: validated_samples=", log_text)
+            self.assertIn(
+                "Rescue sources: validated_samples=",
+                log_text,
+            )
+            self.assertIn("initial_status=rebuild.", log_text)
             self.assertIn(
                 "Rescue options: busco_lineages=bacillota_odb12,mycoplasmatota_odb12",
                 log_text,
@@ -496,6 +524,173 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 log_text,
             )
             self.assertIn("Loaded 1 validated sample(s)", log_text)
+            self.assertIn(
+                "Validation warnings table is missing at",
+                log_text,
+            )
+            self.assertIn(
+                "Rebuilt rescue initial-status seed from validated_samples and validation_warnings:",
+                log_text,
+            )
+
+    def test_main_rebuilds_initial_status_seed_from_validated_samples(self) -> None:
+        """Ignore the old published final status table when no override is supplied."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            legacy_status_row = self.make_initial_status_row(
+                accession="ACC1",
+                internal_id="ID1",
+                is_new="FALSE",
+                taxonomy_status="done",
+                barrnap_status="done",
+                codetta_status="done",
+                eggnog_status="skipped",
+                warnings="legacy_warning",
+                notes="legacy note",
+            )
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+                source_status_rows=[legacy_status_row],
+                validation_warning_rows=[
+                    {
+                        "accession": "ACC1",
+                        "warning_code": "internal_id_collision_resolved",
+                        "message": "Internal ID collision resolved during validation.",
+                    }
+                ],
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            source_seed_path = rescue_outdir / "tables" / "source_sample_status.tsv"
+            _header, rows = read_tsv_rows(source_seed_path)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["is_new"], "false")
+            self.assertEqual(rows[0]["taxonomy_status"], "na")
+            self.assertEqual(rows[0]["warnings"], "internal_id_collision_resolved")
+            self.assertEqual(
+                rows[0]["notes"],
+                "Internal ID collision resolved during validation.",
+            )
+            log_text = stderr.getvalue()
+            self.assertIn(
+                "Rebuilt rescue initial-status seed from validated_samples and validation_warnings:",
+                log_text,
+            )
+            self.assertNotIn("Using explicit rescue initial-status override:", log_text)
+
+    def test_main_uses_explicit_initial_status_override(self) -> None:
+        """Copy and use an explicit validation-time seed override when supplied."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+            )
+            override_status = self.write_tsv_rows(
+                tmpdir / "override_status.tsv",
+                SAMPLE_STATUS_COLUMNS,
+                [
+                    self.make_initial_status_row(
+                        accession="ACC1",
+                        internal_id="ID1",
+                        is_new="FALSE",
+                        taxonomy_status="done",
+                        warnings="override_warning",
+                    )
+                ],
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                            "--initial-status",
+                            str(override_status),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            source_seed_path = rescue_outdir / "tables" / "source_sample_status.tsv"
+            _header, rows = read_tsv_rows(source_seed_path)
+            self.assertEqual(rows[0]["is_new"], "FALSE")
+            self.assertEqual(rows[0]["taxonomy_status"], "done")
+            self.assertEqual(rows[0]["warnings"], "override_warning")
+            log_text = stderr.getvalue()
+            self.assertIn("initial_status_override=", log_text)
+            self.assertIn("Using explicit rescue initial-status override:", log_text)
+
+    def test_main_rebuilds_initial_status_without_validation_warnings_when_missing(self) -> None:
+        """Warn and continue when the published validation-warnings table is absent."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            source_seed_path = rescue_outdir / "tables" / "source_sample_status.tsv"
+            _header, rows = read_tsv_rows(source_seed_path)
+            self.assertEqual(rows[0]["warnings"], "")
+            self.assertEqual(rows[0]["notes"], "")
+            self.assertIn("Validation warnings table is missing at", stderr.getvalue())
 
     def test_main_logs_genome_fasta_fallback_resolution(self) -> None:
         """Log when rescue uses genome_fasta instead of a published staged FASTA."""

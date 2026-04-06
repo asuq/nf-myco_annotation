@@ -332,6 +332,100 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 "New sample metadata missing; unavailable fields filled with NA.",
             )
 
+    def test_main_accepts_case_insensitive_is_new_in_initial_status_seed(self) -> None:
+        """Treat legacy TRUE/FALSE seed values as valid boolean equivalents."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id\nACC1\tfalse\tNA\t/path/one.fna\tid_1\n",
+            )
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [
+                    line.strip()
+                    for line in SAMPLE_STATUS_COLUMNS_ASSET.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ],
+                [
+                    self.make_initial_status_row(
+                        accession="ACC1",
+                        internal_id="id_1",
+                        is_new="FALSE",
+                    )
+                ],
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tTax_ID\tOrganism_Name\tAtypical_Warnings\nACC1\t123\tOne\tNA\n",
+            )
+            output = tmpdir / "sample_status.tsv"
+
+            exit_code = build_sample_status.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--initial-status",
+                    str(initial_status),
+                    "--metadata",
+                    str(metadata),
+                    "--columns",
+                    str(SAMPLE_STATUS_COLUMNS_ASSET),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            _header, rows = read_tsv_rows(output)
+            self.assertEqual(rows[0]["is_new"], "false")
+
+    def test_main_rejects_invalid_is_new_token_in_initial_status_seed(self) -> None:
+        """Fail with an accession-specific error for invalid seed booleans."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_rows = [
+                {
+                    "accession": "ACC1",
+                    "is_new": "false",
+                    "assembly_level": "NA",
+                    "genome_fasta": "/path/one.fna",
+                    "internal_id": "id_1",
+                }
+            ]
+            initial_status = self.write_tsv_rows(
+                tmpdir / "initial_status.tsv",
+                [
+                    line.strip()
+                    for line in SAMPLE_STATUS_COLUMNS_ASSET.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ],
+                [
+                    self.make_initial_status_row(
+                        accession="ACC1",
+                        internal_id="id_1",
+                        is_new="maybe",
+                    )
+                ],
+            )
+            output_columns = [
+                line.strip()
+                for line in SAMPLE_STATUS_COLUMNS_ASSET.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+            with self.assertRaises(build_sample_status.SampleStatusError) as excinfo:
+                build_sample_status.load_initial_status(
+                    initial_status,
+                    output_columns=output_columns,
+                    validated_samples=validated_rows,
+                )
+
+            self.assertIn(
+                "initial sample-status table contains invalid is_new value 'maybe' for accession 'ACC1'.",
+                str(excinfo.exception),
+            )
+
     def test_main_marks_missing_annotation_manifests_as_failed(self) -> None:
         """Fail gcode-qualified annotation statuses when manifest rows are missing."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
