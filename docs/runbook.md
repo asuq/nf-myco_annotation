@@ -197,6 +197,13 @@ rebuilt without rerunning the heavy per-sample tools.
 
 - `--source-outdir` must point to the failed run's published results tree
 - `--outdir` must be a different fresh rescue directory
+- by default, rescue rebuilds the validation-time `source_sample_status.tsv`
+  seed from `validated_samples.tsv` plus `validation_warnings.tsv`
+- the old published `tables/sample_status.tsv` is not used as the default seed,
+  because in a completed or partially completed run it may already be the later
+  overlaid final audit table
+- `--initial-status` remains available as an explicit override when you really
+  have the original validation-time seed table
 - `--busco-lineage` must be supplied once with the original run order as
   whitespace-separated values because the first lineage remains the primary
   ANI-scoring BUSCO column
