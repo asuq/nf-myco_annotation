@@ -66,7 +66,7 @@ This is a **behaviour-preserving v1 refactor**, not a methodological redesign.
 - Output per-sample `best_16S.fna`.
 - Produce cohort-level `all_best_16S.fna`.
 - Produce cohort-level `all_partial_16S.fna`.
-- If a genome is atypical, still run Barrnap and keep the per-sample result, but include its intact 16S in `all_best_16S.fna` only when the atypical reason is `unverified source organism`.
+- If a genome is atypical, still run Barrnap and keep the per-sample result, but include its intact 16S in `all_best_16S.fna` only when it is atypical only because of `unverified source organism`.
 - Include all partial-only samples in `all_partial_16S.fna`, including atypical samples.
 - `16S` master-table vocabulary is fixed as:
   - `Yes`
@@ -175,7 +175,7 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
   - low-quality genomes;
   - genomes without **complete** 16S (`16S != Yes`);
   - atypical genomes.
-- Exception: **unverified source organisms** among atypical genomes must still be included in ANI clustering.
+- Exception: genomes atypical **only because of** `unverified source organism` must still be included in ANI clustering.
 - The BUSCO lineage prioritised for ANI representative scoring is the **first lineage in the configured list**.
 
 ### 2.14 Final reporting policy
@@ -211,7 +211,7 @@ These were not fully specified, so they are fixed here for v1.
 If the metadata table contains `Atypical_Warnings`, then:
 
 - `is_atypical = true` when `Atypical_Warnings` is non-empty and not `NA`;
-- `is_atypical_exception = true` when `Atypical_Warnings` contains the case-insensitive phrase `unverified source organism`.
+- `is_atypical_exception = true` only when the parsed atypical-reason list contains one or more entries and every entry is the case-insensitive phrase `unverified source organism`.
 
 If `Atypical_Warnings` is absent entirely:
 

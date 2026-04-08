@@ -343,9 +343,9 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
 - Barrnap runs for every sample and also emits the per-sample `best_16S.fna`
   and `16S_status.tsv` artefacts used by downstream ANI and reporting. The
   cohort 16S branch builds `all_best_16S.fna` from intact hits that are
-  non-atypical or atypical only because of `unverified source organism`, and
-  builds `all_partial_16S.fna` from every partial-only sample, including
-  atypical partial samples.
+  non-atypical or atypical only because of `unverified source organism`;
+  mixed atypical reasons remain excluded. It builds `all_partial_16S.fna`
+  from every partial-only sample, including atypical partial samples.
 - CheckM2 always runs twice per sample, once with translation table `4` and
   once with `11`. `summarise_checkm2.py` applies `params.gcode_rule` and emits
   the merged per-sample QC summary.
