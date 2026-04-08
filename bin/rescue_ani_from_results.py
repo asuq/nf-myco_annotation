@@ -153,6 +153,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--assembly-stats",
+        type=Path,
+        help=(
+            "Override source assembly_stats.tsv. Defaults to "
+            "source outdir cohort/assembly_stats/assembly_stats.tsv."
+        ),
+    )
+    parser.add_argument(
+        "--recalculate-assembly-stats",
+        action="store_true",
+        help=(
+            "Recalculate assembly stats from staged FASTA files instead of "
+            "reusing the published source table."
+        ),
+    )
+    parser.add_argument(
         "--assembly-stats-jobs",
         type=int,
         default=1,
@@ -220,6 +236,14 @@ def count_tsv_rows(path: Path) -> int:
     return len(rows)
 
 
+def format_accession_list(accessions: Sequence[str]) -> str:
+    """Format accession-like identifiers for concise rescue messages."""
+    if len(accessions) <= 5:
+        return ", ".join(accessions)
+    preview = ", ".join(accessions[:5])
+    return f"{preview}, ... (+{len(accessions) - 5} more)"
+
+
 def format_count_pairs(pairs: Sequence[tuple[str, int]]) -> str:
     """Format ordered key-count pairs for one log line."""
     if not pairs:
@@ -235,6 +259,14 @@ def resolve_validated_samples_path(args: argparse.Namespace) -> Path:
 def resolve_validation_warnings_path(source_outdir: Path) -> Path:
     """Resolve the validation-warnings source path."""
     return source_outdir / "tables" / "validation_warnings.tsv"
+
+
+def resolve_source_assembly_stats_path(args: argparse.Namespace) -> Path:
+    """Resolve the source assembly-stats table used by rescue."""
+    return (
+        args.assembly_stats
+        or args.source_outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv"
+    )
 
 
 def validate_outdirs(source_outdir: Path, rescue_outdir: Path) -> None:
@@ -305,6 +337,7 @@ def log_startup_configuration(
     *,
     validated_samples_source: Path,
     validation_warnings_source: Path,
+    source_assembly_stats: Path,
 ) -> None:
     """Log the resolved rescue configuration before execution."""
     LOGGER.info(
@@ -333,10 +366,16 @@ def log_startup_configuration(
         args.ani_score_profile,
     )
     LOGGER.info(
-        "Rescue tools: fastani_binary=%s seqtk_binary=%s assembly_stats_jobs=%d.",
-        args.fastani_binary,
+        "Rescue assembly stats: source=%s mode=%s.",
+        source_assembly_stats,
+        "recalculate" if args.recalculate_assembly_stats else "copy",
+    )
+    LOGGER.info("Rescue tools: fastani_binary=%s.", args.fastani_binary)
+    LOGGER.info(
+        "Rescue assembly-stats tools: seqtk_binary=%s assembly_stats_jobs=%d%s.",
         args.seqtk_binary,
         args.assembly_stats_jobs,
+        "" if args.recalculate_assembly_stats else " (ignored unless --recalculate-assembly-stats)",
     )
 
 
@@ -689,6 +728,76 @@ def build_tool_wrapper_env(
     return env
 
 
+def validate_source_assembly_stats(
+    path: Path,
+    *,
+    validated_accessions: Sequence[str],
+) -> int:
+    """Validate a source assembly-stats table before rescue reuses it."""
+    validated_set = set(validated_accessions)
+    try:
+        assembly_stats_index = build_master_table.load_assembly_stats_index(
+            path,
+            validated_set,
+        )
+    except build_master_table.MasterTableError as error:
+        raise RescueAniError(
+            "Rescue source assembly-stats table is unavailable or invalid at "
+            f"{path}: {error}. Use --recalculate-assembly-stats to rebuild it."
+        ) from error
+
+    missing_accessions = sorted(validated_set - set(assembly_stats_index))
+    if missing_accessions:
+        raise RescueAniError(
+            "Rescue source assembly-stats table is incomplete at "
+            f"{path}: missing validated accession rows for "
+            f"{format_accession_list(missing_accessions)}. "
+            "Use --recalculate-assembly-stats to rebuild it."
+        )
+
+    missing_metrics: list[str] = []
+    for accession in sorted(validated_set):
+        row = assembly_stats_index[accession]
+        missing_columns = [
+            column
+            for column in build_master_table.ASSEMBLY_STATS_COLUMNS
+            if build_master_table.is_missing(row.get(column, ""))
+        ]
+        if missing_columns:
+            missing_metrics.append(f"{accession}[{','.join(missing_columns)}]")
+
+    if missing_metrics:
+        raise RescueAniError(
+            "Rescue source assembly-stats table is incomplete at "
+            f"{path}: missing required metric values for "
+            f"{format_accession_list(missing_metrics)}. "
+            "Use --recalculate-assembly-stats to rebuild it."
+        )
+
+    return len(assembly_stats_index)
+
+
+def copy_source_assembly_stats(
+    source_path: Path,
+    output_path: Path,
+    *,
+    validated_accessions: Sequence[str],
+) -> Path:
+    """Validate and copy source assembly stats into the rescue outdir."""
+    row_count = validate_source_assembly_stats(
+        source_path,
+        validated_accessions=validated_accessions,
+    )
+    copied_path = copy_source_table(source_path, output_path)
+    LOGGER.info(
+        "Copied rescue assembly stats from source table: source=%s output=%s row_count=%d.",
+        source_path,
+        copied_path,
+        row_count,
+    )
+    return copied_path
+
+
 def run_calculate_assembly_stats(
     staged_manifest: Path,
     output_path: Path,
@@ -735,6 +844,43 @@ def run_calculate_assembly_stats(
         raise RescueAniError(f"Assembly stats output was not created: {output_path}")
     LOGGER.info("Wrote assembly stats to %s with %d row(s).", output_path, count_tsv_rows(output_path))
     return output_path
+
+
+def prepare_rescue_assembly_stats(
+    *,
+    args: argparse.Namespace,
+    staged_manifest: Path,
+    samples: Sequence[ResolvedSample],
+    source_assembly_stats: Path,
+    output_path: Path,
+) -> Path:
+    """Prepare the rescued assembly-stats table by copy or recalculation."""
+    validated_accessions = [sample.accession for sample in samples]
+    if args.recalculate_assembly_stats:
+        assembly_stats_path = run_calculate_assembly_stats(
+            staged_manifest,
+            output_path,
+            seqtk_binary=args.seqtk_binary,
+            jobs=args.assembly_stats_jobs,
+        )
+        LOGGER.info(
+            "Rescue assembly stats ready: mode=recalculated output=%s row_count=%d.",
+            assembly_stats_path,
+            count_tsv_rows(assembly_stats_path),
+        )
+        return assembly_stats_path
+
+    assembly_stats_path = copy_source_assembly_stats(
+        source_assembly_stats,
+        output_path,
+        validated_accessions=validated_accessions,
+    )
+    LOGGER.info(
+        "Rescue assembly stats ready: mode=copied output=%s row_count=%d.",
+        assembly_stats_path,
+        count_tsv_rows(assembly_stats_path),
+    )
+    return assembly_stats_path
 
 
 def table_has_rows(path: Path) -> bool:
@@ -1134,10 +1280,12 @@ def run_rescue(args: argparse.Namespace) -> None:
     validate_outdirs(args.source_outdir, args.outdir)
     validated_samples_source = resolve_validated_samples_path(args)
     validation_warnings_source = resolve_validation_warnings_path(args.source_outdir)
+    source_assembly_stats = resolve_source_assembly_stats_path(args)
     log_startup_configuration(
         args,
         validated_samples_source=validated_samples_source,
         validation_warnings_source=validation_warnings_source,
+        source_assembly_stats=source_assembly_stats,
     )
     if not args.metadata.is_file():
         raise RescueAniError(f"Metadata table does not exist: {args.metadata}")
@@ -1184,13 +1332,14 @@ def run_rescue(args: argparse.Namespace) -> None:
         for lineage in args.busco_lineage
     ]
 
-    LOGGER.info("Reconstructing staged manifest and assembly statistics.")
+    LOGGER.info("Reconstructing staged manifest.")
     staged_manifest = write_staged_manifest(args.outdir, samples)
-    assembly_stats = run_calculate_assembly_stats(
-        staged_manifest,
-        args.outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv",
-        seqtk_binary=args.seqtk_binary,
-        jobs=args.assembly_stats_jobs,
+    assembly_stats = prepare_rescue_assembly_stats(
+        args=args,
+        staged_manifest=staged_manifest,
+        samples=samples,
+        source_assembly_stats=source_assembly_stats,
+        output_path=args.outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv",
     )
 
     LOGGER.info("Building rescued ANI eligibility and FastANI inputs.")

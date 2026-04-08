@@ -239,6 +239,18 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         staged_path = source_outdir / "samples" / accession / "staged" / f"{internal_id}.fasta"
         return self.write_text_file(staged_path, f">{internal_id}\n{sequence}\n")
 
+    def write_source_assembly_stats(
+        self,
+        source_outdir: Path,
+        rows: Sequence[dict[str, str]],
+    ) -> Path:
+        """Write one published source assembly-stats table."""
+        return self.write_tsv_rows(
+            source_outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv",
+            ("accession", "n50", "scaffolds", "genome_size"),
+            rows,
+        )
+
     def fake_run_subprocess(
         self,
         stats_by_accession: dict[str, tuple[str, str, str]],
@@ -316,6 +328,8 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         tmpdir: Path,
         *,
         include_staged_fasta: bool,
+        include_source_assembly_stats: bool = True,
+        source_assembly_stats_rows: Sequence[dict[str, str]] | None = None,
         barrnap_mode: str = "partial",
         source_status_rows: Sequence[dict[str, str]] | None = None,
         validation_warning_rows: Sequence[dict[str, str]] | None = None,
@@ -358,6 +372,20 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         if validation_warning_rows is not None:
             self.write_validation_warnings(source_outdir, validation_warning_rows)
         self.write_text_file(genome_fasta, ">ACC1\nACGTACGTACGT\n")
+        if include_source_assembly_stats:
+            self.write_source_assembly_stats(
+                source_outdir,
+                list(source_assembly_stats_rows)
+                if source_assembly_stats_rows is not None
+                else [
+                    {
+                        "accession": "ACC1",
+                        "n50": "50000",
+                        "scaffolds": "2",
+                        "genome_size": "800000",
+                    }
+                ],
+            )
         if include_staged_fasta:
             self.write_staged_fasta(source_outdir, accession="ACC1", internal_id="ID1")
         self.write_barrnap_outputs(source_outdir, accession="ACC1", mode=barrnap_mode)
@@ -447,11 +475,16 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 "--busco-lineage",
                 "bacillota_odb12",
                 "mycoplasmatota_odb12",
+                "--assembly-stats",
+                "/tmp/source_stats.tsv",
+                "--recalculate-assembly-stats",
                 "--assembly-stats-jobs",
                 "8",
             ]
         )
 
+        self.assertEqual(args.assembly_stats, Path("/tmp/source_stats.tsv"))
+        self.assertTrue(args.recalculate_assembly_stats)
         self.assertEqual(args.assembly_stats_jobs, 8)
 
     def test_parse_args_rejects_repeated_busco_lineage_option(self) -> None:
@@ -520,7 +553,19 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 log_text,
             )
             self.assertIn(
-                "Rescue tools: fastani_binary=fastANI seqtk_binary=seqtk assembly_stats_jobs=1.",
+                "Rescue assembly stats: source=",
+                log_text,
+            )
+            self.assertIn(
+                "mode=copy.",
+                log_text,
+            )
+            self.assertIn(
+                "Rescue tools: fastani_binary=fastANI.",
+                log_text,
+            )
+            self.assertIn(
+                "Rescue assembly-stats tools: seqtk_binary=seqtk assembly_stats_jobs=1 (ignored unless --recalculate-assembly-stats).",
                 log_text,
             )
             self.assertIn("Loaded 1 validated sample(s)", log_text)
@@ -532,6 +577,226 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 "Rebuilt rescue initial-status seed from validated_samples and validation_warnings:",
                 log_text,
             )
+
+    def test_main_copies_published_source_assembly_stats_by_default(self) -> None:
+        """Reuse the published source assembly-stats table unless recomputation is requested."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+                source_assembly_stats_rows=[
+                    {
+                        "accession": "ACC1",
+                        "n50": "61000",
+                        "scaffolds": "4",
+                        "genome_size": "910000",
+                    }
+                ],
+            )
+
+            subprocess_mock = mock.Mock()
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    subprocess_mock,
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            subprocess_mock.assert_not_called()
+            assembly_stats = rescue_outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv"
+            _header, rows = read_tsv_rows(assembly_stats)
+            self.assertEqual(
+                rows,
+                [
+                    {
+                        "accession": "ACC1",
+                        "n50": "61000",
+                        "scaffolds": "4",
+                        "genome_size": "910000",
+                    }
+                ],
+            )
+            log_text = stderr.getvalue()
+            self.assertIn("Copied rescue assembly stats from source table:", log_text)
+            self.assertIn("Rescue assembly stats ready: mode=copied", log_text)
+
+    def test_main_uses_assembly_stats_override_when_supplied(self) -> None:
+        """Copy an explicit source assembly-stats override into the rescue outdir."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+            )
+            override_stats = self.write_tsv_rows(
+                tmpdir / "override_assembly_stats.tsv",
+                ("accession", "n50", "scaffolds", "genome_size"),
+                [
+                    {
+                        "accession": "ACC1",
+                        "n50": "72000",
+                        "scaffolds": "6",
+                        "genome_size": "950000",
+                    }
+                ],
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    mock.Mock(),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                            "--assembly-stats",
+                            str(override_stats),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            assembly_stats = rescue_outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv"
+            _header, rows = read_tsv_rows(assembly_stats)
+            self.assertEqual(rows[0]["n50"], "72000")
+            self.assertEqual(rows[0]["scaffolds"], "6")
+            self.assertIn(f"source={override_stats}", stderr.getvalue())
+
+    def test_main_fails_when_default_source_assembly_stats_is_missing(self) -> None:
+        """Stop with a clear hint when the published source assembly-stats table is absent."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+                include_source_assembly_stats=False,
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    mock.Mock(),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("Use --recalculate-assembly-stats to rebuild it.", stderr.getvalue())
+
+    def test_main_fails_when_source_assembly_stats_is_missing_validated_rows(self) -> None:
+        """Reject a source assembly-stats table that omits validated accessions."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+                source_assembly_stats_rows=[],
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    mock.Mock(),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("missing validated accession rows for ACC1", stderr.getvalue())
+            self.assertIn("Use --recalculate-assembly-stats to rebuild it.", stderr.getvalue())
+
+    def test_main_fails_when_source_assembly_stats_has_missing_required_metrics(self) -> None:
+        """Reject a source assembly-stats table with missing required metric values."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
+                tmpdir,
+                include_staged_fasta=True,
+                source_assembly_stats_rows=[
+                    {
+                        "accession": "ACC1",
+                        "n50": "NA",
+                        "scaffolds": "2",
+                        "genome_size": "800000",
+                    }
+                ],
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    rescue_ani_from_results,
+                    "run_subprocess",
+                    mock.Mock(),
+                ):
+                    exit_code = rescue_ani_from_results.main(
+                        [
+                            "--source-outdir",
+                            str(source_outdir),
+                            "--metadata",
+                            str(metadata),
+                            "--outdir",
+                            str(rescue_outdir),
+                            "--busco-lineage",
+                            "bacillota_odb12",
+                            "mycoplasmatota_odb12",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("missing required metric values for ACC1[n50]", stderr.getvalue())
+            self.assertIn("Use --recalculate-assembly-stats to rebuild it.", stderr.getvalue())
 
     def test_main_rebuilds_initial_status_seed_from_validated_samples(self) -> None:
         """Ignore the old published final status table when no override is supplied."""
@@ -728,13 +993,14 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             self.assertIn("source=genome_fasta_fallback", log_text)
             self.assertIn("Resolved 1 sample(s); genome_fasta_fallback=1.", log_text)
 
-    def test_main_writes_lf_only_staged_manifest_for_real_assembly_stats(self) -> None:
-        """Write an LF-only staged manifest that the real shell helper can consume."""
+    def test_main_recalculates_assembly_stats_when_requested(self) -> None:
+        """Recalculate assembly stats only when rescue is told to do so explicitly."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
             tmpdir = Path(tmpdir_name)
             source_outdir, rescue_outdir, metadata = self.write_single_sample_rescue_fixture(
                 tmpdir,
                 include_staged_fasta=True,
+                include_source_assembly_stats=False,
                 barrnap_mode="partial",
             )
             self.install_fake_seqtk(tmpdir)
@@ -760,6 +1026,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                                 "--busco-lineage",
                                 "bacillota_odb12",
                                 "mycoplasmatota_odb12",
+                                "--recalculate-assembly-stats",
                                 "--assembly-stats-jobs",
                                 "3",
                             ]
@@ -774,7 +1041,9 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             _header, rows = read_tsv_rows(assembly_stats)
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["accession"], "ACC1")
+            self.assertIn("mode=recalculate.", stderr.getvalue())
             self.assertIn("Running assembly stats: jobs=3 seqtk_binary=seqtk", stderr.getvalue())
+            self.assertIn("Rescue assembly stats ready: mode=recalculated", stderr.getvalue())
 
     @unittest.skipUnless(SCIPY_AVAILABLE, "SciPy is required for ANI rescue integration tests.")
     def test_main_recovers_ani_outputs_and_partial_final_tables(self) -> None:
@@ -851,6 +1120,35 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                     accession=sample["accession"],
                     internal_id=sample["internal_id"],
                 )
+            self.write_source_assembly_stats(
+                source_outdir,
+                [
+                    {
+                        "accession": "ACC1",
+                        "n50": "50000",
+                        "scaffolds": "2",
+                        "genome_size": "800000",
+                    },
+                    {
+                        "accession": "ACC2",
+                        "n50": "45000",
+                        "scaffolds": "3",
+                        "genome_size": "780000",
+                    },
+                    {
+                        "accession": "ACC3",
+                        "n50": "42000",
+                        "scaffolds": "4",
+                        "genome_size": "760000",
+                    },
+                    {
+                        "accession": "ACC4",
+                        "n50": "47000",
+                        "scaffolds": "2",
+                        "genome_size": "790000",
+                    },
+                ],
+            )
 
             self.write_barrnap_outputs(source_outdir, accession="ACC1", mode="yes")
             self.write_barrnap_outputs(source_outdir, accession="ACC2", mode="partial")
@@ -925,8 +1223,6 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                             "mycoplasmatota_odb12",
                             "--fastani-binary",
                             "fake-fastani",
-                            "--assembly-stats-jobs",
-                            "2",
                         ]
                     )
 
@@ -942,7 +1238,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             self.assertIn("ANI gating for ACC2: included=false reason=partial_16s.", log_text)
             self.assertIn("ANI gating for ACC3: included=false reason=low_quality.", log_text)
             self.assertIn("ANI exclusion reasons: low_quality=1; partial_16s=1.", log_text)
-            self.assertIn("Running assembly stats: jobs=2", log_text)
+            self.assertIn("Rescue assembly stats ready: mode=copied", log_text)
             self.assertIn(
                 "ANI cluster outputs: cluster_path=",
                 log_text,
