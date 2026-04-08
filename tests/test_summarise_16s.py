@@ -434,6 +434,45 @@ class ConcatBest16STestCase(unittest.TestCase):
             self.assertEqual((tmpdir / "all_best_16S.fna").read_text(encoding="utf-8"), "")
             self.assertEqual(read_tsv_rows(tmpdir / "all_best_16S_manifest.tsv"), [])
 
+    def test_concat_best_16s_excludes_mixed_atypical_reasons(self) -> None:
+        """Exclude intact 16S rows when unverified source organism is not the sole reason."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            sample_dir = tmpdir / "sample"
+            sample_dir.mkdir()
+            status_path, best_fasta = self.write_status_and_fasta(
+                sample_dir,
+                accession="ACC_MIXED",
+                status_value="Yes",
+                header="hit_mixed",
+                length=85,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_MIXED\tgenome length too small, unverified source organism\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [("ACC_MIXED", "acc_mixed_id", status_path, best_fasta)],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual((tmpdir / "all_best_16S.fna").read_text(encoding="utf-8"), "")
+            self.assertEqual(read_tsv_rows(tmpdir / "all_best_16S_manifest.tsv"), [])
+
     def test_concat_best_16s_builds_partial_cohort_including_atypical_samples(self) -> None:
         """Build the partial cohort from all partial rows, including atypical ones."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

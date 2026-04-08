@@ -5,6 +5,7 @@ GCA_965226525.1_MED1	GCA_965226525.1	false	true	NA	gcode4_candidate;crispr_posit
 MYCO_NEW_1	GCA_000027325.1	true	false	NA	missing_metadata_case
 MYCO_ATYPICAL_1	GCA_000027325.1	false	true	cell culture adapted	atypical_excluded_candidate;gcode4_candidate
 MYCO_EXCEPTION_1	GCA_000027345.1	false	true	unverified source organism	atypical_exception_candidate;gcode4_candidate
+MYCO_MIXED_1	GCA_000027325.1	false	true	genome length too small, unverified source organism	atypical_mixed_candidate;gcode4_candidate
 MYCO_FILLER_1	GCA_000027325.1	false	true	NA	filler
 MYCO_FILLER_2	GCA_000027345.1	false	true	NA	filler
 SPIRO_FILLER_1	GCA_965226525.1	false	true	NA	filler

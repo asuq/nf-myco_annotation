@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from atypical_warnings import classify_atypical_warnings
 from build_master_table import (
     choose_assembly_level,
     detect_key_column,
@@ -213,18 +214,6 @@ def detect_metadata_value(metadata_row: dict[str, str], column_name: str) -> str
     return MISSING_VALUE if is_missing(value) else value
 
 
-def detect_atypical_flags(metadata_row: dict[str, str]) -> tuple[bool, bool]:
-    """Detect atypical status and the locked unverified-source exception."""
-    atypical_column = find_column_by_normalised_name(tuple(metadata_row), "Atypical_Warnings")
-    if atypical_column is None:
-        return False, False
-    atypical_value = metadata_row.get(atypical_column, "")
-    if is_missing(atypical_value):
-        return False, False
-    lowered = atypical_value.casefold()
-    return True, "unverified source organism" in lowered
-
-
 def choose_checkm2_fields(sample_row: dict[str, str]) -> tuple[str, str, str]:
     """Return gcode-specific completeness and contamination values."""
     gcode = sample_row.get("Gcode", MISSING_VALUE) or MISSING_VALUE
@@ -363,7 +352,12 @@ def run_build_fastani_inputs(
         elif sixteen_s_value != "Yes":
             reasons.append("16s_na")
 
-        is_atypical, is_exception = detect_atypical_flags(metadata_row) if metadata_row else (False, False)
+        atypical_value = (
+            detect_metadata_value(metadata_row, "Atypical_Warnings")
+            if metadata_row
+            else MISSING_VALUE
+        )
+        is_atypical, is_exception = classify_atypical_warnings(atypical_value)
         if is_atypical and not is_exception:
             reasons.append("atypical")
 

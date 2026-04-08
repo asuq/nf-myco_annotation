@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from atypical_warnings import classify_atypical_warnings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -225,14 +226,6 @@ def detect_accession_column(header: Sequence[str]) -> str:
             "Accession, accession"
         )
     return matches[0]
-
-
-def classify_atypical_warnings(atypical_warnings: str | None) -> tuple[bool, bool]:
-    """Classify atypical status and the locked unverified-source exception."""
-    if is_missing(atypical_warnings):
-        return False, False
-    lowered = atypical_warnings.casefold()
-    return True, "unverified source organism" in lowered
 
 
 def load_metadata_atypical_index(metadata_path: Path | None) -> dict[str, str]:

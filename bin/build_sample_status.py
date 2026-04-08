@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from atypical_warnings import classify_atypical_warnings
 import build_master_table as table_helpers
 import master_table_contract
 import validate_inputs
@@ -438,21 +439,6 @@ def derive_codetta_status(
     return "failed", ["missing_codetta_summary"]
 
 
-def detect_atypical_flags(metadata_row: dict[str, str]) -> tuple[bool, bool]:
-    """Return the atypical and unverified-source-exception flags."""
-    atypical_column = table_helpers.find_column_by_normalised_name(
-        tuple(metadata_row),
-        "Atypical_Warnings",
-    )
-    if atypical_column is None:
-        return False, False
-    atypical_value = metadata_row.get(atypical_column, "")
-    if table_helpers.is_missing(atypical_value):
-        return False, False
-    lowered = atypical_value.casefold()
-    return True, "unverified source organism" in lowered
-
-
 def derive_ani_decision(
     accession: str,
     *,
@@ -471,7 +457,8 @@ def derive_ani_decision(
         return "na", ""
 
     exclusion_reasons: list[str] = []
-    is_atypical, is_exception = detect_atypical_flags(metadata_row)
+    atypical_value = table_helpers.detect_metadata_value(metadata_row, "Atypical_Warnings")
+    is_atypical, is_exception = classify_atypical_warnings(atypical_value)
 
     if gcode_value == "NA":
         exclusion_reasons.append("gcode_na")

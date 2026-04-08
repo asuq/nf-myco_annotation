@@ -86,6 +86,7 @@ REQUIRED_ROLE_TAGS = {
     "ani_cluster_candidate",
     "atypical_excluded_candidate",
     "atypical_exception_candidate",
+    "atypical_mixed_candidate",
     "missing_metadata_case",
     "collision_candidate",
 }
@@ -989,6 +990,19 @@ def assert_role_coverage(
         for record in atypical_exception_candidates
     ):
         raise AcceptanceTestError("missing_atypical_exception_16s_inclusion")
+
+    atypical_mixed_candidates = records_with_role(plan, "atypical_mixed_candidate")
+    if not any(
+        status_rows[record.accession]["ani_included"] == "false"
+        and "atypical" in status_rows[record.accession]["ani_exclusion_reason"]
+        for record in atypical_mixed_candidates
+    ):
+        raise AcceptanceTestError("missing_atypical_mixed_exclusion")
+    if any(
+        record.accession in intact_manifest_accessions
+        for record in atypical_mixed_candidates
+    ):
+        raise AcceptanceTestError("unexpected_atypical_mixed_16s_inclusion")
 
     missing_metadata_candidates = records_with_role(plan, "missing_metadata_case")
     if not any(

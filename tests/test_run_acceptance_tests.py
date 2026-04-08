@@ -201,6 +201,14 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "role_tags": "atypical_exception_candidate;gcode4_candidate",
             },
             {
+                "accession": "MYCO_MIXED",
+                "source_accession": "SRC_MYCO_A",
+                "is_new": "false",
+                "include_metadata": "true",
+                "atypical_warnings": "genome length too small, unverified source organism",
+                "role_tags": "atypical_mixed_candidate;gcode4_candidate",
+            },
+            {
                 "accession": "ECOLI-PAIR",
                 "source_accession": "SRC_ECOLI",
                 "is_new": "false",
@@ -312,17 +320,21 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
             sample_header, sample_rows = run_acceptance_tests.read_csv(prepared.sample_csv)
             self.assertEqual(tuple(sample_header), run_acceptance_tests.SAMPLE_COLUMNS)
-            self.assertEqual(len(sample_rows), 9)
+            self.assertEqual(len(sample_rows), 10)
             self.assertEqual(sample_rows[0]["genome_fasta"], str(prepared.source_stats["SRC_MYCO_A"].fasta_path))
             self.assertEqual(sample_rows[-1]["genome_fasta"], str(prepared.source_stats["SRC_ECOLI"].fasta_path))
 
             metadata_header, metadata_rows = read_tsv_rows(prepared.metadata_tsv)
             self.assertEqual(tuple(metadata_header), run_acceptance_tests.METADATA_COLUMNS)
-            self.assertEqual(len(metadata_rows), 8)
+            self.assertEqual(len(metadata_rows), 9)
             metadata_by_accession = {row["Accession"]: row for row in metadata_rows}
             self.assertNotIn("SRC_MYCO_A_NEW", metadata_by_accession)
             self.assertEqual(metadata_by_accession["MYCO-ATYPICAL"]["Atypical_Warnings"], "cell culture adapted")
             self.assertEqual(metadata_by_accession["MYCO_EXCEPTION"]["Atypical_Warnings"], "unverified source organism")
+            self.assertEqual(
+                metadata_by_accession["MYCO_MIXED"]["Atypical_Warnings"],
+                "genome length too small, unverified source organism",
+            )
 
             self.assertEqual(prepared.source_stats["SRC_MYCO_A"].scaffolds, 2)
             self.assertEqual(prepared.source_stats["SRC_MYCO_A"].genome_size, 7)
@@ -344,7 +356,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         catalog = run_acceptance_tests.load_source_catalog(MEDIUM_SOURCE_CATALOG)
         plan = run_acceptance_tests.load_cohort_plan(MEDIUM_COHORT_PLAN, catalog)
 
-        self.assertEqual(len(plan), 20)
+        self.assertEqual(len(plan), 21)
         self.assertEqual(
             sum("eggnog_smoke_candidate" in record.role_tags for record in plan),
             1,
@@ -464,7 +476,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
 
             sample_header, sample_rows = run_acceptance_tests.read_csv(prepared.sample_csv)
             self.assertEqual(tuple(sample_header), run_acceptance_tests.SAMPLE_COLUMNS)
-            self.assertEqual(len(sample_rows), 20)
+            self.assertEqual(len(sample_rows), 21)
             self.assertEqual(
                 [row["accession"] for row in sample_rows],
                 [record.accession for record in prepared.cohort_plan],
@@ -542,6 +554,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "SRC_MYCO_A_NEW": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "NA"},
                 "MYCO-ATYPICAL": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
                 "MYCO_EXCEPTION": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "C000001", "Tax_ID": "101"},
+                "MYCO_MIXED": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
                 "ECOLI-PAIR": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "C000002", "Tax_ID": "103"},
                 "ECOLI PAIR": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "C000002", "Tax_ID": "103"},
             }
@@ -553,6 +566,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "SRC_MYCO_A_NEW": {"accession": "SRC_MYCO_A_NEW", "ani_included": "false", "ani_exclusion_reason": "partial_16s", "warnings": "missing_metadata_for_new_sample", "internal_id": "SRC_MYCO_A_NEW"},
                 "MYCO-ATYPICAL": {"accession": "MYCO-ATYPICAL", "ani_included": "false", "ani_exclusion_reason": "atypical", "warnings": "", "internal_id": "MYCO_ATYPICAL"},
                 "MYCO_EXCEPTION": {"accession": "MYCO_EXCEPTION", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "", "internal_id": "MYCO_EXCEPTION"},
+                "MYCO_MIXED": {"accession": "MYCO_MIXED", "ani_included": "false", "ani_exclusion_reason": "atypical", "warnings": "", "internal_id": "MYCO_MIXED"},
                 "ECOLI-PAIR": {"accession": "ECOLI-PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_aaa"},
                 "ECOLI PAIR": {"accession": "ECOLI PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_bbb"},
             }
@@ -589,6 +603,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "SRC_MYCO_A_NEW": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "NA"},
                 "MYCO-ATYPICAL": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
                 "MYCO_EXCEPTION": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "C000001", "Tax_ID": "101"},
+                "MYCO_MIXED": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
                 "ECOLI-PAIR": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "C000002", "Tax_ID": "103"},
                 "ECOLI PAIR": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "C000002", "Tax_ID": "103"},
             }
@@ -600,6 +615,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 "SRC_MYCO_A_NEW": {"accession": "SRC_MYCO_A_NEW", "ani_included": "false", "ani_exclusion_reason": "partial_16s", "warnings": "missing_metadata_for_new_sample", "internal_id": "SRC_MYCO_A_NEW"},
                 "MYCO-ATYPICAL": {"accession": "MYCO-ATYPICAL", "ani_included": "false", "ani_exclusion_reason": "atypical", "warnings": "", "internal_id": "MYCO_ATYPICAL"},
                 "MYCO_EXCEPTION": {"accession": "MYCO_EXCEPTION", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "", "internal_id": "MYCO_EXCEPTION"},
+                "MYCO_MIXED": {"accession": "MYCO_MIXED", "ani_included": "false", "ani_exclusion_reason": "atypical", "warnings": "", "internal_id": "MYCO_MIXED"},
                 "ECOLI-PAIR": {"accession": "ECOLI-PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_aaa"},
                 "ECOLI PAIR": {"accession": "ECOLI PAIR", "ani_included": "true", "ani_exclusion_reason": "", "warnings": "internal_id_collision_resolved", "internal_id": "ECOLI_PAIR_bbb"},
             }
