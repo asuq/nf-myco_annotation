@@ -230,8 +230,13 @@ uv run bin/rescue_ani_from_results.py \
   --fastani-binary "singularity exec /path/to/fastani.sif fastANI"
 ```
 
-If `seqtk` is also only available through a container wrapper, pass that
-wrapper the same way:
+By default, rescue reuses the published source table at
+`cohort/assembly_stats/assembly_stats.tsv`. If that table is missing or you do
+not trust it, point rescue at a different TSV with `--assembly-stats` or opt
+into recomputation with `--recalculate-assembly-stats`.
+
+If `seqtk` is only available through a container wrapper, pass that wrapper
+when recomputation is requested:
 
 ```bash
 uv run bin/rescue_ani_from_results.py \
@@ -239,6 +244,7 @@ uv run bin/rescue_ani_from_results.py \
   --metadata /path/to/metadata.tsv \
   --outdir /path/to/rescued-ani \
   --busco-lineage bacillota_odb12 mycoplasmatota_odb12 \
+  --recalculate-assembly-stats \
   --seqtk-binary "singularity exec /path/to/seqtk.sif seqtk" \
   --fastani-binary "singularity exec /path/to/fastani.sif fastANI"
 ```
@@ -248,6 +254,7 @@ The rescue command rebuilds:
 - per-sample `best_16S.fna` and `16S_status.tsv`
 - per-sample `checkm2_summary.tsv`
 - per-lineage BUSCO summary TSVs
+- `cohort/assembly_stats/assembly_stats.tsv` by copying the published source table, or by recomputing it when `--recalculate-assembly-stats` is used
 - `cohort/fastani/` ANI inputs, exclusions, matrix, and logs
 - `cohort/ani_clusters/` cluster, ANI summary, and representative tables
 - partial `tables/master_table.tsv` and `tables/sample_status.tsv`
