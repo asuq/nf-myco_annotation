@@ -10,3 +10,10 @@
 - Use nf-core-like retry and resource-handling patterns in Nextflow configuration and process definitions.
 - Do not add PADLOC or eggNOG outputs to the master table unless `docs/design_spec.md` changes.
 - Keep explicit Nextflow module interfaces with named outputs, and include `stub` sections for testability.
+- Keep tracked project documentation in `docs/`.
+- Keep all local working docs, debug notes, commit notes, and other repo-specific notes under `.untracked/`; do not use `/tmp` for repo-specific notes.
+- Classify local notes under `.untracked/` by purpose:
+  - `.untracked/debug/` for incident-specific debugging and recovery notes
+  - `.untracked/ledger/` for current bug and state ledgers
+  - `.untracked/notes/` for maintenance, planning, and change-history notes
+- Keep the `.untracked/` top level limited to bucket directories plus a small README.
