@@ -144,9 +144,21 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("cpus = { Math.min(64 * task.attempt, params.max_cpus as int) }", gwdg_text)
         self.assertIn("memory = { [200.GB * task.attempt, params.max_memory].min() }", gwdg_text)
         self.assertIn("time = { [1.d * task.attempt, params.max_time].min() }", gwdg_text)
-        self.assertIn("withName: PROKKA", gwdg_text)
-        self.assertIn("withName: CALCULATE_ASSEMBLY_STATS", gwdg_text)
-        self.assertIn("stageInMode = 'copy'", gwdg_text)
+        self.assertIn(
+            "withName: PROKKA {\n"
+            "                container = params.prokka_container\n"
+            "                stageInMode = 'copy'",
+            gwdg_text,
+        )
+        self.assertIn(
+            "withName: CALCULATE_ASSEMBLY_STATS {\n"
+            "                container = params.seqtk_container\n"
+            "                cpus = { Math.min(4 * task.attempt, params.max_cpus as int) }\n"
+            "                memory = { [8.GB * task.attempt, params.max_memory].min() }\n"
+            "                time = { [4.h * task.attempt, params.max_time].min() }\n"
+            "                stageInMode = 'copy'",
+            gwdg_text,
+        )
         self.assertNotIn("params.slurm_account", gwdg_text)
 
     def test_oist_20k_storage_override_is_opt_in_and_resume_safe(self) -> None:
