@@ -163,6 +163,7 @@ are:
 - `slurm`
 - `singularity`
 - `oist`
+- `gwdg`
 - `test`
 - `debug`
 
@@ -173,6 +174,7 @@ Profile-specific behaviour that affects implementation understanding:
 - `docker` adds an amd64 override for the CRISPRCasFinder container on ARM hosts
 - `slurm` and `oist` raise medium and high resource ceilings
 - `singularity` and `oist` enable Singularity and honour cache and run options
+- `gwdg` enables Singularity on SCC, keeps task scratch on `LOCAL_TMPDIR`, prefers `SHM_TMPDIR` for first-attempt temp files, and retries with `LOCAL_TMPDIR`
 
 ## Published output layout
 

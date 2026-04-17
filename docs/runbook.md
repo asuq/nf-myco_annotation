@@ -176,6 +176,7 @@ under `--outdir` on success.
 - `slurm`: SLURM executor with optional `params.slurm_queue` and `params.slurm_cluster_options`
 - `singularity`: Singularity execution with optional `params.singularity_cache_dir` and `params.singularity_run_options`
 - `oist`: standalone OIST HPC profile with SLURM and Singularity enabled, using the submitting user account
+- `gwdg`: standalone GWDG SCC profile with SLURM, Singularity, `LOCAL_TMPDIR` scratch, and SHM-first temp files
 - `test`: local fixture profile for `-stub-run`
 
 ## Minimal test path
@@ -448,6 +449,21 @@ OIST:
 
 ```bash
 nextflow run . -profile oist \
+  --sample_csv samples.csv \
+  --metadata metadata.tsv \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
+  --busco_db /path/to/busco \
+  --eggnog_db /path/to/eggnog-db \
+  --singularity_cache_dir /path/to/singularity-cache \
+  --outdir results
+```
+
+GWDG SCC:
+
+```bash
+nextflow run . -profile gwdg \
   --sample_csv samples.csv \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
