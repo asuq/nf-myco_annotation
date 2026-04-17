@@ -118,7 +118,11 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("['--export=ALL', '-C ssd', params.slurm_cluster_options ?: null]", gwdg_text)
         self.assertIn("singularity.enabled = true", gwdg_text)
         self.assertIn("singularity.autoMounts = true", gwdg_text)
-        self.assertIn("singularity.cacheDir = params.singularity_cache_dir ?: null", gwdg_text)
+        self.assertIn(
+            "singularity.cacheDir = params.singularity_cache_dir ?: '/projects/scc/MPG/MBMM/scc_mbmm_harder_/dir.project/Softwares/nfx_singularity_cache'",
+            gwdg_text,
+        )
+        self.assertIn("singularity.pullTimeout = '4h'", gwdg_text)
         self.assertIn("docker.enabled = false", gwdg_text)
         self.assertIn("process.containerOptions = params.singularity_run_options ?: ''", gwdg_text)
         self.assertIn("process.resourceLimits = [", gwdg_text)
@@ -134,6 +138,8 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn('export SINGULARITYENV_TMPDIR="${temp_root}"', gwdg_text)
         self.assertIn("withLabel: process_medium", gwdg_text)
         self.assertIn("withLabel: process_high", gwdg_text)
+        self.assertIn("time = { [6.h * task.attempt, params.max_time].min() }", gwdg_text)
+        self.assertIn("time = { [1.d * task.attempt, params.max_time].min() }", gwdg_text)
         self.assertIn("withName: PROKKA", gwdg_text)
         self.assertIn("withName: CALCULATE_ASSEMBLY_STATS", gwdg_text)
         self.assertIn("stageInMode = 'copy'", gwdg_text)
