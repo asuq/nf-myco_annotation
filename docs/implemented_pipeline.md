@@ -235,6 +235,10 @@ Notes on that layout:
 - `prokka/`, `ccfinder/`, `padloc/`, and `eggnog/` are only published for
   samples whose assigned gcode is `4` or `11`
 - `busco/<lineage>/` is published for every configured lineage per sample
+- `checkm2_gcode4/`, `checkm2_gcode11/`, `busco/<lineage>/`, `prokka/`, and
+  `ccfinder/` are flat curated publish folders: they keep the published logs
+  and summary artefacts at the tool root and do not republish duplicate nested
+  raw subdirectories when those would only mirror the same files
 - `cohort/16s/` contains the combined eligible-sample 16S FASTA and manifest
 - `pipeline_info/` is enabled through base configuration for both entrypoints
 

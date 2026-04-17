@@ -1132,6 +1132,12 @@ results/
     └── tool_and_db_versions.tsv
 ```
 
+Published per-sample tool folders are curated artefact views, not mirrored raw
+work directories. For `checkm2_gcode4/`, `checkm2_gcode11/`, `busco/<lineage>/`,
+`prokka/`, and `ccfinder/`, keep the published logs and summary artefacts at
+the tool root and do not republish nested raw subdirectories when they would
+only duplicate those same files.
+
 ---
 
 ## 13. Nextflow implementation rules for Codex
