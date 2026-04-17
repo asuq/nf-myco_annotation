@@ -9,7 +9,11 @@ process BUSCO {
         { "${params.outdir}/samples/${meta.accession}/busco/${lineage}" },
         mode: 'copy',
         overwrite: true,
-        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+        saveAs: { filename ->
+            filename in ['short_summary.json', 'busco.log']
+                ? filename
+                : null
+        },
     )
 
     input:

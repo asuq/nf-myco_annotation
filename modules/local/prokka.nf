@@ -9,7 +9,11 @@ process PROKKA {
         { "${params.outdir}/samples/${meta.accession}/prokka" },
         mode: 'copy',
         overwrite: true,
-        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+        saveAs: { filename ->
+            filename in ['prokka.gff', 'prokka.faa', 'prokka.log']
+                ? filename
+                : null
+        },
     )
 
     input:

@@ -625,6 +625,29 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("rm -rf \"\\${resource_directory}\"", codetta_text)
         self.assertIn("rm -f codetta/*.alignment_output.txt codetta/*.alignment_output.txt.gz codetta/*.genetic_code.out", codetta_text)
 
+    def test_pruned_tool_publish_filters_keep_flat_curated_outputs(self) -> None:
+        """Publish only the flat curated tool files, not duplicate nested raw directories."""
+        checkm2_text = (MODULES_DIR / "checkm2.nf").read_text(encoding="utf-8")
+        busco_text = (MODULES_DIR / "busco.nf").read_text(encoding="utf-8")
+        prokka_text = (MODULES_DIR / "prokka.nf").read_text(encoding="utf-8")
+        ccfinder_text = (MODULES_DIR / "ccfinder.nf").read_text(encoding="utf-8")
+
+        self.assertIn("filename in ['quality_report.tsv', 'checkm2.log']", checkm2_text)
+        self.assertNotIn("filename == 'versions.yml' ? null : filename", checkm2_text)
+        self.assertNotIn("filename == 'checkm2_gcode${translation_table}'", checkm2_text)
+
+        self.assertIn("filename in ['short_summary.json', 'busco.log']", busco_text)
+        self.assertNotIn("filename == 'versions.yml' ? null : filename", busco_text)
+        self.assertNotIn("filename == 'busco_${lineage}'", busco_text)
+
+        self.assertIn("filename in ['prokka.gff', 'prokka.faa', 'prokka.log']", prokka_text)
+        self.assertNotIn("filename == 'versions.yml' ? null : filename", prokka_text)
+        self.assertNotIn("filename == 'prokka'", prokka_text)
+
+        self.assertIn("filename in ['result.json', 'ccfinder.log']", ccfinder_text)
+        self.assertNotIn("filename == 'versions.yml' ? null : filename", ccfinder_text)
+        self.assertNotIn("filename == 'ccfinder'", ccfinder_text)
+
     def test_summarise_ccfinder_consumes_strict_json_only(self) -> None:
         """Require CRISPR summarisation to depend only on the emitted JSON artefact."""
         module_text = (MODULES_DIR / "summarise_ccfinder.nf").read_text(encoding="utf-8")

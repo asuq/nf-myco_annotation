@@ -8,7 +8,11 @@ process CCFINDER {
         { "${params.outdir}/samples/${meta.accession}/ccfinder" },
         mode: 'copy',
         overwrite: true,
-        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+        saveAs: { filename ->
+            filename in ['result.json', 'ccfinder.log']
+                ? filename
+                : null
+        },
     )
 
     input:

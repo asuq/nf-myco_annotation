@@ -10,7 +10,11 @@ process CHECKM2 {
         { "${params.outdir}/samples/${meta.accession}/checkm2_gcode${translation_table}" },
         mode: 'copy',
         overwrite: true,
-        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+        saveAs: { filename ->
+            filename in ['quality_report.tsv', 'checkm2.log']
+                ? filename
+                : null
+        },
     )
 
     input:
