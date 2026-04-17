@@ -15,6 +15,7 @@ SINGULARITY_CONFIG = ROOT / "conf" / "singularity.config"
 SLURM_CONFIG = ROOT / "conf" / "slurm.config"
 OIST_CONFIG = ROOT / "conf" / "oist.config"
 OIST_20K_STORAGE_CONFIG = ROOT / "conf" / "oist_20k_storage.config"
+GWDG_CONFIG = ROOT / "conf" / "gwdg.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
 DEBUG_CONFIG = ROOT / "conf" / "debug.config"
 BASE_CONFIG = ROOT / "conf" / "base.config"
@@ -45,6 +46,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("singularity_run_options = ''", config_text)
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
+        self.assertIn("includeConfig 'conf/gwdg.config'", config_text)
         self.assertNotIn("padloc_db = null", config_text)
         self.assertNotIn("padloc_db_label = null", config_text)
         self.assertNotIn("slurm_account", config_text)
@@ -100,6 +102,40 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertNotIn("errorStrategy", oist_text)
         self.assertNotIn("params.slurm_account", oist_text)
         self.assertNotIn("beforeScript", oist_text)
+
+    def test_gwdg_profile_is_available_as_one_standalone_runtime(self) -> None:
+        """Keep the GWDG profile self-contained for SCC SLURM plus Singularity runs."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+        gwdg_text = GWDG_CONFIG.read_text(encoding="utf-8")
+
+        self.assertTrue(GWDG_CONFIG.is_file())
+        self.assertIn("includeConfig 'conf/gwdg.config'", config_text)
+        self.assertIn("profiles {", gwdg_text)
+        self.assertIn("gwdg {", gwdg_text)
+        self.assertIn("process.executor = 'slurm'", gwdg_text)
+        self.assertIn("executor.queueSize = params.executor_queue_size", gwdg_text)
+        self.assertIn("process.queue = params.slurm_queue ?: 'scc-cpu'", gwdg_text)
+        self.assertIn("['--export=ALL', '-C ssd', params.slurm_cluster_options ?: null]", gwdg_text)
+        self.assertIn("singularity.enabled = true", gwdg_text)
+        self.assertIn("singularity.autoMounts = true", gwdg_text)
+        self.assertIn("singularity.cacheDir = params.singularity_cache_dir ?: null", gwdg_text)
+        self.assertIn("docker.enabled = false", gwdg_text)
+        self.assertIn("process.containerOptions = params.singularity_run_options ?: ''", gwdg_text)
+        self.assertIn("process.resourceLimits = [", gwdg_text)
+        self.assertIn("process.scratch = '$LOCAL_TMPDIR'", gwdg_text)
+        self.assertIn("process.stageOutMode = 'copy'", gwdg_text)
+        self.assertIn("process.beforeScript = {", gwdg_text)
+        self.assertIn("task.attempt == 1", gwdg_text)
+        self.assertIn("'SHM_TMPDIR', 'LOCAL_TMPDIR', 'SHARED_SSD_TMPDIR', 'SHARED_TMPDIR'", gwdg_text)
+        self.assertIn("'LOCAL_TMPDIR', 'SHARED_SSD_TMPDIR', 'SHARED_TMPDIR'", gwdg_text)
+        self.assertIn('export APPTAINERENV_TMPDIR="${temp_root}"', gwdg_text)
+        self.assertIn('export SINGULARITYENV_TMPDIR="${temp_root}"', gwdg_text)
+        self.assertIn("withLabel: process_medium", gwdg_text)
+        self.assertIn("withLabel: process_high", gwdg_text)
+        self.assertIn("withName: PROKKA", gwdg_text)
+        self.assertIn("withName: CALCULATE_ASSEMBLY_STATS", gwdg_text)
+        self.assertIn("stageInMode = 'copy'", gwdg_text)
+        self.assertNotIn("params.slurm_account", gwdg_text)
 
     def test_oist_20k_storage_override_is_opt_in_and_resume_safe(self) -> None:
         """Keep the large-cohort OIST override separate from the default tracked profiles."""
