@@ -64,6 +64,7 @@ process BUILD_MASTER_TABLE {
 
     stub:
     def appendColumns = [
+        'is_new',
         'superkingdom',
         'phylum',
         'class',
@@ -98,6 +99,8 @@ process BUILD_MASTER_TABLE {
     ]
     def appendRow = appendColumns.collect { column ->
         switch (column) {
+            case 'is_new':
+                return 'false'
             case 'Gcode':
                 return '4'
             case 'GC_Content':

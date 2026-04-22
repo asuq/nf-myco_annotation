@@ -259,11 +259,13 @@ summaries rather than by re-reading raw tool directories.
 
 The master table preserves the original metadata block exactly as supplied and
 in its original order. Derived columns are appended afterwards in the runtime
-order resolved from `params.busco_lineages`. The checked-in
+order resolved from `params.busco_lineages`. The appended block starts with
+`is_new`, sourced from `validated_samples.tsv`. The checked-in
 `assets/master_table_append_columns.txt` snapshot records the default lineage
 pair only.
 
 ```text
+is_new
 superkingdom
 phylum
 class

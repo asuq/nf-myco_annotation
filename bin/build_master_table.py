@@ -560,6 +560,7 @@ def build_master_row(
     row = {column: metadata_row[column] for column in metadata_header}
 
     derived_values = {column: "NA" for column in append_columns}
+    derived_values["is_new"] = sample_row["is_new"]
     derived_values.update(derive_taxonomy_values(metadata_row, taxonomy_index))
 
     for column in CHECKM2_COLUMNS:
@@ -620,10 +621,13 @@ def run_build(args: argparse.Namespace) -> None:
         busco_lineages=args.busco_lineage,
     )
 
-    expected_header = master_table_contract.build_master_table_columns(
-        metadata_header,
-        busco_lineages,
-    )
+    try:
+        expected_header = master_table_contract.build_master_table_columns(
+            metadata_header,
+            busco_lineages,
+        )
+    except ValueError as error:
+        raise MasterTableError(str(error)) from error
     if append_columns != expected_header[len(metadata_header) :]:
         raise MasterTableError(
             "Append-column contract does not match the BUSCO-aware master-table contract."

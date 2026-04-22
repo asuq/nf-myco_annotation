@@ -192,6 +192,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
             master_by_accession = {row["Accession"]: row for row in master_rows}
 
             self.assertEqual(master_by_accession["ACC1"]["Tax_ID"], "123")
+            self.assertEqual(master_by_accession["ACC1"]["is_new"], "false")
             self.assertEqual(master_by_accession["ACC1"]["superkingdom"], "Bacteria")
             self.assertEqual(master_by_accession["ACC1"]["16S"], "Yes")
             self.assertEqual(master_by_accession["ACC1"]["GC_Content"], "NA")
@@ -204,6 +205,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC1"]["Cluster_ID"], "cluster_1")
 
             self.assertEqual(master_by_accession["ACC2"]["Accession"], "ACC2")
+            self.assertEqual(master_by_accession["ACC2"]["is_new"], "true")
             self.assertEqual(master_by_accession["ACC2"]["Tax_ID"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["Organism_Name"], "Candidate two")
             self.assertEqual(master_by_accession["ACC2"]["Atypical_Warnings"], "NA")
@@ -517,6 +519,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
 
             self.assertEqual(len(master_rows), 1)
             self.assertEqual(master_rows[0]["Accession"], "ACC_NEW")
+            self.assertEqual(master_rows[0]["is_new"], "true")
             self.assertEqual(master_rows[0]["Tax_ID"], "NA")
             self.assertEqual(master_rows[0]["Organism_Name"], "Novel isolate")
             self.assertEqual(master_rows[0]["Atypical_Warnings"], "NA")
@@ -563,9 +566,52 @@ class BuildMasterTableTestCase(unittest.TestCase):
             _, master_rows = read_tsv_rows(master_output)
 
             self.assertEqual(master_rows[0]["Accession"], "ACC_NEW")
+            self.assertEqual(master_rows[0]["is_new"], "true")
             self.assertEqual(master_rows[0]["Organism_Name"], "Novel isolate")
             self.assertEqual(master_rows[0]["Assembly_Level"], "Complete Genome")
             self.assertEqual(master_rows[0]["Atypical_Warnings"], "NA")
+
+    def test_main_rejects_metadata_header_overlap_with_appended_is_new(self) -> None:
+        """Fail when metadata already declares the appended is_new column."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            validated_samples = self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(
+                    [
+                        "accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id",
+                        "ACC1\tfalse\tNA\t/path/one.fna\tid_1",
+                    ]
+                )
+                + "\n",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tis_new\tTax_ID",
+                        "ACC1\tfalse\t123",
+                    ]
+                )
+                + "\n",
+            )
+            master_output = tmpdir / "master_table.tsv"
+
+            exit_code = build_master_table.main(
+                [
+                    "--validated-samples",
+                    str(validated_samples),
+                    "--metadata",
+                    str(metadata),
+                    "--append-columns",
+                    str(APPEND_COLUMNS_ASSET),
+                    "--output",
+                    str(master_output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(master_output.exists())
 
     def test_main_rejects_duplicate_accessions_in_validated_manifest(self) -> None:
         """Fail when validated_samples.tsv contains duplicate accession rows."""

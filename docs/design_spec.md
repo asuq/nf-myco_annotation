@@ -11,7 +11,7 @@
 Refactor the legacy Jupyter-notebook workflow and manual per-sample curation into a single **Nextflow DSL2** pipeline that:
 
 1. runs the required annotation and QC tools on **all input genomes**;
-2. uses `is_new` **only** for metadata handling;
+2. uses `is_new` for metadata handling and final reporting;
 3. produces per-sample annotation outputs;
 4. produces cohort-level outputs (taxonomy expansion, ANI clustering, combined 16S FASTA, status table, versions table);
 5. produces one final **master table** with preserved input metadata columns followed by derived columns.
@@ -25,7 +25,7 @@ This is a **behaviour-preserving v1 refactor**, not a methodological redesign.
 ### 2.1 Input policy
 
 - Run all tools on **all** genomes in the sample manifest.
-- `is_new` controls only how metadata are sourced and merged.
+- `is_new` controls how metadata are sourced and merged and must also be emitted in the final master table.
 - Required sample-manifest columns are exactly:
   - `accession`
   - `is_new`
@@ -182,6 +182,8 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
 
 - Produce `sample_status.tsv`.
 - Add Codetta summary values to the final reporting layer.
+- Add `is_new` to the master table as the first appended column after the
+  preserved metadata block.
 - Add `GC_Content` to the master table immediately after
   `Total_Coding_Sequences_gcode11` and before `Gcode`.
 - Derive `GC_Content` from `seqtk comp` as `(G + C) / (A + C + G + T) * 100`,
@@ -425,6 +427,8 @@ Required behaviour:
 - preserve the original metadata columns exactly as given and in the same order;
 - join by accession;
 - append derived columns after the metadata block;
+- hard-fail if metadata already contains `is_new`, because that name is reserved
+  for the appended reporting column;
 - if the metadata key is named `accession`, normalise it internally to `Accession` for joining;
 - otherwise require an `Accession` column.
 
@@ -971,11 +975,16 @@ The table is built as:
 
 - Preserve all metadata columns exactly as supplied.
 - Do not reorder or rename them except for the internal join-key normalisation needed to match the sample manifest.
+- Do not inject `is_new` into the metadata block; emit it only in the appended reporting block.
 - For `is_new=true` genomes absent from metadata, generate the metadata block with `NA` values unless user-supplied values are available.
 
 ## 9.3 Appended derived columns in fixed order
 
 Append after the metadata block:
+
+### Manifest / reporting block
+
+- `is_new`
 
 ### Taxonomy block
 

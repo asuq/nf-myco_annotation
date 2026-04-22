@@ -16,6 +16,7 @@ TAXONOMY_COLUMNS = (
     "genus",
     "species",
 )
+MASTER_TABLE_PREFIX_COLUMNS = ("is_new",)
 CHECKM2_COLUMNS = (
     "Completeness_gcode4",
     "Completeness_gcode11",
@@ -92,6 +93,7 @@ def build_append_columns(busco_lineages: Sequence[str] | None = None) -> list[st
         f"BUSCO_{lineage}" for lineage in normalise_busco_lineages(busco_lineages)
     ]
     return [
+        *MASTER_TABLE_PREFIX_COLUMNS,
         *TAXONOMY_COLUMNS,
         *CHECKM2_COLUMNS,
         *ASSEMBLY_DERIVED_COLUMNS,
@@ -164,6 +166,7 @@ def extract_busco_lineages_from_append_columns(
 ) -> tuple[str, ...]:
     """Return BUSCO lineage names encoded in one append-column contract."""
     prefix_columns = [
+        *MASTER_TABLE_PREFIX_COLUMNS,
         *TAXONOMY_COLUMNS,
         *CHECKM2_COLUMNS,
         *ASSEMBLY_DERIVED_COLUMNS,
