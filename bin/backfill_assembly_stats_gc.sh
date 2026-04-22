@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: backfill_assembly_stats_gc.sh --results-dir PATH [--input PATH] [--output PATH] [--seqtk-binary CMD]
+Usage: backfill_assembly_stats_gc.sh --results-dir PATH [--input PATH] [--output PATH] [--seqtk-binary CMD] [--jobs INT]
 
 Backfill gc_content into an existing assembly_stats.tsv for one previous run.
 The script preserves the existing table rows and columns, appending gc_content
@@ -11,14 +11,37 @@ derived from the published staged genomes under samples/<accession>/staged/.
 EOF
 }
 
-cleanup_output_tmp() {
+cleanup_temp_files() {
     if [[ -n "${OUTPUT_TMP}" ]]; then
         rm -f "${OUTPUT_TMP}"
+    fi
+    if ((${#CLEANUP_DIRS[@]} > 0)); then
+        rm -rf "${CLEANUP_DIRS[@]}"
     fi
 }
 
 log_error() {
     printf 'ERROR: %s\n' "$1" >&2
+}
+
+validate_jobs() {
+    local jobs="$1"
+
+    if ! [[ "${jobs}" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "--jobs must be a positive integer."
+        return 1
+    fi
+}
+
+resolve_script_path() {
+    local invocation="$1"
+
+    if [[ "${invocation}" == */* ]]; then
+        printf '%s\n' "${invocation}"
+        return 0
+    fi
+
+    command -v "${invocation}"
 }
 
 find_column_index() {
@@ -73,7 +96,7 @@ run_seqtk_comp() {
     local fasta_path="$1"
 
     SEQTK_BINARY="${seqtk_binary}" FASTA_PATH="${fasta_path}" \
-        bash -lc 'eval "$SEQTK_BINARY" comp "$FASTA_PATH"'
+        bash -lc 'eval "set -- $SEQTK_BINARY"; "$@" comp "$FASTA_PATH"'
 }
 
 compute_gc_content() {
@@ -116,13 +139,93 @@ compute_gc_content() {
     printf '%s\n' "${gc_content}"
 }
 
+run_worker() {
+    local row_index="$1"
+    local accession="$2"
+    local fasta_path="$3"
+    local worker_dir="$4"
+    local seqtk_command="$5"
+    local result_path error_path gc_content
+
+    result_path="${worker_dir}/results/${row_index}.tsv"
+    error_path="${worker_dir}/errors/${row_index}.log"
+    seqtk_binary="${seqtk_command}"
+
+    if ! gc_content="$(compute_gc_content "${fasta_path}")"; then
+        printf '%s\n' "Failed to calculate gc_content for ${accession} from ${fasta_path}." > "${error_path}"
+        return 255
+    fi
+
+    printf '%s\n' "${gc_content}" > "${result_path}"
+}
+
+collect_worker_error() {
+    local worker_dir="$1"
+    local task_count="$2"
+    local row_index error_path
+
+    for ((row_index = 1; row_index <= task_count; row_index++)); do
+        error_path="${worker_dir}/errors/${row_index}.log"
+        if [[ -s "${error_path}" ]]; then
+            cat "${error_path}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+merge_worker_results() {
+    local worker_dir="$1"
+    local task_count="$2"
+    local input_path="$3"
+    local output_path="$4"
+    local output_tmp row_index result_path input_line
+
+    output_tmp="${worker_dir}/assembly_stats.tsv"
+    {
+        printf '%s\tgc_content\n' "$(IFS=$'\t'; printf '%s' "${HEADER_COLUMNS[*]}")"
+        row_index=0
+        while IFS= read -r input_line; do
+            input_line="${input_line%$'\r'}"
+            if [[ -z "${input_line}" ]]; then
+                continue
+            fi
+            row_index=$((row_index + 1))
+            result_path="${worker_dir}/results/${row_index}.tsv"
+            if [[ ! -f "${result_path}" ]]; then
+                log_error "GC backfill worker did not produce row ${row_index}."
+                return 1
+            fi
+            printf '%s\t%s\n' "${input_line}" "$(cat "${result_path}")"
+        done < <(tail -n +2 "${input_path}")
+        if ((row_index != task_count)); then
+            log_error "GC backfill merge saw ${row_index} data rows, expected ${task_count}."
+            return 1
+        fi
+    } > "${output_tmp}"
+
+    mv "${output_tmp}" "${output_path}"
+}
+
 main() {
-    local results_dir="" input="" output="" output_dir
+    local results_dir="" input="" output="" output_dir jobs="1"
     local accession_index required_column
-    local duplicate_accessions="" gc_content accession staged_fasta
+    local duplicate_accessions="" accession staged_fasta input_line
+    local worker_dir task_file worker_script task_count
     local -a header_array fields
 
     seqtk_binary="seqtk"
+
+    if [[ "${1:-}" == "--worker" ]]; then
+        shift
+        if (($# != 5)); then
+            log_error "Worker mode expects row index, accession, FASTA path, worker dir, and seqtk command."
+            return 1
+        fi
+        run_worker "$1" "$2" "$3" "$4" "$5"
+        return $?
+    fi
 
     while (($# > 0)); do
         case "$1" in
@@ -142,6 +245,10 @@ main() {
                 seqtk_binary="$2"
                 shift 2
                 ;;
+            --jobs)
+                jobs="$2"
+                shift 2
+                ;;
             -h|--help)
                 usage
                 return 0
@@ -157,6 +264,9 @@ main() {
     if [[ -z "${results_dir}" ]]; then
         log_error "--results-dir is required."
         usage >&2
+        return 1
+    fi
+    if ! validate_jobs "${jobs}"; then
         return 1
     fi
     if [[ ! -d "${results_dir}" ]]; then
@@ -188,6 +298,7 @@ main() {
         log_error "Input assembly stats table already contains gc_content: ${input}"
         return 1
     fi
+    HEADER_COLUMNS=("${header_array[@]}")
 
     accession_index="$(find_column_index header_array "accession")"
     duplicate_accessions="$(
@@ -211,41 +322,66 @@ main() {
     output_dir="$(dirname "${output}")"
     mkdir -p "${output_dir}"
     OUTPUT_TMP="$(mktemp "${output_dir}/.assembly_stats_gc.XXXXXX")"
-    trap cleanup_output_tmp EXIT
+    worker_dir="$(mktemp -d)"
+    CLEANUP_DIRS+=("${worker_dir}")
+    mkdir -p "${worker_dir}/results" "${worker_dir}/errors"
+    task_file="${worker_dir}/tasks.nul"
+    worker_script="$(resolve_script_path "$0")"
+    task_count=0
 
-    {
-        printf '%s\tgc_content\n' "$(IFS=$'\t'; printf '%s' "${header_array[*]}")"
+    while IFS= read -r input_line; do
+        input_line="${input_line%$'\r'}"
+        if [[ -z "${input_line}" ]]; then
+            continue
+        fi
 
-        while IFS=$'\t' read -r -a fields; do
-            if ((${#fields[@]} == 0)); then
-                continue
+        IFS=$'\t' read -r -a fields <<< "${input_line}"
+        if ((${#fields[@]} <= accession_index)); then
+            log_error "Assembly stats row is missing the accession field."
+            return 1
+        fi
+
+        accession="${fields[accession_index]}"
+        if [[ -z "${accession}" ]]; then
+            log_error "Assembly stats row contains an empty accession."
+            return 1
+        fi
+
+        staged_fasta="$(resolve_staged_fasta "${results_dir}" "${accession}")" || return 1
+        task_count=$((task_count + 1))
+        printf '%s\0%s\0%s\0%s\0%s\0' \
+            "${task_count}" \
+            "${accession}" \
+            "${staged_fasta}" \
+            "${worker_dir}" \
+            "${seqtk_binary}" \
+            >> "${task_file}"
+    done < <(tail -n +2 "${input}")
+
+    if [[ -s "${task_file}" ]]; then
+        if ! xargs -0 -n 5 -P "${jobs}" bash "${worker_script}" --worker < "${task_file}"; then
+            local worker_error
+            worker_error="$(collect_worker_error "${worker_dir}" "${task_count}" || true)"
+            if [[ -n "${worker_error}" ]]; then
+                log_error "${worker_error}"
+            else
+                log_error "GC backfill worker execution failed."
             fi
-            if ((${#fields[@]} <= accession_index)); then
-                log_error "Assembly stats row is missing the accession field."
-                return 1
-            fi
+            return 1
+        fi
+    fi
 
-            accession="${fields[accession_index]}"
-            if [[ -z "${accession}" ]]; then
-                log_error "Assembly stats row contains an empty accession."
-                return 1
-            fi
-
-            staged_fasta="$(resolve_staged_fasta "${results_dir}" "${accession}")" || return 1
-            if ! gc_content="$(compute_gc_content "${staged_fasta}")"; then
-                log_error "Failed to calculate gc_content for ${accession} from ${staged_fasta}."
-                return 1
-            fi
-
-            printf '%s\t%s\n' "$(IFS=$'\t'; printf '%s' "${fields[*]}")" "${gc_content}"
-        done < <(tail -n +2 "${input}" | tr -d '\r')
-    } > "${OUTPUT_TMP}"
+    if ! merge_worker_results "${worker_dir}" "${task_count}" "${input}" "${OUTPUT_TMP}"; then
+        return 1
+    fi
 
     mv "${OUTPUT_TMP}" "${output}"
     OUTPUT_TMP=""
-    trap - EXIT
 }
 
 seqtk_binary=""
 OUTPUT_TMP=""
+CLEANUP_DIRS=()
+HEADER_COLUMNS=()
+trap cleanup_temp_files EXIT
 main "$@"

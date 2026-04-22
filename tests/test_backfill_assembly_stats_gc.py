@@ -178,6 +178,63 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             self.assertEqual(rows[0]["gc_content"], "50")
             self.assertEqual(rows[1]["gc_content"], "50")
 
+    def test_parallel_jobs_preserve_input_row_order(self) -> None:
+        """Keep output rows in the same order when multiple workers run."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            results_dir = self.write_previous_run_fixture(
+                tmpdir,
+                assembly_rows=[
+                    {"accession": "ACC3", "n50": "3", "scaffolds": "3", "genome_size": "30"},
+                    {"accession": "ACC1", "n50": "1", "scaffolds": "1", "genome_size": "10"},
+                    {"accession": "ACC2", "n50": "2", "scaffolds": "2", "genome_size": "20"},
+                ],
+            )
+            self.write_staged_fasta(results_dir, "ACC3", "ID3.fasta", "GGGG")
+            self.write_staged_fasta(results_dir, "ACC1", "ID1.fasta", "AAAA")
+            self.write_staged_fasta(results_dir, "ACC2", "ID2.fasta", "CCCC")
+
+            result = self.run_script(
+                results_dir=results_dir,
+                path_prefix=tmpdir,
+                extra_args=["--jobs", "2"],
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            _header, rows = read_tsv(
+                results_dir / "cohort" / "assembly_stats" / "assembly_stats.with_gc.tsv"
+            )
+            self.assertEqual([row["accession"] for row in rows], ["ACC3", "ACC1", "ACC2"])
+            self.assertEqual([row["gc_content"] for row in rows], ["100", "0", "100"])
+
+    def test_parallel_jobs_accept_staged_paths_with_spaces(self) -> None:
+        """Handle staged FASTA paths containing spaces during parallel execution."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            seqtk_path = self.install_fake_seqtk(tmpdir)
+            spaced_root = tmpdir / "with spaces"
+            results_dir = self.write_previous_run_fixture(
+                spaced_root,
+                assembly_rows=[
+                    {"accession": "ACC5", "n50": "5", "scaffolds": "1", "genome_size": "8"}
+                ],
+            )
+            self.write_staged_fasta(results_dir, "ACC5", "ID5.fasta", "AACCGGTT")
+
+            result = self.run_script(
+                results_dir=results_dir,
+                path_prefix=tmpdir,
+                extra_args=["--jobs", "2", "--seqtk-binary", str(seqtk_path)],
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            _header, rows = read_tsv(
+                results_dir / "cohort" / "assembly_stats" / "assembly_stats.with_gc.tsv"
+            )
+            self.assertEqual(rows[0]["accession"], "ACC5")
+            self.assertEqual(rows[0]["gc_content"], "50")
+
     def test_excludes_ambiguous_bases_from_gc_denominator(self) -> None:
         """Ignore ambiguous bases when computing gc_content."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -289,6 +346,52 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Failed to calculate gc_content for ACC1", result.stderr)
+
+    def test_parallel_jobs_report_failing_accession(self) -> None:
+        """Surface the accession-specific worker error when one parallel job fails."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            results_dir = self.write_previous_run_fixture(
+                tmpdir,
+                assembly_rows=[
+                    {"accession": "ACC1", "n50": "1", "scaffolds": "1", "genome_size": "8"},
+                    {"accession": "ACC2", "n50": "2", "scaffolds": "1", "genome_size": "8"},
+                ],
+            )
+            self.write_staged_fasta(results_dir, "ACC1", "ID1.fasta", "AACCGGTT")
+            self.write_staged_fasta(results_dir, "ACC2", "ID2.fasta", "NNNNNNNN")
+
+            result = self.run_script(
+                results_dir=results_dir,
+                path_prefix=tmpdir,
+                extra_args=["--jobs", "2"],
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Failed to calculate gc_content for ACC2", result.stderr)
+
+    def test_rejects_invalid_jobs_argument(self) -> None:
+        """Fail early when --jobs is not a positive integer."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            results_dir = self.write_previous_run_fixture(
+                tmpdir,
+                assembly_rows=[
+                    {"accession": "ACC1", "n50": "1", "scaffolds": "1", "genome_size": "8"}
+                ],
+            )
+            self.write_staged_fasta(results_dir, "ACC1", "ID1.fasta", "AACCGGTT")
+
+            result = self.run_script(
+                results_dir=results_dir,
+                path_prefix=tmpdir,
+                extra_args=["--jobs", "0"],
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--jobs must be a positive integer", result.stderr)
 
 
 if __name__ == "__main__":
