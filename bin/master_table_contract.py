@@ -28,6 +28,7 @@ CHECKM2_COLUMNS = (
     "Total_Coding_Sequences_gcode4",
     "Total_Coding_Sequences_gcode11",
 )
+ASSEMBLY_DERIVED_COLUMNS = ("GC_Content",)
 CODETTA_COLUMNS = ("Codetta_Genetic_Code", "Codetta_NCBI_Table_Candidates")
 GCODE_QC_COLUMNS = ("Gcode", *CODETTA_COLUMNS, "Low_quality", "16S")
 CRISPR_COLUMNS = ("CRISPRS", "SPACERS_SUM", "CRISPR_FRAC")
@@ -93,6 +94,7 @@ def build_append_columns(busco_lineages: Sequence[str] | None = None) -> list[st
     return [
         *TAXONOMY_COLUMNS,
         *CHECKM2_COLUMNS,
+        *ASSEMBLY_DERIVED_COLUMNS,
         *GCODE_QC_COLUMNS,
         *busco_columns,
         *CRISPR_COLUMNS,
@@ -164,6 +166,7 @@ def extract_busco_lineages_from_append_columns(
     prefix_columns = [
         *TAXONOMY_COLUMNS,
         *CHECKM2_COLUMNS,
+        *ASSEMBLY_DERIVED_COLUMNS,
         *GCODE_QC_COLUMNS,
     ]
     suffix_columns = [*CRISPR_COLUMNS, *ANI_COLUMNS]

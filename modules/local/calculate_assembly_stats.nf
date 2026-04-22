@@ -40,8 +40,8 @@ process CALCULATE_ASSEMBLY_STATS {
     stub:
     '''
     cat <<'EOF' > assembly_stats.tsv
-    accession	n50	scaffolds	genome_size
-    sample_a	80	1	80
+    accession	n50	scaffolds	genome_size	gc_content
+    sample_a	80	1	80	50
     EOF
     cat <<'EOF' > versions.yml
     "${task.process}":

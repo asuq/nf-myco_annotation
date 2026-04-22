@@ -100,7 +100,12 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                     "    sys.exit(1)",
                     "",
                     "for name, sequence in read_fasta(Path(sys.argv[2])):",
-                    "    print(f\"{name}\\t{len(sequence)}\\t0\\t0\\t0\\t0\")",
+                    "    upper = sequence.upper()",
+                    "    print(",
+                    "        f\"{name}\\t{len(sequence)}\\t\"",
+                    "        f\"{upper.count('A')}\\t{upper.count('C')}\\t\"",
+                    "        f\"{upper.count('G')}\\t{upper.count('T')}\"",
+                    "    )",
                     "",
                 ]
             ),
@@ -247,7 +252,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
         """Write one published source assembly-stats table."""
         return self.write_tsv_rows(
             source_outdir / "cohort" / "assembly_stats" / "assembly_stats.tsv",
-            ("accession", "n50", "scaffolds", "genome_size"),
+            ("accession", "n50", "scaffolds", "genome_size", "gc_content"),
             rows,
         )
 
@@ -277,12 +282,13 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                         "n50": stats_by_accession[row["accession"]][0],
                         "scaffolds": stats_by_accession[row["accession"]][1],
                         "genome_size": stats_by_accession[row["accession"]][2],
+                        "gc_content": stats_by_accession[row["accession"]][3],
                     }
                     for row in rows
                 ]
                 self.write_tsv_rows(
                     output_path,
-                    ("accession", "n50", "scaffolds", "genome_size"),
+                    ("accession", "n50", "scaffolds", "genome_size", "gc_content"),
                     stats_rows,
                 )
                 return subprocess.CompletedProcess(
@@ -383,6 +389,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                         "n50": "50000",
                         "scaffolds": "2",
                         "genome_size": "800000",
+                        "gc_content": "50",
                     }
                 ],
             )
@@ -524,7 +531,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 with mock.patch.object(
                     rescue_ani_from_results,
                     "run_subprocess",
-                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000", "50")}),
                 ):
                     exit_code = rescue_ani_from_results.main(
                         [
@@ -591,6 +598,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                         "n50": "61000",
                         "scaffolds": "4",
                         "genome_size": "910000",
+                        "gc_content": "48.5",
                     }
                 ],
             )
@@ -629,6 +637,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                         "n50": "61000",
                         "scaffolds": "4",
                         "genome_size": "910000",
+                        "gc_content": "48.5",
                     }
                 ],
             )
@@ -646,13 +655,14 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             )
             override_stats = self.write_tsv_rows(
                 tmpdir / "override_assembly_stats.tsv",
-                ("accession", "n50", "scaffolds", "genome_size"),
+                ("accession", "n50", "scaffolds", "genome_size", "gc_content"),
                 [
                     {
                         "accession": "ACC1",
                         "n50": "72000",
                         "scaffolds": "6",
                         "genome_size": "950000",
+                        "gc_content": "51.2",
                     }
                 ],
             )
@@ -769,6 +779,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                         "n50": "NA",
                         "scaffolds": "2",
                         "genome_size": "800000",
+                        "gc_content": "50",
                     }
                 ],
             )
@@ -831,7 +842,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 with mock.patch.object(
                     rescue_ani_from_results,
                     "run_subprocess",
-                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000", "50")}),
                 ):
                     exit_code = rescue_ani_from_results.main(
                         [
@@ -892,7 +903,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 with mock.patch.object(
                     rescue_ani_from_results,
                     "run_subprocess",
-                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000", "50")}),
                 ):
                     exit_code = rescue_ani_from_results.main(
                         [
@@ -934,7 +945,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 with mock.patch.object(
                     rescue_ani_from_results,
                     "run_subprocess",
-                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000", "50")}),
                 ):
                     exit_code = rescue_ani_from_results.main(
                         [
@@ -971,7 +982,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 with mock.patch.object(
                     rescue_ani_from_results,
                     "run_subprocess",
-                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000")}),
+                    self.fake_run_subprocess({"ACC1": ("50000", "2", "800000", "50")}),
                 ):
                     exit_code = rescue_ani_from_results.main(
                         [
@@ -1128,24 +1139,28 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                         "n50": "50000",
                         "scaffolds": "2",
                         "genome_size": "800000",
+                        "gc_content": "50",
                     },
                     {
                         "accession": "ACC2",
                         "n50": "45000",
                         "scaffolds": "3",
                         "genome_size": "780000",
+                        "gc_content": "49",
                     },
                     {
                         "accession": "ACC3",
                         "n50": "42000",
                         "scaffolds": "4",
                         "genome_size": "760000",
+                        "gc_content": "47",
                     },
                     {
                         "accession": "ACC4",
                         "n50": "47000",
                         "scaffolds": "2",
                         "genome_size": "790000",
+                        "gc_content": "51",
                     },
                 ],
             )
@@ -1203,10 +1218,10 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                     "run_subprocess",
                     self.fake_run_subprocess(
                         {
-                            "ACC1": ("50000", "2", "800000"),
-                            "ACC2": ("45000", "3", "780000"),
-                            "ACC3": ("42000", "4", "760000"),
-                            "ACC4": ("47000", "2", "790000"),
+                            "ACC1": ("50000", "2", "800000", "50"),
+                            "ACC2": ("45000", "3", "780000", "49"),
+                            "ACC3": ("42000", "4", "760000", "47"),
+                            "ACC4": ("47000", "2", "790000", "51"),
                         }
                     ),
                 ):
@@ -1485,8 +1500,8 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 "run_subprocess",
                 self.fake_run_subprocess(
                     {
-                        "ACC1": ("50000", "2", "800000"),
-                        "ACC2": ("49000", "2", "790000"),
+                        "ACC1": ("50000", "2", "800000", "50"),
+                        "ACC2": ("49000", "2", "790000", "49"),
                     }
                 ),
             ):

@@ -66,7 +66,12 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                     sys.exit(1)
 
                 for name, sequence in read_fasta(Path(sys.argv[2])):
-                    print(f"{name}\\t{len(sequence)}\\t0\\t0\\t0\\t0")
+                    upper = sequence.upper()
+                    print(
+                        f"{name}\\t{len(sequence)}\\t"
+                        f"{upper.count('A')}\\t{upper.count('C')}\\t"
+                        f"{upper.count('G')}\\t{upper.count('T')}"
+                    )
                 """
             ),
             encoding="utf-8",
@@ -129,6 +134,7 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                         "n50": "8",
                         "scaffolds": "1",
                         "genome_size": "8",
+                        "gc_content": "50",
                     }
                 ],
             )
@@ -163,6 +169,7 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                         "n50": "10",
                         "scaffolds": "3",
                         "genome_size": "19",
+                        "gc_content": "0",
                     }
                 ],
             )
@@ -194,9 +201,31 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                         "n50": "8",
                         "scaffolds": "1",
                         "genome_size": "8",
+                        "gc_content": "50",
                     }
                 ],
             )
+
+    def test_excludes_ambiguous_bases_from_gc_denominator(self) -> None:
+        """Calculate GC from canonical bases only."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC5.fasta", ">contig1\nACGTNNNN\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC5\tid_5\tACC5.fasta\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(read_tsv(output)[0]["gc_content"], "50")
 
     def test_parallel_jobs_preserve_manifest_order(self) -> None:
         """Emit deterministic row order while processing multiple genomes in parallel."""
@@ -301,6 +330,27 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Failed to calculate assembly statistics for ACC3", result.stderr)
+
+    def test_fails_when_fasta_contains_no_canonical_bases(self) -> None:
+        """Reject FASTA input that contains no A, C, G, or T bases."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC6.fasta", ">contig1\nNNNNNN\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC6\tid_6\tACC6.fasta\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Failed to calculate assembly statistics for ACC6", result.stderr)
 
 
 if __name__ == "__main__":

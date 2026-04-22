@@ -137,9 +137,9 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 tmpdir / "assembly_stats.tsv",
                 "\n".join(
                     [
-                        "accession\tn50\tscaffolds\tgenome_size",
-                        "ACC1\t100000\t1\t100000",
-                        "ACC2\t80000\t2\t900000",
+                        "accession\tn50\tscaffolds\tgenome_size\tgc_content",
+                        "ACC1\t100000\t1\t100000\t50",
+                        "ACC2\t80000\t2\t900000\t48",
                     ]
                 )
                 + "\n",
@@ -742,9 +742,9 @@ class BuildSampleStatusTestCase(unittest.TestCase):
                 tmpdir / "assembly_stats.tsv",
                 "\n".join(
                     [
-                        "accession\tn50\tscaffolds\tgenome_size",
-                        "ACC1\t100000\t1\t100000",
-                        "ACC2\t90000\t2\t950000",
+                        "accession\tn50\tscaffolds\tgenome_size\tgc_content",
+                        "ACC1\t100000\t1\t100000\t50",
+                        "ACC2\t90000\t2\t950000\t47.2",
                     ]
                 )
                 + "\n",
@@ -889,7 +889,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             assembly_stats = self.write_text_file(
                 tmpdir / "assembly_stats.tsv",
-                "accession\tn50\tscaffolds\tgenome_size\nACC1\t100000\t1\t100000\n",
+                "accession\tn50\tscaffolds\tgenome_size\tgc_content\nACC1\t100000\t1\t100000\t50\n",
             )
             checkm2 = self.write_text_file(
                 tmpdir / "checkm2.tsv",
@@ -1124,7 +1124,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             assembly_stats = self.write_text_file(
                 tmpdir / "assembly_stats.tsv",
-                "accession\tn50\tscaffolds\tgenome_size\nACC1\t100000\t1\t100000\n",
+                "accession\tn50\tscaffolds\tgenome_size\tgc_content\nACC1\t100000\t1\t100000\t50\n",
             )
             checkm2 = self.write_text_file(
                 tmpdir / "checkm2.tsv",
@@ -1203,7 +1203,7 @@ class BuildSampleStatusTestCase(unittest.TestCase):
             )
             assembly_stats = self.write_text_file(
                 tmpdir / "assembly_stats.tsv",
-                "accession\tn50\tscaffolds\tgenome_size\nACC1\t100000\t1\t100000\n",
+                "accession\tn50\tscaffolds\tgenome_size\tgc_content\nACC1\t100000\t1\t100000\t50\n",
             )
             checkm2 = self.write_text_file(
                 tmpdir / "checkm2.tsv",

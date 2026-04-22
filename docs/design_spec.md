@@ -182,6 +182,11 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
 
 - Produce `sample_status.tsv`.
 - Add Codetta summary values to the final reporting layer.
+- Add `GC_Content` to the master table immediately after
+  `Total_Coding_Sequences_gcode11` and before `Gcode`.
+- Derive `GC_Content` from `seqtk comp` as `(G + C) / (A + C + G + T) * 100`,
+  ignoring ambiguous bases and formatting the result as a plain decimal without
+  a percent sign.
 - Produce a final plain-text versions report.
 - Prefer BioContainers images.
 - If BioContainers do not cover a tool, create a module-specific Dockerfile in `docker/`.
@@ -994,6 +999,7 @@ Append after the metadata block:
 - `Average_Gene_Length_gcode11`
 - `Total_Coding_Sequences_gcode4`
 - `Total_Coding_Sequences_gcode11`
+- `GC_Content`
 
 ### Gcode / QC block
 

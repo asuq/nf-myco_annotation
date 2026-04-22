@@ -85,6 +85,16 @@ class MasterTableContractTestCase(unittest.TestCase):
             "Codetta_NCBI_Table_Candidates",
         )
 
+    def test_gc_content_precedes_gcode(self) -> None:
+        """Keep the seqtk-derived GC column before the gcode block."""
+        columns = master_table_contract.build_append_columns()
+
+        self.assertEqual(
+            columns[columns.index("Total_Coding_Sequences_gcode11") + 1],
+            "GC_Content",
+        )
+        self.assertEqual(columns[columns.index("GC_Content") + 1], "Gcode")
+
     def test_normalise_busco_lineages_rejects_duplicates(self) -> None:
         """Fail when BUSCO lineage names repeat after normalisation."""
         with self.assertRaises(ValueError):

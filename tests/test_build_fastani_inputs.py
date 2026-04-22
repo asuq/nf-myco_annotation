@@ -325,7 +325,7 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             )
             assembly_stats = self.write_text_file(
                 tmpdir / "assembly_stats.tsv",
-                "accession\tn50\tscaffolds\tgenome_size\nACC4\t40000\t3\t120000\n",
+                "accession\tn50\tscaffolds\tgenome_size\tgc_content\nACC4\t40000\t3\t120000\t50\n",
             )
             checkm2 = self.write_text_file(
                 tmpdir / "checkm2.tsv",

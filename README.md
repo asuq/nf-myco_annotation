@@ -58,8 +58,9 @@ The main analysis workflow is designed around these steps:
 
 PADLOC and eggNOG outputs are retained in per-sample folders but are not
 merged into `master_table.tsv`. Codetta is merged into the final reporting
-tables through `Codetta_Genetic_Code`, `Codetta_NCBI_Table_Candidates`, and
-`codetta_status`. In `tool_and_db_versions.tsv`, Codetta is reported as
+tables through `GC_Content`, `Codetta_Genetic_Code`,
+`Codetta_NCBI_Table_Candidates`, and `codetta_status`. In
+`tool_and_db_versions.tsv`, Codetta is reported as
 compatible with `v2.0`, the default container image is
 `quay.io/asuq1617/codetta:2.0`, and the pinned upstream `main` commit used for
 the image build is recorded explicitly.

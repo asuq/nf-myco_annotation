@@ -194,6 +194,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC1"]["Tax_ID"], "123")
             self.assertEqual(master_by_accession["ACC1"]["superkingdom"], "Bacteria")
             self.assertEqual(master_by_accession["ACC1"]["16S"], "Yes")
+            self.assertEqual(master_by_accession["ACC1"]["GC_Content"], "NA")
             self.assertEqual(
                 master_by_accession["ACC1"]["Codetta_Genetic_Code"],
                 "FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG",
@@ -207,6 +208,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC2"]["Organism_Name"], "Candidate two")
             self.assertEqual(master_by_accession["ACC2"]["Atypical_Warnings"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["superkingdom"], "NA")
+            self.assertEqual(master_by_accession["ACC2"]["GC_Content"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["Codetta_Genetic_Code"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["Codetta_NCBI_Table_Candidates"], "NA")
             self.assertEqual(master_by_accession["ACC2"]["CRISPRS"], "NA")
@@ -724,9 +726,9 @@ class BuildMasterTableTestCase(unittest.TestCase):
                 tmpdir / "assembly_stats.tsv",
                 "\n".join(
                     [
-                        "accession\tn50\tscaffolds\tgenome_size",
-                        "ACC1\t90000\t2\t800000",
-                        "ACC2\t120000\t1\t120000",
+                        "accession\tn50\tscaffolds\tgenome_size\tgc_content",
+                        "ACC1\t90000\t2\t800000\t37.5",
+                        "ACC2\t120000\t1\t120000\t50",
                     ]
                 )
                 + "\n",
@@ -755,9 +757,11 @@ class BuildMasterTableTestCase(unittest.TestCase):
             self.assertEqual(master_by_accession["ACC1"]["N50"], "50000")
             self.assertEqual(master_by_accession["ACC1"]["Scaffolds"], "2")
             self.assertEqual(master_by_accession["ACC1"]["Genome_Size"], "800000")
+            self.assertEqual(master_by_accession["ACC1"]["GC_Content"], "37.5")
             self.assertEqual(master_by_accession["ACC2"]["N50"], "120000")
             self.assertEqual(master_by_accession["ACC2"]["Scaffolds"], "1")
             self.assertEqual(master_by_accession["ACC2"]["Genome_Size"], "120000")
+            self.assertEqual(master_by_accession["ACC2"]["GC_Content"], "50")
 
     def test_main_does_not_insert_missing_metadata_metric_columns(self) -> None:
         """Avoid adding new metadata columns when the input header omits them."""
@@ -773,7 +777,7 @@ class BuildMasterTableTestCase(unittest.TestCase):
             )
             assembly_stats = self.write_text_file(
                 tmpdir / "assembly_stats.tsv",
-                "accession\tn50\tscaffolds\tgenome_size\nACC1\t120000\t1\t120000\n",
+                "accession\tn50\tscaffolds\tgenome_size\tgc_content\nACC1\t120000\t1\t120000\t50\n",
             )
             master_output = tmpdir / "master_table.tsv"
 

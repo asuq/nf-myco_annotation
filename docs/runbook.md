@@ -855,7 +855,8 @@ Published final tables are written under `results/tables/`:
 The master table preserves the original metadata block, then appends derived
 columns in the runtime order resolved from `params.busco_lineages`. The
 checked-in `assets/master_table_append_columns.txt` file records the default
-lineage pair only.
+lineage pair only. `GC_Content` is derived from the published
+`cohort/assembly_stats/assembly_stats.tsv` table produced by `seqtk comp`.
 Codetta contributes `Codetta_Genetic_Code` and
 `Codetta_NCBI_Table_Candidates`, and `sample_status.tsv` includes
 `codetta_status`.

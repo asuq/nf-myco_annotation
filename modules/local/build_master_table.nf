@@ -81,6 +81,7 @@ process BUILD_MASTER_TABLE {
         'Average_Gene_Length_gcode11',
         'Total_Coding_Sequences_gcode4',
         'Total_Coding_Sequences_gcode11',
+        'GC_Content',
         'Gcode',
         'Codetta_Genetic_Code',
         'Codetta_NCBI_Table_Candidates',
@@ -99,6 +100,8 @@ process BUILD_MASTER_TABLE {
         switch (column) {
             case 'Gcode':
                 return '4'
+            case 'GC_Content':
+                return '50'
             case 'Codetta_Genetic_Code':
                 return 'FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG'
             case 'Codetta_NCBI_Table_Candidates':

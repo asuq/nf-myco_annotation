@@ -66,6 +66,7 @@ resolve_script_path() {
 compute_assembly_stats() {
     local fasta_path="$1"
     local lengths_file summary_file n50 target scaffolds genome_size
+    local adenine_count cytosine_count guanine_count thymine_count canonical_bases gc_content
 
     lengths_file="$(mktemp)"
     summary_file="$(mktemp)"
@@ -75,25 +76,34 @@ compute_assembly_stats() {
         BEGIN {
             count = 0
             total = 0
+            adenine = 0
+            cytosine = 0
+            guanine = 0
+            thymine = 0
         }
         {
-            if ($2 ~ /^[0-9]+$/) {
+            if ($2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ && $6 ~ /^[0-9]+$/) {
                 print $2
                 count += 1
                 total += $2
+                adenine += $3
+                cytosine += $4
+                guanine += $5
+                thymine += $6
             }
         }
         END {
-            if (count == 0) {
+            if (count == 0 || (adenine + cytosine + guanine + thymine) == 0) {
                 exit 1
             }
-            printf "%d\t%d\n", count, total > summary_file
+            printf "%d\t%d\t%d\t%d\t%d\t%d\n", \
+                count, total, adenine, cytosine, guanine, thymine > summary_file
         }
     ' > "${lengths_file}"; then
         return 1
     fi
 
-    IFS=$'\t' read -r scaffolds genome_size < "${summary_file}"
+    IFS=$'\t' read -r scaffolds genome_size adenine_count cytosine_count guanine_count thymine_count < "${summary_file}"
     target=$(( (genome_size + 1) / 2 ))
     n50="$(
         sort -nr "${lengths_file}" | awk -v target="${target}" '
@@ -111,7 +121,27 @@ compute_assembly_stats() {
         return 1
     fi
 
-    printf '%s\t%s\t%s\n' "${n50}" "${scaffolds}" "${genome_size}"
+    canonical_bases=$((adenine_count + cytosine_count + guanine_count + thymine_count))
+    if ((canonical_bases == 0)); then
+        return 1
+    fi
+
+    gc_content="$(
+        awk -v cytosine="${cytosine_count}" -v guanine="${guanine_count}" -v canonical="${canonical_bases}" '
+            BEGIN {
+                value = ((cytosine + guanine) / canonical) * 100
+                formatted = sprintf("%.6f", value)
+                sub(/0+$/, "", formatted)
+                sub(/\.$/, "", formatted)
+                print formatted
+            }
+        '
+    )"
+    if [[ -z "${gc_content}" ]]; then
+        return 1
+    fi
+
+    printf '%s\t%s\t%s\t%s\n' "${n50}" "${scaffolds}" "${genome_size}" "${gc_content}"
 }
 
 run_worker() {
@@ -156,7 +186,7 @@ merge_worker_results() {
 
     output_tmp="${worker_dir}/assembly_stats.tsv"
     {
-        printf 'accession\tn50\tscaffolds\tgenome_size\n'
+        printf 'accession\tn50\tscaffolds\tgenome_size\tgc_content\n'
         for ((row_index = 1; row_index <= task_count; row_index++)); do
             result_path="${worker_dir}/results/${row_index}.tsv"
             if [[ ! -f "${result_path}" ]]; then

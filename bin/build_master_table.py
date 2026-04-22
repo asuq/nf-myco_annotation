@@ -31,12 +31,13 @@ VALIDATED_SAMPLE_SUPPLEMENTAL_EXCLUSIONS = (
 )
 TAXONOMY_COLUMNS = tuple(master_table_contract.TAXONOMY_COLUMNS)
 CHECKM2_COLUMNS = tuple(master_table_contract.CHECKM2_COLUMNS) + ("Gcode", "Low_quality")
+ASSEMBLY_DERIVED_COLUMN_MAP = {"GC_Content": "gc_content"}
 CODETTA_COLUMNS = tuple(master_table_contract.CODETTA_COLUMNS)
 SIXTEEN_S_COLUMNS = ("16S",)
 CRISPR_COLUMNS = tuple(master_table_contract.CRISPR_COLUMNS)
 ANI_COLUMNS = tuple(master_table_contract.ANI_COLUMNS)
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
-ASSEMBLY_STATS_COLUMNS = ("n50", "scaffolds", "genome_size")
+ASSEMBLY_STATS_COLUMNS = ("n50", "scaffolds", "genome_size", "gc_content")
 ASSEMBLY_METADATA_COLUMN_MAP = {
     "N50": "n50",
     "Scaffolds": "scaffolds",
@@ -564,6 +565,11 @@ def build_master_row(
     for column in CHECKM2_COLUMNS:
         if accession in checkm2_index and column in checkm2_index[accession]:
             derived_values[column] = checkm2_index[accession][column] or "NA"
+
+    if assembly_stats_row is not None:
+        for output_column, stats_column in ASSEMBLY_DERIVED_COLUMN_MAP.items():
+            stats_value = assembly_stats_row.get(stats_column, "NA")
+            derived_values[output_column] = "NA" if is_missing(stats_value) else stats_value
 
     if accession in sixteen_s_index and "16S" in sixteen_s_index[accession]:
         derived_values["16S"] = sixteen_s_index[accession]["16S"] or "NA"

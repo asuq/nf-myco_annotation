@@ -281,6 +281,7 @@ Average_Gene_Length_gcode4
 Average_Gene_Length_gcode11
 Total_Coding_Sequences_gcode4
 Total_Coding_Sequences_gcode11
+GC_Content
 Gcode
 Codetta_Genetic_Code
 Codetta_NCBI_Table_Candidates
@@ -360,6 +361,9 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
 - Codetta is independent of gcode assignment. It runs for every sample and
   adds `Codetta_Genetic_Code`, `Codetta_NCBI_Table_Candidates`, and
   `codetta_status` to the final reporting layer.
+- `calculate_assembly_stats.sh` uses `seqtk comp` to emit `n50`, `scaffolds`,
+  `genome_size`, and the derived `gc_content` cohort table used by ANI rescue
+  and to populate the master-table `GC_Content` column.
 - The default Codetta image is `quay.io/asuq1617/codetta:2.0`. The workflow
   reports Codetta as `v2.0` and also records the pinned upstream source commit
   used to build that image in `tool_and_db_versions.tsv`.
