@@ -24,6 +24,10 @@ log_error() {
     printf 'ERROR: %s\n' "$1" >&2
 }
 
+log_info() {
+    printf 'INFO: %s\n' "$1" >&2
+}
+
 validate_jobs() {
     local jobs="$1"
 
@@ -151,12 +155,15 @@ run_worker() {
     error_path="${worker_dir}/errors/${row_index}.log"
     seqtk_binary="${seqtk_command}"
 
+    log_info "Starting accession ${accession}: row=${row_index} staged_fasta=${fasta_path}"
     if ! gc_content="$(compute_gc_content "${fasta_path}")"; then
+        log_info "Backfill failed for accession ${accession}: row=${row_index}"
         printf '%s\n' "Failed to calculate gc_content for ${accession} from ${fasta_path}." > "${error_path}"
         return 255
     fi
 
     printf '%s\n' "${gc_content}" > "${result_path}"
+    log_info "Backfilled accession ${accession}: row=${row_index} gc_content=${gc_content}"
 }
 
 collect_worker_error() {
@@ -282,6 +289,8 @@ main() {
         return 1
     fi
 
+    log_info "Backfill configuration: results_dir=${results_dir} input=${input} output=${output} jobs=${jobs} seqtk_binary=${seqtk_binary}"
+
     IFS=$'\t' read -r -a header_array < <(head -n 1 "${input}" | tr -d '\r')
     if ((${#header_array[@]} == 0)); then
         log_error "Input assembly stats table is empty: ${input}"
@@ -349,6 +358,7 @@ main() {
 
         staged_fasta="$(resolve_staged_fasta "${results_dir}" "${accession}")" || return 1
         task_count=$((task_count + 1))
+        log_info "Queued accession ${accession}: row=${task_count} staged_fasta=${staged_fasta}"
         printf '%s\0%s\0%s\0%s\0%s\0' \
             "${task_count}" \
             "${accession}" \
@@ -358,7 +368,10 @@ main() {
             >> "${task_file}"
     done < <(tail -n +2 "${input}")
 
+    log_info "Detected ${task_count} assembly-stats row(s) for GC backfill."
+
     if [[ -s "${task_file}" ]]; then
+        log_info "Starting GC backfill workers: rows=${task_count} jobs=${jobs}"
         if ! xargs -0 -n 5 -P "${jobs}" bash "${worker_script}" --worker < "${task_file}"; then
             local worker_error
             worker_error="$(collect_worker_error "${worker_dir}" "${task_count}" || true)"
@@ -371,12 +384,15 @@ main() {
         fi
     fi
 
+    log_info "Merging GC backfill results into ${output}"
     if ! merge_worker_results "${worker_dir}" "${task_count}" "${input}" "${OUTPUT_TMP}"; then
         return 1
     fi
 
+    log_info "Writing merged GC backfill output to ${output}"
     mv "${OUTPUT_TMP}" "${output}"
     OUTPUT_TMP=""
+    log_info "GC backfill complete: rows=${task_count} output=${output}"
 }
 
 seqtk_binary=""

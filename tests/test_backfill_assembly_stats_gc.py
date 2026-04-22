@@ -165,6 +165,14 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             result = self.run_script(results_dir=results_dir, path_prefix=tmpdir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("INFO: Backfill configuration:", result.stderr)
+            self.assertIn("INFO: Queued accession ACC2: row=1", result.stderr)
+            self.assertIn("INFO: Queued accession ACC1: row=2", result.stderr)
+            self.assertIn("INFO: Starting GC backfill workers: rows=2 jobs=1", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC2: row=1 gc_content=50", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC1: row=2 gc_content=50", result.stderr)
+            self.assertIn("INFO: Writing merged GC backfill output to", result.stderr)
+            self.assertIn("INFO: GC backfill complete: rows=2 output=", result.stderr)
             output_path = results_dir / "cohort" / "assembly_stats" / "assembly_stats.with_gc.tsv"
             header, rows = read_tsv(output_path)
             self.assertEqual(
@@ -202,6 +210,13 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("INFO: Detected 3 assembly-stats row(s) for GC backfill.", result.stderr)
+            self.assertIn("INFO: Starting GC backfill workers: rows=3 jobs=2", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC3: row=1 gc_content=100", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC1: row=2 gc_content=0", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC2: row=3 gc_content=100", result.stderr)
+            self.assertIn("INFO: Merging GC backfill results into", result.stderr)
+            self.assertIn("INFO: GC backfill complete: rows=3 output=", result.stderr)
             _header, rows = read_tsv(
                 results_dir / "cohort" / "assembly_stats" / "assembly_stats.with_gc.tsv"
             )
@@ -229,6 +244,8 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("INFO: Backfill configuration:", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC5: row=1 gc_content=50", result.stderr)
             _header, rows = read_tsv(
                 results_dir / "cohort" / "assembly_stats" / "assembly_stats.with_gc.tsv"
             )
@@ -281,6 +298,7 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             result = self.run_script(results_dir=results_dir, path_prefix=tmpdir)
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("INFO: Backfill configuration:", result.stderr)
             self.assertIn("Missing staged directory for ACC1", result.stderr)
 
     def test_fails_when_multiple_staged_fastas_are_present(self) -> None:
@@ -305,6 +323,7 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             result = self.run_script(results_dir=results_dir, path_prefix=tmpdir)
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("INFO: Backfill configuration:", result.stderr)
             self.assertIn("Expected exactly one staged FASTA for ACC1, found multiple", result.stderr)
 
     def test_fails_when_input_lacks_required_column(self) -> None:
@@ -322,6 +341,7 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             result = self.run_script(results_dir=results_dir, path_prefix=tmpdir)
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("INFO: Backfill configuration:", result.stderr)
             self.assertIn("missing the scaffolds column", result.stderr)
 
     def test_fails_when_staged_fasta_has_no_canonical_bases(self) -> None:
@@ -345,6 +365,8 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             result = self.run_script(results_dir=results_dir, path_prefix=tmpdir)
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("INFO: Starting accession ACC1: row=1", result.stderr)
+            self.assertIn("INFO: Backfill failed for accession ACC1: row=1", result.stderr)
             self.assertIn("Failed to calculate gc_content for ACC1", result.stderr)
 
     def test_parallel_jobs_report_failing_accession(self) -> None:
@@ -369,6 +391,9 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("INFO: Starting GC backfill workers: rows=2 jobs=2", result.stderr)
+            self.assertIn("INFO: Backfilled accession ACC1: row=1 gc_content=50", result.stderr)
+            self.assertIn("INFO: Backfill failed for accession ACC2: row=2", result.stderr)
             self.assertIn("Failed to calculate gc_content for ACC2", result.stderr)
 
     def test_rejects_invalid_jobs_argument(self) -> None:
@@ -391,6 +416,7 @@ class BackfillAssemblyStatsGcTestCase(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("INFO: Backfill configuration:", result.stderr)
             self.assertIn("--jobs must be a positive integer", result.stderr)
 
 
