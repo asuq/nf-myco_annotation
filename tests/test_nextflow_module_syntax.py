@@ -640,9 +640,16 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn("filename == 'versions.yml' ? null : filename", busco_text)
         self.assertNotIn("filename == 'busco_${lineage}'", busco_text)
 
-        self.assertIn("filename in ['prokka.gff', 'prokka.faa', 'prokka.log']", prokka_text)
+        self.assertIn("filename in ['prokka.gff', 'prokka.faa', 'prokka.gbk', 'prokka.log']", prokka_text)
         self.assertNotIn("filename == 'versions.yml' ? null : filename", prokka_text)
         self.assertNotIn("filename == 'prokka'", prokka_text)
+        self.assertIn("tuple val(meta), path('prokka'), path('prokka.gff'), path('prokka.faa'), path('prokka.gbk'), path('prokka.log'), emit: results", prokka_text)
+        self.assertIn("prokka_gbk=\\$(find prokka -maxdepth 1 -type f -name '*.gbk' | head -n 1 || true)", prokka_text)
+        self.assertIn('cp "\\${prokka_gbk}" prokka.gbk', prokka_text)
+        self.assertIn('if [[ -s prokka.gbk ]]; then', prokka_text)
+        self.assertIn('cp prokka.gbk "\\${tmp_keep_dir}/"', prokka_text)
+        self.assertIn("cat <<'EOF' > prokka.gbk", prokka_text)
+        self.assertIn("cp prokka.gbk prokka/sample_a.gbk", prokka_text)
 
         self.assertIn("filename in ['result.json', 'ccfinder.log']", ccfinder_text)
         self.assertNotIn("filename == 'versions.yml' ? null : filename", ccfinder_text)

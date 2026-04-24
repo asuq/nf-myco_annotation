@@ -10,7 +10,7 @@ process PROKKA {
         mode: 'copy',
         overwrite: true,
         saveAs: { filename ->
-            filename in ['prokka.gff', 'prokka.faa', 'prokka.log']
+            filename in ['prokka.gff', 'prokka.faa', 'prokka.gbk', 'prokka.log']
                 ? filename
                 : null
         },
@@ -20,7 +20,7 @@ process PROKKA {
     tuple val(meta), path(genome), val(gcode)
 
     output:
-    tuple val(meta), path('prokka'), path('prokka.gff'), path('prokka.faa'), path('prokka.log'), emit: results
+    tuple val(meta), path('prokka'), path('prokka.gff'), path('prokka.faa'), path('prokka.gbk'), path('prokka.log'), emit: results
     tuple val(meta), path('prokka.gff'), path('prokka.faa'), emit: padloc_inputs
     tuple val(meta), path('prokka.faa'), emit: eggnog_inputs
     path 'versions.yml', emit: versions
@@ -83,12 +83,22 @@ process PROKKA {
         : > prokka.faa
     fi
 
+    prokka_gbk=\$(find prokka -maxdepth 1 -type f -name '*.gbk' | head -n 1 || true)
+    if [[ "\${exit_code}" -eq 0 && -n "\${prokka_gbk}" ]]; then
+        cp "\${prokka_gbk}" prokka.gbk
+    else
+        : > prokka.gbk
+    fi
+
     tmp_keep_dir="\$(mktemp -d)"
     if [[ -s prokka.gff ]]; then
         cp prokka.gff "\${tmp_keep_dir}/"
     fi
     if [[ -s prokka.faa ]]; then
         cp prokka.faa "\${tmp_keep_dir}/"
+    fi
+    if [[ -s prokka.gbk ]]; then
+        cp prokka.gbk "\${tmp_keep_dir}/"
     fi
     rm -rf prokka
     mkdir -p prokka
@@ -119,8 +129,18 @@ process PROKKA {
     >sample_a_1
     MAAAAAAAAA
     EOF
+    cat <<'EOF' > prokka.gbk
+    LOCUS       contig1                  30 bp    DNA     linear   BCT 01-JAN-2000
+    FEATURES             Location/Qualifiers
+         CDS             1..30
+                         /locus_tag="sample_a_1"
+    ORIGIN
+            1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    //
+    EOF
     cp prokka.gff prokka/sample_a.gff
     cp prokka.faa prokka/sample_a.faa
+    cp prokka.gbk prokka/sample_a.gbk
     : > prokka.log
     cat <<'EOF' > versions.yml
     "${task.process}":
