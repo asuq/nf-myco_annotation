@@ -25,9 +25,10 @@ Use raw `nextflow run prepare_databases.nf` only when you need direct operator
 control outside the standard SLURM validation gate.
 
 The wrapper now preflights `dbprep-slurm` and `all` against
-`conf/base.config`. If the repo still pins the stale helper image
-`quay.io/asuq1617/nf-myco_db:0.2`, the wrapper stops before submitting work and
-asks you to move to `quay.io/asuq1617/nf-myco_db:0.3`.
+the root `nextflow.config` helper-image default. If the repo still pins the
+stale helper image `quay.io/asuq1617/nf-myco_db:0.2`, the wrapper stops before
+submitting work and asks you to move `params.runtime_db_helper_container` to
+`quay.io/asuq1617/nf-myco_db:0.3`.
 
 For a scripted SLURM validation of runtime database preparation itself, use the
 wrapper's `dbprep-slurm` mode. That mode runs `prepare_databases.nf`, downloads

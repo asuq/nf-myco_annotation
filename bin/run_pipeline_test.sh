@@ -5,7 +5,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly RUNNER="bin/run_acceptance_tests.py"
 readonly VALID_MODES="prepare unit stub local slurm dbprep-slurm all"
-readonly BASE_CONFIG="${REPO_ROOT}/conf/base.config"
+readonly NEXTFLOW_CONFIG="${REPO_ROOT}/nextflow.config"
 readonly CURRENT_RUNTIME_DB_HELPER_IMAGE="quay.io/asuq1617/nf-myco_db:0.3"
 readonly STALE_RUNTIME_DB_HELPER_IMAGE="quay.io/asuq1617/nf-myco_db:0.2"
 readonly MINIMUM_HOST_PYTHON="3.12"
@@ -54,9 +54,9 @@ print_command() {
 }
 
 preflight_runtime_db_helper_image() {
-    if grep -Fq "${STALE_RUNTIME_DB_HELPER_IMAGE}" "${BASE_CONFIG}"; then
+    if grep -Fq "${STALE_RUNTIME_DB_HELPER_IMAGE}" "${NEXTFLOW_CONFIG}"; then
         printf '%s\n' \
-            "Error: ${BASE_CONFIG} still pins stale runtime-db helper image ${STALE_RUNTIME_DB_HELPER_IMAGE}. Update it to ${CURRENT_RUNTIME_DB_HELPER_IMAGE} before running dbprep-slurm or all." \
+            "Error: ${NEXTFLOW_CONFIG} still pins stale runtime-db helper image ${STALE_RUNTIME_DB_HELPER_IMAGE}. Update params.runtime_db_helper_container to ${CURRENT_RUNTIME_DB_HELPER_IMAGE} before running dbprep-slurm or all." \
             >&2
         return 1
     fi

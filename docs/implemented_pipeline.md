@@ -145,6 +145,7 @@ The most important implementation-level parameters are:
 | `outdir` | both | Published output root; defaults to `results`. |
 | `download_missing_databases` | `prepare_databases.nf` | Enables in-place population of missing runtime databases. |
 | `force_runtime_database_rebuild` | `prepare_databases.nf` | Forces re-preparation of runtime database destinations. |
+| `runtime_db_helper_container` | `prepare_databases.nf` | Dedicated helper image for runtime database preparation and finalisation. |
 | `runtime_db_scratch_root` | `prepare_databases.nf` | Optional scratch root for database preparation. |
 
 Version-labelling parameters are reported in `tool_and_db_versions.tsv` but do

@@ -36,6 +36,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("download_missing_databases = false", config_text)
         self.assertIn("force_runtime_database_rebuild = false", config_text)
         self.assertIn("gcode_rule = 'strict_delta'", config_text)
+        self.assertIn("runtime_db_helper_container = 'quay.io/asuq1617/nf-myco_db:0.3'", config_text)
         self.assertIn("runtime_db_scratch_root = null", config_text)
         self.assertIn("task_attempts = 3", config_text)
         self.assertIn("soft_fail_attempts = 3", config_text)
@@ -52,7 +53,6 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertNotIn("padloc_db_label = null", config_text)
         self.assertNotIn("slurm_account", config_text)
         self.assertNotIn("use_biocontainers", config_text)
-        self.assertNotIn("runtime_db_helper_container", config_text)
         self.assertNotIn("apptainer_cache_dir", config_text)
         self.assertNotIn("apptainer_run_options", config_text)
         self.assertNotIn("max_retries = ", config_text)
@@ -279,6 +279,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
 
     def test_runtime_database_prep_processes_use_the_dedicated_helper_image(self) -> None:
         """Keep the prep entry point on the dedicated runtime DB helper image."""
+        root_config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
         self.assertIn(
@@ -290,22 +291,24 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            "withLabel: prep_taxdump_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.runtime_db_helper_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: prep_codetta_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            "withLabel: prep_codetta_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.runtime_db_helper_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: finalise_runtime_database {\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            "withLabel: finalise_runtime_database {\n        container = params.runtime_db_helper_container",
             config_text,
         )
         self.assertIn(
-            "withLabel: merge_runtime_database_reports {\n        container = 'quay.io/asuq1617/nf-myco_db:0.3'",
+            "withLabel: merge_runtime_database_reports {\n        container = params.runtime_db_helper_container",
             config_text,
         )
+        self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.3", config_text)
         self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.2", config_text)
+        self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.2", root_config_text)
         self.assertIn(
             "withLabel: download_checkm2_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.checkm2_container",
             config_text,

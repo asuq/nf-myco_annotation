@@ -116,8 +116,9 @@ Shared helper image requirement:
 
 Runtime database prep helper image:
 
-- `prepare_databases.nf` always uses the dedicated helper image
-  `quay.io/asuq1617/nf-myco_db:0.3`
+- `prepare_databases.nf` uses the dedicated helper image configured by
+  `params.runtime_db_helper_container`
+- the default helper image is `quay.io/asuq1617/nf-myco_db:0.3`
 - the repo-owned Dockerfile for this image lives under
   `docker/runtime_db_helper/Dockerfile`
 
@@ -288,8 +289,8 @@ For a single operator-facing entrypoint, use `bin/run_pipeline_test.sh`.
 
 See `docs/run_pipeline_test.md` for wrapper usage, prerequisites, examples, and
 expected output locations. Its `dbprep-slurm` and `all` modes now preflight the
-repo config so they fail fast if `conf/base.config` still pins the stale
-runtime-db helper image tag.
+repo config so they fail fast if the root helper-image default still pins the
+stale runtime-db helper image tag.
 
 ## Acceptance harness
 

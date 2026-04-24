@@ -161,6 +161,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertIn("preflight_runtime_db_helper_image()", script_text)
         self.assertIn("preflight_host_python()", script_text)
         self.assertIn('readonly MINIMUM_HOST_PYTHON="3.12"', script_text)
+        self.assertIn('readonly NEXTFLOW_CONFIG="${REPO_ROOT}/nextflow.config"', script_text)
+        self.assertIn("params.runtime_db_helper_container", script_text)
         self.assertIn("quay.io/asuq1617/nf-myco_db:0.3", script_text)
         self.assertIn("quay.io/asuq1617/nf-myco_db:0.2", script_text)
         self.assertIn("dbprep-slurm | all)", script_text)
