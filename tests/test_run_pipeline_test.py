@@ -106,6 +106,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("--singularity-cache-dir SINGULARITY_CACHE_DIR", result.stdout)
         self.assertIn("--singularity-run-options SINGULARITY_RUN_OPTIONS", result.stdout)
+        self.assertIn("--slurm-qos SLURM_QOS", result.stdout)
         self.assertNotIn("--slurm-account", result.stdout)
 
     def test_wrapper_dry_run_slurm_preserves_singularity_arguments(self) -> None:
@@ -125,6 +126,9 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "/tmp/singularity-cache",
             "--singularity-run-options",
             "bind=/db",
+            "--slurm-qos",
+            "2h",
+            "--slurm-cluster-options=--qos=2h",
         )
 
         self.assertEqual(result.returncode, 0)
@@ -134,7 +138,8 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "--checkm2-db /tmp/checkm2 --busco-db /tmp/busco "
             "--eggnog-db /tmp/eggnog "
             "--singularity-cache-dir /tmp/singularity-cache "
-            "--singularity-run-options bind=/db",
+            "--singularity-run-options bind=/db "
+            "--slurm-qos 2h --slurm-cluster-options=--qos=2h",
         )
         self.assertEqual(result.stderr, "")
 
@@ -213,6 +218,9 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "--force-runtime-database-rebuild",
             "--slurm-queue",
             "short",
+            "--slurm-qos",
+            "2h",
+            "--slurm-cluster-options=--constraint=ssd",
             "--singularity-cache-dir",
             "/tmp/singularity-cache",
         )
@@ -224,6 +232,7 @@ class RunPipelineTestScriptTestCase(unittest.TestCase):
             "--taxdump /tmp/taxdump --checkm2-db /tmp/checkm2 --codetta-db /tmp/codetta --busco-db /tmp/busco "
             "--eggnog-db /tmp/eggnog "
             "--force-runtime-database-rebuild --slurm-queue short "
+            "--slurm-qos 2h --slurm-cluster-options=--constraint=ssd "
             "--singularity-cache-dir /tmp/singularity-cache",
         )
         self.assertEqual(result.stderr, "")

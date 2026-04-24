@@ -44,6 +44,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("eggnog_only_accessions = null", config_text)
         self.assertIn("singularity_cache_dir = null", config_text)
         self.assertIn("singularity_run_options = ''", config_text)
+        self.assertIn("slurm_qos = null", config_text)
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
         self.assertIn("includeConfig 'conf/gwdg.config'", config_text)
@@ -90,6 +91,10 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("process.executor = 'slurm'", oist_text)
         self.assertIn("executor.queueSize = params.executor_queue_size", oist_text)
         self.assertIn("process.queue = params.slurm_queue ?: 'short'", oist_text)
+        self.assertIn("process.clusterOptions = buildSlurmClusterOptions()", oist_text)
+        self.assertIn("params.slurm_cluster_options instanceof Boolean", oist_text)
+        self.assertIn("Use --slurm_qos 2h or --slurm_cluster_options='--qos=2h'.", oist_text)
+        self.assertIn('params.slurm_qos ? "--qos=${params.slurm_qos}" : null', oist_text)
         self.assertIn("params.slurm_cluster_options ?: null", oist_text)
         self.assertIn("singularity.enabled = true", oist_text)
         self.assertIn("singularity.autoMounts = true", oist_text)
@@ -115,7 +120,11 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("process.executor = 'slurm'", gwdg_text)
         self.assertIn("executor.queueSize = params.executor_queue_size", gwdg_text)
         self.assertIn("process.queue = params.slurm_queue ?: 'scc-cpu'", gwdg_text)
-        self.assertIn("['--export=ALL', '-C ssd', params.slurm_cluster_options ?: null]", gwdg_text)
+        self.assertIn("process.clusterOptions = buildSlurmClusterOptions(['--export=ALL', '-C ssd'])", gwdg_text)
+        self.assertIn("params.slurm_cluster_options instanceof Boolean", gwdg_text)
+        self.assertIn("Use --slurm_qos 2h or --slurm_cluster_options='--qos=2h'.", gwdg_text)
+        self.assertIn('params.slurm_qos ? "--qos=${params.slurm_qos}" : null', gwdg_text)
+        self.assertIn("params.slurm_cluster_options ?: null", gwdg_text)
         self.assertIn("singularity.enabled = true", gwdg_text)
         self.assertIn("singularity.autoMounts = true", gwdg_text)
         self.assertIn(
@@ -340,6 +349,11 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         """Keep SLURM runtime profiles on the shared retry-then-finish policy."""
         slurm_text = SLURM_CONFIG.read_text(encoding="utf-8")
 
+        self.assertIn("process.clusterOptions = buildSlurmClusterOptions()", slurm_text)
+        self.assertIn("params.slurm_cluster_options instanceof Boolean", slurm_text)
+        self.assertIn("Use --slurm_qos 2h or --slurm_cluster_options='--qos=2h'.", slurm_text)
+        self.assertIn('params.slurm_qos ? "--qos=${params.slurm_qos}" : null', slurm_text)
+        self.assertIn("params.slurm_cluster_options ?: null", slurm_text)
         self.assertNotIn("errorStrategy", slurm_text)
 
     def test_local_profile_caps_memory_for_workstation_runs(self) -> None:

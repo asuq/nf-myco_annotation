@@ -49,6 +49,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "busco_db": Path("/tmp/busco"),
             "gcode_rule": None,
             "slurm_queue": None,
+            "slurm_qos": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
             "singularity_run_options": None,
@@ -68,6 +69,7 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             "eggnog_db": Path("/tmp/eggnog"),
             "force_runtime_database_rebuild": False,
             "slurm_queue": None,
+            "slurm_qos": None,
             "slurm_cluster_options": None,
             "singularity_cache_dir": None,
             "singularity_run_options": None,
@@ -735,11 +737,59 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         )
 
         self.assertIn("--singularity_cache_dir", command)
-        self.assertIn(Path("/tmp/singularity-cache"), command)
+        self.assertIn(str(Path("/tmp/singularity-cache")), command)
         self.assertIn("--singularity_run_options", command)
         self.assertIn("bind=/db", command)
         self.assertNotIn("--apptainer_cache_dir", command)
         self.assertNotIn("--apptainer_run_options", command)
+
+    def test_build_nextflow_command_forwards_slurm_qos(self) -> None:
+        """Forward a safe SLURM QoS parameter to Nextflow."""
+        args = self.make_real_run_args(slurm_qos="2h")
+        cohort = run_acceptance_tests.PreparedCohort(
+            work_root=Path("/tmp/work"),
+            sample_csv=Path("/tmp/sample_sheet.csv"),
+            metadata_tsv=Path("/tmp/metadata.tsv"),
+            source_stats_tsv=Path("/tmp/source_stats.tsv"),
+            checksums_tsv=Path("/tmp/download_checksums.tsv"),
+            cohort_plan=(),
+            source_stats={},
+        )
+
+        command = run_acceptance_tests.build_nextflow_command(
+            profile="slurm,singularity",
+            work_dir=Path("/tmp/work-dir"),
+            outdir=Path("/tmp/results"),
+            cohort=cohort,
+            args=args,
+        )
+
+        self.assertIn("--slurm_qos", command)
+        self.assertIn("2h", command)
+
+    def test_build_nextflow_command_preserves_dash_prefixed_slurm_options(self) -> None:
+        """Forward dash-prefixed SLURM options without losing their value."""
+        args = self.make_real_run_args(slurm_cluster_options="--qos=2h")
+        cohort = run_acceptance_tests.PreparedCohort(
+            work_root=Path("/tmp/work"),
+            sample_csv=Path("/tmp/sample_sheet.csv"),
+            metadata_tsv=Path("/tmp/metadata.tsv"),
+            source_stats_tsv=Path("/tmp/source_stats.tsv"),
+            checksums_tsv=Path("/tmp/download_checksums.tsv"),
+            cohort_plan=(),
+            source_stats={},
+        )
+
+        command = run_acceptance_tests.build_nextflow_command(
+            profile="slurm,singularity",
+            work_dir=Path("/tmp/work-dir"),
+            outdir=Path("/tmp/results"),
+            cohort=cohort,
+            args=args,
+        )
+
+        self.assertIn("--slurm_cluster_options=--qos=2h", command)
+        self.assertNotIn("--slurm_cluster_options", command)
 
     def test_build_nextflow_command_forwards_gcode_rule(self) -> None:
         """Forward an explicit gcode rule override to the real pipeline."""
@@ -775,6 +825,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             busco_db=Path("/tmp/busco"),
             eggnog_db=Path("/tmp/eggnog"),
             force_runtime_database_rebuild=True,
+            slurm_qos="2h",
+            slurm_cluster_options="--constraint=ssd",
             singularity_cache_dir="/tmp/singularity-cache",
             singularity_run_options="bind=/db",
         )
@@ -801,6 +853,10 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
         self.assertIn("/tmp/singularity-cache", command)
         self.assertIn("--singularity_run_options", command)
         self.assertIn("bind=/db", command)
+        self.assertIn("--slurm_qos", command)
+        self.assertIn("2h", command)
+        self.assertIn("--slurm_cluster_options=--constraint=ssd", command)
+        self.assertNotIn("--slurm_cluster_options", command)
 
     def test_assert_dbprep_database_tree_accepts_complete_layout(self) -> None:
         """Accept a prepared runtime database tree with the required markers."""

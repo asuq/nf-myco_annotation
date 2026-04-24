@@ -653,11 +653,15 @@ def run_command(
         )
 
 
-def maybe_add_parameter(command: list[str], name: str, value: str | None) -> None:
+def maybe_add_parameter(command: list[str], name: str, value: object | None) -> None:
     """Append one Nextflow-style parameter when it has a value."""
     if value is None or value == "":
         return
-    command.extend([name, value])
+    text_value = str(value)
+    if text_value.startswith("-"):
+        command.append(f"{name}={text_value}")
+        return
+    command.extend([name, text_value])
 
 
 def validate_real_run_args(args: argparse.Namespace) -> None:
@@ -738,6 +742,7 @@ def build_nextflow_command(
         command.extend(["--busco_db", str(Path(args.busco_db).resolve())])
     maybe_add_parameter(command, "--gcode_rule", args.gcode_rule)
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
+    maybe_add_parameter(command, "--slurm_qos", args.slurm_qos)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
     maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
     maybe_add_parameter(command, "--singularity_run_options", args.singularity_run_options)
@@ -780,6 +785,7 @@ def build_dbprep_command(
     if args.force_runtime_database_rebuild:
         command.extend(["--force_runtime_database_rebuild", "true"])
     maybe_add_parameter(command, "--slurm_queue", args.slurm_queue)
+    maybe_add_parameter(command, "--slurm_qos", args.slurm_qos)
     maybe_add_parameter(command, "--slurm_cluster_options", args.slurm_cluster_options)
     maybe_add_parameter(command, "--singularity_cache_dir", args.singularity_cache_dir)
     maybe_add_parameter(command, "--singularity_run_options", args.singularity_run_options)
@@ -1305,6 +1311,7 @@ def build_real_run_parser() -> argparse.ArgumentParser:
         help="Nextflow profile string for SLURM real-data runs.",
     )
     parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
+    parser.add_argument("--slurm-qos", default=None, help="Optional SLURM QoS.")
     parser.add_argument(
         "--slurm-cluster-options",
         default=None,
@@ -1342,6 +1349,7 @@ def build_dbprep_run_parser() -> argparse.ArgumentParser:
         help="Rebuild incomplete runtime database destinations in place.",
     )
     parser.add_argument("--slurm-queue", default=None, help="Optional SLURM queue.")
+    parser.add_argument("--slurm-qos", default=None, help="Optional SLURM QoS.")
     parser.add_argument(
         "--slurm-cluster-options",
         default=None,

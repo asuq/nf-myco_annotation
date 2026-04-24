@@ -289,8 +289,13 @@ nextflow run . -profile slurm,singularity \
   --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
+  --slurm_qos 2h \
   --outdir results
 ```
+
+Use `--slurm_qos 2h` for QoS. For generic SLURM options that start with a
+dash, pass the Nextflow parameter with equals syntax, for example
+`--slurm_cluster_options='--qos=2h'`.
 
 OIST profile run:
 
@@ -378,7 +383,8 @@ For the full published layout and the exact reporting column contracts, see
 
 - `local`: local executor
 - `docker`: enables Docker execution
-- `slurm`: enables the SLURM executor
+- `slurm`: enables the SLURM executor with optional `--slurm_queue`,
+  `--slurm_qos`, and `--slurm_cluster_options`
 - `singularity`: enables Singularity execution
 - `oist`: OIST HPC profile with SLURM and Singularity enabled
 - `test`: fixture-backed local profile for `-stub-run`

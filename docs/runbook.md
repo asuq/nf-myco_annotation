@@ -173,7 +173,7 @@ under `--outdir` on success.
 
 - `debug`: composable behaviour profile that defaults eggNOG smoke runs to `GCA_000027325.1`
 - `local`: local executor
-- `slurm`: SLURM executor with optional `params.slurm_queue` and `params.slurm_cluster_options`
+- `slurm`: SLURM executor with optional `params.slurm_queue`, `params.slurm_qos`, and `params.slurm_cluster_options`
 - `singularity`: Singularity execution with optional `params.singularity_cache_dir` and `params.singularity_run_options`
 - `oist`: standalone OIST HPC profile with SLURM and Singularity enabled, using the submitting user account
 - `gwdg`: standalone GWDG SCC profile with SLURM, Singularity, `LOCAL_TMPDIR` scratch, and SHM-first temp files
@@ -354,7 +354,8 @@ python3 bin/run_acceptance_tests.py slurm \
   --codetta-db /path/to/codetta-db \
   --busco-db /path/to/busco \
   --eggnog-db /path/to/eggnog-db \
-  --slurm-queue short
+  --slurm-queue short \
+  --slurm-qos 2h
 ```
 
 Example SLURM database-prep run:
@@ -369,6 +370,7 @@ python3 bin/run_acceptance_tests.py dbprep-slurm \
   --busco-db /path/to/db/busco \
   --eggnog-db /path/to/db/Eggnog_db/Eggnog_Diamond_db \
   --slurm-queue short \
+  --slurm-qos 2h \
   --singularity-cache-dir /path/to/singularity-cache
 ```
 
@@ -428,8 +430,13 @@ nextflow run . -profile slurm \
   --codetta_db /path/to/codetta-db \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
+  --slurm_qos 2h \
   --outdir results
 ```
+
+Use `--slurm_qos 2h` for QoS. If you need generic SLURM options that begin
+with a dash, use equals syntax so Nextflow keeps the value attached, for
+example `--slurm_cluster_options='--qos=2h'`.
 
 Singularity:
 
