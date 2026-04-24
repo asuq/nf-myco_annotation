@@ -4,7 +4,7 @@
  */
 process CALCULATE_ASSEMBLY_STATS {
     tag "assembly_stats"
-    label 'process_single'
+    label 'process_medium'
     cache 'deep'
     publishDir(
         { "${params.outdir}/cohort/assembly_stats" },

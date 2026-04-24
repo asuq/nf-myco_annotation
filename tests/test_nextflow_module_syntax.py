@@ -468,16 +468,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             encoding="utf-8"
         )
 
+        self.assertIn("label 'process_medium'", module_text)
         self.assertIn('--jobs "${task.cpus}"', module_text)
         self.assertIn("/^Version:/ { print \\$2; exit }", module_text)
         self.assertIn('seqtk_version="\\${seqtk_version:-NA}"', module_text)
-
-    def test_calculate_assembly_stats_requests_multiple_cpus(self) -> None:
-        """Require assembly-stat calculation to receive multiple workers from config."""
-        config_text = (ROOT / "conf" / "base.config").read_text(encoding="utf-8")
-
-        self.assertIn("withName: CALCULATE_ASSEMBLY_STATS {", config_text)
-        self.assertIn("cpus = { Math.min(4 * task.attempt, params.max_cpus as int) }", config_text)
 
     def test_barrnap_uses_the_last_non_blank_version_line(self) -> None:
         """Require the Barrnap probe to avoid its leading program-name line."""
