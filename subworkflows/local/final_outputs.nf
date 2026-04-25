@@ -79,10 +79,30 @@ workflow FINAL_OUTPUTS {
         return values[columnIndex].trim()
     }
 
+    unpackTuple = { item, channelName, expectedSize ->
+        if (!(item instanceof List)) {
+            def actualType = item == null ? 'null' : item.getClass().getName()
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, received ${actualType}."
+            )
+        }
+        if (item.size() != expectedSize) {
+            def preview = item.take(Math.min(item.size(), 3))
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, " +
+                    "received ${item.size()} value(s): ${preview}"
+            )
+        }
+        return item
+    }
+
     configuredEggnogOnlyAccessions = parseConfiguredAccessions.call(params.eggnog_only_accessions)
 
     combined_checkm2 = checkm2_seed
-        .mix(checkm2_summaries.map { meta, summary -> summary })
+        .mix(checkm2_summaries.map { item ->
+            def values = unpackTuple.call(item, 'checkm2_summaries', 2)
+            values[1]
+        })
         .collectFile(
             name: 'checkm2_summaries.tsv',
             keepHeader: true,
@@ -91,7 +111,10 @@ workflow FINAL_OUTPUTS {
         )
 
     combined_16s = sixteen_s_seed
-        .mix(sixteen_s_summaries.map { meta, best16s, status -> status })
+        .mix(sixteen_s_summaries.map { item ->
+            def values = unpackTuple.call(item, 'sixteen_s_summaries', 3)
+            values[2]
+        })
         .collectFile(
             name: '16s_statuses.tsv',
             keepHeader: true,
@@ -100,7 +123,10 @@ workflow FINAL_OUTPUTS {
         )
 
     combined_ccfinder = ccfinder_seed
-        .mix(ccfinder_summaries.map { meta, strains, contigs, crisprs -> strains })
+        .mix(ccfinder_summaries.map { item ->
+            def values = unpackTuple.call(item, 'ccfinder_summaries', 4)
+            values[1]
+        })
         .collectFile(
             name: 'ccfinder_strains.tsv',
             keepHeader: true,
@@ -109,7 +135,10 @@ workflow FINAL_OUTPUTS {
         )
 
     combined_codetta = codetta_seed
-        .mix(codetta_summaries.map { meta, summary -> summary })
+        .mix(codetta_summaries.map { item ->
+            def values = unpackTuple.call(item, 'codetta_summaries', 2)
+            values[1]
+        })
         .collectFile(
             name: 'codetta_summary.tsv',
             keepHeader: true,
@@ -122,7 +151,12 @@ workflow FINAL_OUTPUTS {
     prokkaManifest = Channel
         .of('accession\texit_code\tgff_size\tfaa_size')
         .concat(
-            prokka_results.map { meta, prokkaDir, gff, faa, log ->
+            prokka_results.map { item ->
+                def values = unpackTuple.call(item, 'prokka_results', 5)
+                def meta = values[0]
+                def gff = values[2]
+                def faa = values[3]
+                def log = values[4]
                 "${meta.accession}\t${extractExitCode.call(log)}\t${gff.toFile().length()}\t${faa.toFile().length()}"
             }
         )
@@ -136,7 +170,11 @@ workflow FINAL_OUTPUTS {
     padlocManifest = Channel
         .of('accession\texit_code\tresult_file_count')
         .concat(
-            padloc_results.map { meta, padlocDir, log ->
+            padloc_results.map { item ->
+                def values = unpackTuple.call(item, 'padloc_results', 3)
+                def meta = values[0]
+                def padlocDir = values[1]
+                def log = values[2]
                 "${meta.accession}\t${extractExitCode.call(log)}\t${countTopLevelFiles.call(padlocDir)}"
             }
         )
@@ -150,7 +188,12 @@ workflow FINAL_OUTPUTS {
     eggnogManifest = Channel
         .of('accession\tstatus\twarnings\texit_code\tannotations_size\tresult_file_count')
         .concat(
-            eggnog_results.map { meta, eggnogDir, annotations, log ->
+            eggnog_results.map { item ->
+                def values = unpackTuple.call(item, 'eggnog_results', 4)
+                def meta = values[0]
+                def eggnogDir = values[1]
+                def annotations = values[2]
+                def log = values[3]
                 def exitCode = extractExitCode.call(log)
                 def annotationsSize = annotations.toFile().length()
                 def resultFileCount = countTopLevelFiles.call(eggnogDir)
@@ -166,7 +209,10 @@ workflow FINAL_OUTPUTS {
             configuredEggnogOnlyAccessions == null
                 ? Channel.empty()
                 : checkm2_summaries
-                    .map { meta, summary ->
+                    .map { item ->
+                        def values = unpackTuple.call(item, 'checkm2_summaries', 2)
+                        def meta = values[0]
+                        def summary = values[1]
                         def accession = meta.accession.toString()
                         def gcode = extractSummaryValue.call(summary, 'Gcode')
                         if (!['4', '11'].contains(gcode) || configuredEggnogOnlyAccessions.contains(accession)) {

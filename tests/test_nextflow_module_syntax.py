@@ -417,6 +417,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             "files.toList().sort { versionFile -> versionFile.toString() }",
             final_outputs_text,
         )
+        self.assertIn("unpackTuple.call(item, 'checkm2_summaries', 2)", final_outputs_text)
+        self.assertIsNone(
+            re.search(r"\.map\s*\{\s*[A-Za-z_][A-Za-z0-9_]*\s*,", final_outputs_text)
+        )
         self.assertNotIn("files.sort { left, right ->", final_outputs_text)
 
     def test_collect_versions_runs_helper_via_python3(self) -> None:
