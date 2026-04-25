@@ -12,6 +12,24 @@ include { PER_SAMPLE_ANNOTATION } from './subworkflows/local/per_sample_annotati
 include { PER_SAMPLE_QC } from './subworkflows/local/per_sample_qc'
 
 workflow {
+    def normaliseBuscoLineages = { rawValue ->
+        def rawItems = rawValue instanceof List ? rawValue : [rawValue]
+        def lineages = rawItems
+            .findAll { it != null }
+            .collectMany { it.toString().split(',') as List }
+            .collect { it.trim() }
+            .findAll { it }
+        if (lineages.isEmpty()) {
+            error "params.busco_lineages must resolve to one or more lineage names."
+        }
+        def seen = [] as Set
+        def duplicates = lineages.findAll { !seen.add(it) }.unique()
+        if (!duplicates.isEmpty()) {
+            error "params.busco_lineages must resolve to unique lineage names: ${duplicates.join(', ')}"
+        }
+        return lineages
+    }
+
     if (!params.sample_csv) {
         error "params.sample_csv is required."
     }
@@ -30,9 +48,7 @@ workflow {
     if (!params.eggnog_db) {
         error "params.eggnog_db is required."
     }
-    if (!(params.busco_lineages instanceof List) || params.busco_lineages.isEmpty()) {
-        error "params.busco_lineages must be a non-empty list."
-    }
+    buscoLineagesList = normaliseBuscoLineages.call(params.busco_lineages)
 
     log.warn 'PADLOC and eggNOG outputs are retained in sample folders but are intentionally excluded from master_table.tsv.'
 
@@ -42,7 +58,6 @@ workflow {
     checkm2Db = Channel.fromPath(params.checkm2_db, checkIfExists: true)
     codettaDb = Channel.fromPath(params.codetta_db, checkIfExists: true)
     eggnogDb = Channel.fromPath(params.eggnog_db, checkIfExists: true)
-    buscoLineagesList = params.busco_lineages as List<String>
     buscoLineages = Channel.fromList(buscoLineagesList)
 
     INPUT_VALIDATION_AND_STAGING(

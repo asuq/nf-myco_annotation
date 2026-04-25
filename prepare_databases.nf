@@ -17,9 +17,24 @@ include { PER_SAMPLE_QC as UNUSED_PER_SAMPLE_QC } from './subworkflows/local/per
 include { RUNTIME_DATABASE_PREP } from './subworkflows/local/runtime_database_prep'
 
 workflow {
-    if (!(params.busco_lineages instanceof List) || params.busco_lineages.isEmpty()) {
-        error "params.busco_lineages must be a non-empty list."
+    def normaliseBuscoLineages = { rawValue ->
+        def rawItems = rawValue instanceof List ? rawValue : [rawValue]
+        def lineages = rawItems
+            .findAll { it != null }
+            .collectMany { it.toString().split(',') as List }
+            .collect { it.trim() }
+            .findAll { it }
+        if (lineages.isEmpty()) {
+            error "params.busco_lineages must resolve to one or more lineage names."
+        }
+        def seen = [] as Set
+        def duplicates = lineages.findAll { !seen.add(it) }.unique()
+        if (!duplicates.isEmpty()) {
+            error "params.busco_lineages must resolve to unique lineage names: ${duplicates.join(', ')}"
+        }
+        return lineages
     }
+    buscoLineagesList = normaliseBuscoLineages.call(params.busco_lineages)
 
     def parseBoolean = { value ->
         if (value instanceof Boolean) {
@@ -112,7 +127,7 @@ workflow {
                 mountedDestinations.busco_root[1],
                 mountedDestinations.busco_root[2],
                 downloadEnabled,
-                params.busco_lineages as List<String>,
+                buscoLineagesList,
                 forceRebuild,
             )
         )

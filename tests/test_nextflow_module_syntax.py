@@ -385,6 +385,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("busco_lineages", workflow_text)
         self.assertNotIn("sample_status_columns", workflow_text)
         self.assertNotIn("BUILD_OUTPUT_CONTRACTS", main_text)
+        self.assertIn("def normaliseBuscoLineages = { rawValue ->", main_text)
+        self.assertIn("collectMany { it.toString().split(',') as List }", main_text)
+        self.assertIn("buscoLineagesList = normaliseBuscoLineages.call(params.busco_lineages)", main_text)
         self.assertIn("Channel.value(buscoLineagesList)", main_text)
 
     def test_final_outputs_pass_busco_lineages_to_reporting_modules(self) -> None:
@@ -794,7 +797,10 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         workflow_text = (ROOT / "prepare_databases.nf").read_text(encoding="utf-8")
 
         self.assertIn("At least one database destination must be set for prepare_databases.nf.", workflow_text)
-        self.assertIn("params.busco_lineages must be a non-empty list.", workflow_text)
+        self.assertIn("def normaliseBuscoLineages = { rawValue ->", workflow_text)
+        self.assertIn("collectMany { it.toString().split(',') as List }", workflow_text)
+        self.assertIn("params.busco_lineages must resolve to one or more lineage names.", workflow_text)
+        self.assertIn("params.busco_lineages must resolve to unique lineage names:", workflow_text)
         self.assertNotIn("nextflow.enable.configProcessNamesValidation = false", workflow_text)
 
     def test_prepare_databases_registers_main_subworkflows_for_shared_config_selectors(self) -> None:
@@ -947,7 +953,9 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("params.busco_lineages as List<String>", workflow_text)
+        self.assertIn("buscoLineagesList = normaliseBuscoLineages.call(params.busco_lineages)", workflow_text)
+        self.assertIn("buscoLineagesList,", workflow_text)
+        self.assertNotIn("params.busco_lineages as List<String>", workflow_text)
         self.assertIn("""printf '%s\\n' "\\${lineages[@]}" > lineages.txt""", busco_module_text)
         self.assertIn('helper_args+=(--busco-lineage "\\${lineage}")', finalise_module_text)
 
