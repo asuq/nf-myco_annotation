@@ -295,6 +295,52 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
                 ["ACC2", "ACC1", "ACC3"],
             )
 
+    def test_parallel_workers_keep_sort_inputs_until_n50_finishes(self) -> None:
+        """Keep per-worker length files alive throughout parallel N50 calculation."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            manifest_lines = ["accession\tinternal_id\tstaged_filename"]
+            for index in range(1, 17):
+                accession = f"ACC{index:02d}"
+                self.write_text_file(
+                    tmpdir / f"{accession}.fasta",
+                    (
+                        ">contig1\n"
+                        f"{'A' * 50}\n"
+                        ">contig2\n"
+                        f"{'C' * 30}\n"
+                        ">contig3\n"
+                        f"{'G' * 20}\n"
+                        ">contig4\n"
+                        f"{'T' * 10}\n"
+                    ),
+                )
+                manifest_lines.append(f"{accession}\tid_{index}\t{accession}.fasta")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "\n".join(manifest_lines) + "\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+                jobs=12,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_tsv(output)
+            self.assertEqual(len(rows), 16)
+            self.assertEqual(
+                [row["accession"] for row in rows],
+                [f"ACC{i:02d}" for i in range(1, 17)],
+            )
+            self.assertTrue(all(row["n50"] == "30" for row in rows))
+            self.assertTrue(all(row["scaffolds"] == "4" for row in rows))
+            self.assertTrue(all(row["genome_size"] == "110" for row in rows))
+
     def test_parallel_jobs_report_failing_accession(self) -> None:
         """Fail the stage when one parallel worker cannot derive contig lengths."""
         with tempfile.TemporaryDirectory() as tmpdir_name:

@@ -64,14 +64,15 @@ resolve_script_path() {
 }
 
 compute_assembly_stats() {
-    local fasta_path="$1"
-    local temp_dir="$2"
+    local accession="$1"
+    local fasta_path="$2"
+    local temp_dir="$3"
+    local result_path="$4"
     local lengths_file summary_file n50 target scaffolds genome_size
     local adenine_count cytosine_count guanine_count thymine_count canonical_bases gc_content
 
     lengths_file="$(mktemp "${temp_dir}/lengths.XXXXXX")"
     summary_file="$(mktemp "${temp_dir}/summary.XXXXXX")"
-    CLEANUP_FILES+=("${lengths_file}" "${summary_file}")
 
     if ! seqtk comp "${fasta_path}" | awk -v summary_file="${summary_file}" '
         BEGIN {
@@ -101,12 +102,16 @@ compute_assembly_stats() {
                 count, total, adenine, cytosine, guanine, thymine > summary_file
         }
     ' > "${lengths_file}"; then
+        rm -f "${lengths_file}" "${summary_file}"
         return 1
     fi
 
-    IFS=$'\t' read -r scaffolds genome_size adenine_count cytosine_count guanine_count thymine_count < "${summary_file}"
+    if ! IFS=$'\t' read -r scaffolds genome_size adenine_count cytosine_count guanine_count thymine_count < "${summary_file}"; then
+        rm -f "${lengths_file}" "${summary_file}"
+        return 1
+    fi
     target=$(( (genome_size + 1) / 2 ))
-    n50="$(
+    if ! n50="$(
         sort -nr "${lengths_file}" | awk -v target="${target}" '
             {
                 cumulative += $1
@@ -116,18 +121,23 @@ compute_assembly_stats() {
                 }
             }
         '
-    )"
+    )"; then
+        rm -f "${lengths_file}" "${summary_file}"
+        return 1
+    fi
 
     if [[ -z "${n50}" ]]; then
+        rm -f "${lengths_file}" "${summary_file}"
         return 1
     fi
 
     canonical_bases=$((adenine_count + cytosine_count + guanine_count + thymine_count))
     if ((canonical_bases == 0)); then
+        rm -f "${lengths_file}" "${summary_file}"
         return 1
     fi
 
-    gc_content="$(
+    if ! gc_content="$(
         awk -v cytosine="${cytosine_count}" -v guanine="${guanine_count}" -v canonical="${canonical_bases}" '
             BEGIN {
                 value = ((cytosine + guanine) / canonical) * 100
@@ -137,12 +147,27 @@ compute_assembly_stats() {
                 print formatted
             }
         '
-    )"
+    )"; then
+        rm -f "${lengths_file}" "${summary_file}"
+        return 1
+    fi
     if [[ -z "${gc_content}" ]]; then
+        rm -f "${lengths_file}" "${summary_file}"
         return 1
     fi
 
-    printf '%s\t%s\t%s\t%s\n' "${n50}" "${scaffolds}" "${genome_size}" "${gc_content}"
+    if ! printf '%s\t%s\t%s\t%s\t%s\n' \
+        "${accession}" \
+        "${n50}" \
+        "${scaffolds}" \
+        "${genome_size}" \
+        "${gc_content}" \
+        > "${result_path}"; then
+        rm -f "${lengths_file}" "${summary_file}"
+        return 1
+    fi
+
+    rm -f "${lengths_file}" "${summary_file}"
 }
 
 run_worker() {
@@ -150,19 +175,22 @@ run_worker() {
     local accession="$2"
     local fasta_path="$3"
     local worker_dir="$4"
-    local result_path error_path stats_line temp_dir
+    local result_path error_path temp_dir
 
     result_path="${worker_dir}/results/${row_index}.tsv"
     error_path="${worker_dir}/errors/${row_index}.log"
-    temp_dir="${worker_dir}/tmp"
+    temp_dir="${worker_dir}/tmp/${row_index}"
+    rm -rf "${temp_dir}"
     mkdir -p "${temp_dir}"
+    rm -f "${result_path}" "${error_path}"
 
-    if ! stats_line="$(compute_assembly_stats "${fasta_path}" "${temp_dir}")"; then
+    if ! compute_assembly_stats "${accession}" "${fasta_path}" "${temp_dir}" "${result_path}"; then
+        rm -rf "${temp_dir}"
         printf '%s\n' "Failed to calculate assembly statistics for ${accession}." > "${error_path}"
         return 255
     fi
 
-    printf '%s\t%s\n' "${accession}" "${stats_line}" > "${result_path}"
+    rm -rf "${temp_dir}"
 }
 
 collect_worker_error() {
