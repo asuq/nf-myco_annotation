@@ -1246,7 +1246,7 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
             self.assertIn("Recovered 16S for ACC2:", log_text)
             self.assertIn("Recovered CheckM2 for ACC3:", log_text)
             self.assertIn(
-                "Recovered BUSCO for ACC4: lineage=bacillota_odb12 value=98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200 status=done",
+                "Recovered BUSCO for ACC4: lineage=bacillota_odb12 value=C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200 status=done",
                 log_text,
             )
             self.assertIn("ANI gating for ACC1: included=true reason=none.", log_text)
@@ -1445,6 +1445,25 @@ class RescueAniFromResultsTestCase(unittest.TestCase):
                 [
                     self.make_initial_status_row(accession="ACC1", internal_id="ID1"),
                     self.make_initial_status_row(accession="ACC2", internal_id="ID2"),
+                ],
+            )
+            self.write_source_assembly_stats(
+                source_outdir,
+                [
+                    {
+                        "accession": "ACC1",
+                        "n50": "50000",
+                        "scaffolds": "2",
+                        "genome_size": "800000",
+                        "gc_content": "50",
+                    },
+                    {
+                        "accession": "ACC2",
+                        "n50": "49000",
+                        "scaffolds": "2",
+                        "genome_size": "790000",
+                        "gc_content": "49",
+                    },
                 ],
             )
             for sample in validated_rows:

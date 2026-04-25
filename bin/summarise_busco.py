@@ -49,23 +49,28 @@ PERCENT_ALIASES = {
 }
 COUNT_ALIASES = {
     "C": (
+        "c",
         "complete",
         "completebuscos",
     ),
     "S": (
+        "s",
         "singlecopy",
         "singlecopybuscos",
     ),
     "D": (
+        "d",
         "duplicated",
         "duplicatedbuscos",
         "multicopy",
     ),
     "F": (
+        "f",
         "fragmented",
         "fragmentedbuscos",
     ),
     "M": (
+        "m",
         "missing",
         "missingbuscos",
     ),
@@ -78,6 +83,7 @@ COUNT_ALIASES = {
         "datasetnumberofbuscogenes",
     ),
 }
+COMPACT_PERCENTAGE_KEYS = ("C", "S", "D", "F", "M")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -211,8 +217,59 @@ def format_percent(value: float) -> str:
     return f"{value:.1f}"
 
 
+def format_busco_string(percentages: dict[str, float], n_value: float) -> str:
+    """Format BUSCO percentage metrics into the compact pipeline string."""
+    return (
+        "C:"
+        f"{format_percent(percentages['C'])}%"
+        "[S:"
+        f"{format_percent(percentages['S'])}%,D:"
+        f"{format_percent(percentages['D'])}%],F:"
+        f"{format_percent(percentages['F'])}%,M:"
+        f"{format_percent(percentages['M'])}%,n:{int(round(n_value))}"
+    )
+
+
+def build_compact_percentage_string(scalars: dict[str, list[Any]]) -> str | None:
+    """Build a BUSCO string from direct C/S/D/F/M percentage fields when present."""
+    compact_values = {
+        key: find_scalar_value(scalars, (key.lower(),))
+        for key in COMPACT_PERCENTAGE_KEYS
+    }
+    if any(value is None for value in compact_values.values()):
+        return None
+
+    n_value = find_scalar_value(scalars, COUNT_ALIASES["n"])
+    if n_value is None:
+        return None
+
+    percentages = {
+        key: value
+        for key, value in compact_values.items()
+        if value is not None
+    }
+    if any(value < 0 or value > 100 for value in percentages.values()):
+        return None
+
+    complete = percentages["C"]
+    single = percentages["S"]
+    duplicated = percentages["D"]
+    fragmented = percentages["F"]
+    missing = percentages["M"]
+    if abs(complete - (single + duplicated)) > 0.05:
+        return None
+    if abs((complete + fragmented + missing) - 100.0) > 0.05:
+        return None
+
+    return format_busco_string(percentages, n_value)
+
+
 def build_busco_string_from_scalars(scalars: dict[str, list[Any]]) -> str:
     """Construct a BUSCO summary string from numeric JSON fields."""
+    compact_summary = build_compact_percentage_string(scalars)
+    if compact_summary is not None:
+        return compact_summary
+
     percentages = {
         key: find_scalar_value(scalars, aliases)
         for key, aliases in PERCENT_ALIASES.items()
@@ -226,15 +283,7 @@ def build_busco_string_from_scalars(scalars: dict[str, list[Any]]) -> str:
         n_value = find_scalar_value(scalars, COUNT_ALIASES["n"])
         if n_value is None:
             raise ValueError("BUSCO JSON is missing the total marker count.")
-        return (
-            "C:"
-            f"{format_percent(percentages['C'])}%"
-            "[S:"
-            f"{format_percent(percentages['S'])}%,D:"
-            f"{format_percent(percentages['D'])}%],F:"
-            f"{format_percent(percentages['F'])}%,M:"
-            f"{format_percent(percentages['M'])}%,n:{int(round(n_value))}"
-        )
+        return format_busco_string(percentages, n_value)
 
     counts = {
         key: find_scalar_value(scalars, aliases)

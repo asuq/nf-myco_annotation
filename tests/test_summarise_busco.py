@@ -211,6 +211,46 @@ class SummariseBuscoTestCase(unittest.TestCase):
             )
             self.assertEqual(row["busco_status"], "done")
 
+    def test_main_builds_busco_string_from_compact_percentages(self) -> None:
+        """Construct a summary string from compact BUSCO C/S/D/F/M percentages."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            summary = self.write_json(
+                tmpdir / "short_summary.json",
+                {
+                    "results": {
+                        "C": 98.0,
+                        "S": 98.0,
+                        "D": 0.0,
+                        "F": 1.0,
+                        "M": 1.0,
+                        "n": 200,
+                    }
+                },
+            )
+            output = tmpdir / "summary.tsv"
+
+            exit_code = summarise_busco.main(
+                [
+                    "--accession",
+                    "ACC_COMPACT",
+                    "--summary",
+                    str(summary),
+                    "--lineage",
+                    "bacillota_odb12",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            row = read_tsv_row(output)
+            self.assertEqual(
+                row["BUSCO_bacillota_odb12"],
+                "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+            )
+            self.assertEqual(row["busco_status"], "done")
+
     def test_main_marks_missing_json_as_failed(self) -> None:
         """Emit an NA row when the BUSCO summary file is unavailable."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
