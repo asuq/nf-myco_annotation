@@ -517,6 +517,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertNotIn("BUILD_OUTPUT_CONTRACTS", main_text)
         self.assertIn("Channel.value(buscoLineagesList)", main_text)
         self.assertIn(
+            'primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${buscoLineagesList[0]}").toString()',
+            main_text,
+        )
+        self.assertIn("Channel.value(primaryBuscoColumn)", main_text)
+        self.assertIn(
             'checkm2_seed = Channel.value(file("${projectDir}/assets/tables/headers/checkm2_summary.tsv"))',
             workflow_text,
         )
@@ -538,13 +543,23 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("val busco_lineages", write_status_module)
         self.assertIn('--busco-lineage \\"${it}\\"', write_status_module)
         self.assertNotIn("--columns", write_status_module)
+        self.assertNotIn("params.busco_lineages[0]", workflow_text)
 
-    def test_build_fastani_inputs_uses_first_busco_lineage_for_primary_column(self) -> None:
-        """Require ANI prep and its stub to honour the first configured BUSCO lineage."""
+    def test_build_fastani_inputs_uses_canonical_primary_busco_column(self) -> None:
+        """Require ANI prep and its stub to use the normalised primary BUSCO column."""
         module_text = (MODULES_DIR / "build_fastani_inputs.nf").read_text(encoding="utf-8")
+        workflow_text = (ROOT / "subworkflows" / "local" / "cohort_ani.nf").read_text(
+            encoding="utf-8"
+        )
+        main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
 
-        self.assertIn('params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}"', module_text)
-        self.assertIn("${primaryBuscoColumn}", module_text)
+        self.assertIn("val primary_busco_column", module_text)
+        self.assertIn('--primary-busco-column "${primary_busco_column}"', module_text)
+        self.assertIn("${primary_busco_column}", module_text)
+        self.assertIn("primary_busco_column", workflow_text)
+        self.assertIn("Channel.value(primaryBuscoColumn)", main_text)
+        self.assertNotIn("params.busco_lineages[0]", module_text)
+        self.assertNotIn("params.busco_lineages[0]", workflow_text)
 
     def test_runtime_tool_modules_write_versions_without_indented_headers(self) -> None:
         """Require runtime tool modules to emit versions via printf, not heredoc indentation."""

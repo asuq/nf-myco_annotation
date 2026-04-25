@@ -49,6 +49,7 @@ workflow {
         error "params.eggnog_db is required."
     }
     buscoLineagesList = normaliseBuscoLineages.call(params.busco_lineages)
+    primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${buscoLineagesList[0]}").toString()
 
     log.warn 'PADLOC and eggNOG outputs are retained in sample folders but are intentionally excluded from master_table.tsv.'
 
@@ -86,6 +87,7 @@ workflow {
         PER_SAMPLE_QC.out.gcode_qc,
         PER_SAMPLE_QC.out.sixteen_s_summaries,
         PER_SAMPLE_QC.out.busco_summaries,
+        Channel.value(primaryBuscoColumn),
     )
     FINAL_OUTPUTS(
         INPUT_VALIDATION_AND_STAGING.out.validated_samples,
@@ -105,6 +107,7 @@ workflow {
         COHORT_ANI.out.assembly_stats,
         COHORT_ANI.out.fastani_matrix,
         Channel.value(buscoLineagesList),
+        Channel.value(primaryBuscoColumn),
         INPUT_VALIDATION_AND_STAGING.out.versions
             .mix(BUSCO_DATASET_PREP.out.versions)
             .mix(COHORT_TAXONOMY.out.versions)

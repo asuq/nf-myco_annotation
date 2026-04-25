@@ -26,6 +26,7 @@ workflow FINAL_OUTPUTS {
     assembly_stats
     ani_matrix
     busco_lineages
+    primary_busco_column
     version_files
     nextflow_version
     pipeline_version
@@ -37,7 +38,6 @@ workflow FINAL_OUTPUTS {
     sixteen_s_seed = Channel.value(file("${projectDir}/assets/tables/headers/16s_status.tsv"))
     codetta_seed = Channel.value(file("${projectDir}/assets/tables/headers/codetta_summary.tsv"))
     ccfinder_seed = Channel.value(file("${projectDir}/assets/tables/headers/ccfinder_strains.tsv"))
-    primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}").toString()
     finalOutputsCollectDir = file("${workflow.workDir}/collect/${workflow.sessionId}/final_outputs")
 
     extractExitCode = { logFile ->
@@ -265,7 +265,7 @@ workflow FINAL_OUTPUTS {
         eggnogManifest,
         SELECT_ANI_REPRESENTATIVES.out.ani_summary,
         assembly_stats,
-        primaryBuscoColumn,
+        primary_busco_column,
     )
 
     final_versions = SELECT_ANI_REPRESENTATIVES.out.versions

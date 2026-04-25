@@ -26,6 +26,7 @@ process BUILD_FASTANI_INPUTS {
     path sixteen_s_statuses
     path busco_tables, name: 'busco_tables/busco_table??.tsv'
     path assembly_stats
+    val primary_busco_column
 
     output:
     path 'fastani_inputs', emit: fastani_inputs
@@ -33,8 +34,6 @@ process BUILD_FASTANI_INPUTS {
     path 'ani_metadata.tsv', emit: metadata
     path 'ani_exclusions.tsv', emit: exclusions
     path 'versions.yml', emit: versions
-
-    def primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}").toString()
 
     script:
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
@@ -46,7 +45,7 @@ process BUILD_FASTANI_INPUTS {
     --checkm2 "${checkm2_summaries}" \
     --16s-status "${sixteen_s_statuses}" \
     ${buscoArgs} \
-    --primary-busco-column "${primaryBuscoColumn}" \
+    --primary-busco-column "${primary_busco_column}" \
     --assembly-stats "${assembly_stats}" \
     --outdir .
 
@@ -58,7 +57,6 @@ EOF
 """
 
     stub:
-    def primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${params.busco_lineages[0]}").toString()
     """mkdir -p fastani_inputs
 cat <<'EOF' > fastani_inputs/sample_a.fasta
 >sample_a
@@ -68,7 +66,7 @@ cat <<'EOF' > fastani_paths.txt
 fastani_inputs/sample_a.fasta
 EOF
 cat <<'EOF' > ani_metadata.tsv
-accession	matrix_name	path	assembly_level	gcode	checkm2_completeness	checkm2_contamination	n50	scaffolds	genome_size	organism_name	${primaryBuscoColumn}
+accession	matrix_name	path	assembly_level	gcode	checkm2_completeness	checkm2_contamination	n50	scaffolds	genome_size	organism_name	${primary_busco_column}
 sample_a	fastani_inputs/sample_a.fasta	fastani_inputs/sample_a.fasta	Scaffold	11	95	1	50000	3	800000	Sample_A	C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200
 EOF
 cat <<'EOF' > ani_exclusions.tsv

@@ -16,6 +16,7 @@ workflow COHORT_ANI {
     gcode_qc
     sixteen_s_summaries
     busco_summaries
+    primary_busco_column
 
     main:
     SUMMARISE_BUSCO(busco_summaries)
@@ -109,6 +110,7 @@ workflow COHORT_ANI {
         combined_16s,
         busco_tables,
         CALCULATE_ASSEMBLY_STATS.out.stats,
+        primary_busco_column,
     )
     FASTANI(BUILD_FASTANI_INPUTS.out.fastani_inputs, BUILD_FASTANI_INPUTS.out.paths)
     CLUSTER_ANI(FASTANI.out.matrix, BUILD_FASTANI_INPUTS.out.metadata)
