@@ -230,9 +230,7 @@ workflow FINAL_OUTPUTS {
         .mix(final_versions)
         .collect()
         .map { files ->
-            files.sort { left, right ->
-                left.toString() <=> right.toString()
-            }
+            files.toList().sort { versionFile -> versionFile.toString() }
         }
 
     COLLECT_VERSIONS(

@@ -413,6 +413,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("finalOutputsCollectDir = file(", final_outputs_text)
         self.assertIn("workflow.sessionId", final_outputs_text)
         self.assertIn("storeDir: finalOutputsCollectDir", final_outputs_text)
+        self.assertIn(
+            "files.toList().sort { versionFile -> versionFile.toString() }",
+            final_outputs_text,
+        )
+        self.assertNotIn("files.sort { left, right ->", final_outputs_text)
 
     def test_collect_versions_runs_helper_via_python3(self) -> None:
         """Require version collection to resolve the staged helper explicitly."""
