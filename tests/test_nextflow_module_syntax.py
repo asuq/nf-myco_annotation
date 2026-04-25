@@ -9,7 +9,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES_DIR = ROOT / "modules" / "local"
+SUBWORKFLOWS_DIR = ROOT / "subworkflows" / "local"
 RAW_COMMAND_SUBSTITUTION = re.compile(r'(?<!\\)\$\(')
+ARITY_SENSITIVE_OPERATOR_CLOSURE = re.compile(
+    r"\.(?:map|flatMap|filter)\s*\{\s*[A-Za-z_][A-Za-z0-9_]*\s*,"
+)
+ARITY_SENSITIVE_COLLECTFILE_CLOSURE = re.compile(
+    r"\.collectFile\s*\([^)]*\)\s*\{\s*[A-Za-z_][A-Za-z0-9_]*\s*,",
+    re.DOTALL,
+)
 SOFT_FAIL_RETRY_MARKERS = {
     "barrnap.nf": "retrying_barrnap",
     "busco.nf": "retrying_busco",
@@ -39,6 +47,23 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         matches: list[str] = []
         for path in sorted(MODULES_DIR.glob("*.nf")):
             matches.extend(find_raw_command_substitutions(path))
+
+        self.assertEqual(matches, [])
+
+    def test_local_subworkflows_unpack_channel_tuples_explicitly(self) -> None:
+        """Reject arity-sensitive operator closures on Nextflow channel tuples."""
+        matches: list[str] = []
+        for path in sorted(SUBWORKFLOWS_DIR.glob("*.nf")):
+            workflow_text = path.read_text(encoding="utf-8")
+            for pattern in (
+                ARITY_SENSITIVE_OPERATOR_CLOSURE,
+                ARITY_SENSITIVE_COLLECTFILE_CLOSURE,
+            ):
+                for match in pattern.finditer(workflow_text):
+                    line_number = workflow_text[: match.start()].count("\n") + 1
+                    matches.append(
+                        f"{path.relative_to(ROOT)}:{line_number}:{match.group(0).splitlines()[0]}"
+                    )
 
         self.assertEqual(matches, [])
 

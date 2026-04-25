@@ -23,19 +23,46 @@ workflow PER_SAMPLE_QC {
     CHECKM2_GCODE4(sample_genomes.combine(checkm2_db), Channel.value(4))
     CHECKM2_GCODE11(sample_genomes.combine(checkm2_db), Channel.value(11))
 
+    unpackTuple = { item, channelName, expectedSize ->
+        if (!(item instanceof List)) {
+            def actualType = item == null ? 'null' : item.getClass().getName()
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, received ${actualType}."
+            )
+        }
+        if (item.size() != expectedSize) {
+            def preview = item.take(Math.min(item.size(), 3))
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, " +
+                    "received ${item.size()} value(s): ${preview}"
+            )
+        }
+        return item
+    }
+
     checkm2_gcode4_reports = CHECKM2_GCODE4.out.quality_report
-        .map { meta, translationTable, report ->
+        .map { item ->
+            def values = unpackTuple.call(item, 'checkm2_gcode4_quality_report', 3)
+            def meta = values[0]
+            def report = values[2]
             tuple(meta.accession, meta, report)
         }
 
     checkm2_gcode11_reports = CHECKM2_GCODE11.out.quality_report
-        .map { meta, translationTable, report ->
+        .map { item ->
+            def values = unpackTuple.call(item, 'checkm2_gcode11_quality_report', 3)
+            def meta = values[0]
+            def report = values[2]
             tuple(meta.accession, report)
         }
 
     paired_checkm2_reports = checkm2_gcode4_reports
         .join(checkm2_gcode11_reports)
-        .map { accession, meta, gcode4Report, gcode11Report ->
+        .map { item ->
+            def values = unpackTuple.call(item, 'paired_checkm2_reports', 4)
+            def meta = values[1]
+            def gcode4Report = values[2]
+            def gcode11Report = values[3]
             tuple(meta, gcode4Report, gcode11Report)
         }
 
@@ -43,7 +70,12 @@ workflow PER_SAMPLE_QC {
 
     busco_jobs = sample_genomes
         .combine(busco_datasets)
-        .map { meta, genome, lineage, datasetDir ->
+        .map { item ->
+            def values = unpackTuple.call(item, 'busco_jobs', 4)
+            def meta = values[0]
+            def genome = values[1]
+            def lineage = values[2]
+            def datasetDir = values[3]
             tuple(meta, genome, lineage, datasetDir)
         }
 

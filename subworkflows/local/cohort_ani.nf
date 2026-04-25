@@ -20,21 +20,47 @@ workflow COHORT_ANI {
     main:
     SUMMARISE_BUSCO(busco_summaries)
 
+    unpackTuple = { item, channelName, expectedSize ->
+        if (!(item instanceof List)) {
+            def actualType = item == null ? 'null' : item.getClass().getName()
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, received ${actualType}."
+            )
+        }
+        if (item.size() != expectedSize) {
+            def preview = item.take(Math.min(item.size(), 3))
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, " +
+                    "received ${item.size()} value(s): ${preview}"
+            )
+        }
+        return item
+    }
+
     staged_manifest = Channel
         .of('accession\tinternal_id\tstaged_filename')
         .concat(
-            staged_genomes.map { meta, genome ->
+            staged_genomes.map { item ->
+                def values = unpackTuple.call(item, 'staged_genomes', 2)
+                def meta = values[0]
+                def genome = values[1]
                 "${meta.accession}\t${meta.internal_id}\t${genome.getName()}"
             }
         )
         .collectFile(name: 'staged_genomes.tsv', newLine: true, sort: false)
 
     staged_fasta_files = staged_genomes
-        .map { meta, genome -> genome }
+        .map { item ->
+            def values = unpackTuple.call(item, 'staged_genomes', 2)
+            values[1]
+        }
         .collect()
 
     combined_checkm2 = gcode_qc
-        .map { meta, summary -> summary }
+        .map { item ->
+            def values = unpackTuple.call(item, 'gcode_qc', 2)
+            values[1]
+        }
         .collectFile(
             name: 'checkm2_summaries.tsv',
             keepHeader: true,
@@ -43,7 +69,10 @@ workflow COHORT_ANI {
         )
 
     combined_16s = sixteen_s_summaries
-        .map { meta, best16s, status -> status }
+        .map { item ->
+            def values = unpackTuple.call(item, 'sixteen_s_summaries', 3)
+            values[2]
+        }
         .collectFile(
             name: '16s_statuses.tsv',
             keepHeader: true,
@@ -52,13 +81,19 @@ workflow COHORT_ANI {
         )
 
     busco_tables = SUMMARISE_BUSCO.out.summary
-        .map { meta, lineage, summary ->
+        .map { item ->
+            def values = unpackTuple.call(item, 'busco_summary', 3)
+            def lineage = values[1]
+            def summary = values[2]
             tuple("busco_summary_${lineage}.tsv", summary)
         }
         .collectFile(
             keepHeader: true,
             skip: 1,
-        ) { outputName, summary ->
+        ) { item ->
+            def values = unpackTuple.call(item, 'busco_table_file', 2)
+            def outputName = values[0]
+            def summary = values[1]
             [outputName, summary]
         }
         .collect()

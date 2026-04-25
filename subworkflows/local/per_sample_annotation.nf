@@ -28,12 +28,35 @@ workflow PER_SAMPLE_ANNOTATION {
             .findAll { !it.isEmpty() } as Set
     }
 
-    sample_by_accession = sample_genomes.map { meta, genome ->
+    unpackTuple = { item, channelName, expectedSize ->
+        if (!(item instanceof List)) {
+            def actualType = item == null ? 'null' : item.getClass().getName()
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, received ${actualType}."
+            )
+        }
+        if (item.size() != expectedSize) {
+            def preview = item.take(Math.min(item.size(), 3))
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, " +
+                    "received ${item.size()} value(s): ${preview}"
+            )
+        }
+        return item
+    }
+
+    sample_by_accession = sample_genomes.map { item ->
+        def values = unpackTuple.call(item, 'sample_genomes', 2)
+        def meta = values[0]
+        def genome = values[1]
         tuple(meta.accession, meta, genome)
     }
 
     gcode_by_accession = gcode_summaries
-        .map { meta, summary -> summary }
+        .map { item ->
+            def values = unpackTuple.call(item, 'gcode_summaries', 2)
+            values[1]
+        }
         .splitCsv(header: true, sep: '\t')
         .map { row ->
             tuple(row.accession.toString(), row.Gcode.toString())
@@ -41,10 +64,16 @@ workflow PER_SAMPLE_ANNOTATION {
 
     annotation_candidates = sample_by_accession
         .join(gcode_by_accession)
-        .filter { accession, meta, genome, gcode ->
+        .filter { item ->
+            def values = unpackTuple.call(item, 'annotation_candidates_join', 4)
+            def gcode = values[3]
             ['4', '11'].contains(gcode.toString())
         }
-        .map { accession, meta, genome, gcode ->
+        .map { item ->
+            def values = unpackTuple.call(item, 'annotation_candidates', 4)
+            def meta = values[1]
+            def genome = values[2]
+            def gcode = values[3]
             tuple(meta, genome, gcode.toString())
         }
 
@@ -58,7 +87,9 @@ workflow PER_SAMPLE_ANNOTATION {
 
     eggnog_inputs = PROKKA.out.eggnog_inputs
     if (eggnogOnlyAccessions != null && !eggnogOnlyAccessions.isEmpty()) {
-        eggnog_inputs = eggnog_inputs.filter { meta, faa ->
+        eggnog_inputs = eggnog_inputs.filter { item ->
+            def values = unpackTuple.call(item, 'eggnog_inputs', 2)
+            def meta = values[0]
             eggnogOnlyAccessions.contains(meta.accession.toString())
         }
     }

@@ -10,12 +10,35 @@ workflow COHORT_16S {
     metadata
 
     main:
+    unpackTuple = { item, channelName, expectedSize ->
+        if (!(item instanceof List)) {
+            def actualType = item == null ? 'null' : item.getClass().getName()
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, received ${actualType}."
+            )
+        }
+        if (item.size() != expectedSize) {
+            def preview = item.take(Math.min(item.size(), 3))
+            throw new IllegalArgumentException(
+                "${channelName} expected a ${expectedSize}-value tuple, " +
+                    "received ${item.size()} value(s): ${preview}"
+            )
+        }
+        return item
+    }
+
     collected_best_16s = sixteen_s_summaries
-        .map { meta, best16s, status -> best16s }
+        .map { item ->
+            def values = unpackTuple.call(item, 'sixteen_s_summaries', 3)
+            values[1]
+        }
         .collect()
 
     collected_status_tables = sixteen_s_summaries
-        .map { meta, best16s, status -> status }
+        .map { item ->
+            def values = unpackTuple.call(item, 'sixteen_s_summaries', 3)
+            values[2]
+        }
         .collect()
 
     BUILD_COHORT_16S(
