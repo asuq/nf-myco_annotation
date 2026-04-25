@@ -139,6 +139,14 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("process.stageOutMode = 'copy'", gwdg_text)
         self.assertIn("process.beforeScript = {", gwdg_text)
         self.assertIn("task.attempt == 1", gwdg_text)
+        self.assertIn(
+            '${NXF_SCRATCH:-${SHM_TMPDIR:-${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}}}',
+            gwdg_text,
+        )
+        self.assertIn(
+            '${NXF_SCRATCH:-${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}}',
+            gwdg_text,
+        )
         self.assertIn('${SHM_TMPDIR:-${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}}', gwdg_text)
         self.assertIn('${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}', gwdg_text)
         self.assertNotIn('\\${${name}:-}', gwdg_text)

@@ -65,11 +65,12 @@ resolve_script_path() {
 
 compute_assembly_stats() {
     local fasta_path="$1"
+    local temp_dir="$2"
     local lengths_file summary_file n50 target scaffolds genome_size
     local adenine_count cytosine_count guanine_count thymine_count canonical_bases gc_content
 
-    lengths_file="$(mktemp)"
-    summary_file="$(mktemp)"
+    lengths_file="$(mktemp "${temp_dir}/lengths.XXXXXX")"
+    summary_file="$(mktemp "${temp_dir}/summary.XXXXXX")"
     CLEANUP_FILES+=("${lengths_file}" "${summary_file}")
 
     if ! seqtk comp "${fasta_path}" | awk -v summary_file="${summary_file}" '
@@ -149,12 +150,14 @@ run_worker() {
     local accession="$2"
     local fasta_path="$3"
     local worker_dir="$4"
-    local result_path error_path stats_line
+    local result_path error_path stats_line temp_dir
 
     result_path="${worker_dir}/results/${row_index}.tsv"
     error_path="${worker_dir}/errors/${row_index}.log"
+    temp_dir="${worker_dir}/tmp"
+    mkdir -p "${temp_dir}"
 
-    if ! stats_line="$(compute_assembly_stats "${fasta_path}")"; then
+    if ! stats_line="$(compute_assembly_stats "${fasta_path}" "${temp_dir}")"; then
         printf '%s\n' "Failed to calculate assembly statistics for ${accession}." > "${error_path}"
         return 255
     fi
@@ -284,11 +287,13 @@ main() {
         return 1
     fi
 
-    mkdir -p "$(dirname "${output}")"
-    local worker_dir task_file worker_script task_count
-    worker_dir="$(mktemp -d)"
+    local output_dir worker_dir task_file worker_script task_count
+    output_dir="$(dirname "${output}")"
+    mkdir -p "${output_dir}"
+    output_dir="$(cd "${output_dir}" && pwd)"
+    worker_dir="$(mktemp -d "${output_dir}/.calculate_assembly_stats.XXXXXX")"
     CLEANUP_DIRS+=("${worker_dir}")
-    mkdir -p "${worker_dir}/results" "${worker_dir}/errors"
+    mkdir -p "${worker_dir}/results" "${worker_dir}/errors" "${worker_dir}/tmp"
     task_file="${worker_dir}/tasks.nul"
     worker_script="$(resolve_script_path "$0")"
     task_count=0

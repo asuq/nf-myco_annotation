@@ -86,10 +86,14 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
         output: Path,
         path_prefix: Path,
         jobs: int = 1,
+        environment_overrides: dict[str, str] | None = None,
+        cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """Run the helper script with a controlled PATH."""
         environment = os.environ.copy()
         environment["PATH"] = f"{path_prefix}:{environment['PATH']}"
+        if environment_overrides:
+            environment.update(environment_overrides)
         return subprocess.run(
             [
                 "bash",
@@ -105,6 +109,7 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
             capture_output=True,
             text=True,
             env=environment,
+            cwd=cwd,
         )
 
     def test_calculates_single_contig_stats(self) -> None:
@@ -226,6 +231,37 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(read_tsv(output)[0]["gc_content"], "50")
+
+    def test_uses_output_directory_when_tmpdir_is_unwritable(self) -> None:
+        """Avoid implicit mktemp locations that can be read-only in containers."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.write_text_file(tmpdir / "ACC7.fasta", ">contig1\nAACCGGTT\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC7\tid_7\tACC7.fasta\n",
+            )
+            output_dir = tmpdir / "output"
+            output_dir.mkdir()
+            output = output_dir / "assembly_stats.tsv"
+            blocked_tmp = tmpdir / "blocked_tmp"
+            blocked_tmp.mkdir()
+            blocked_tmp.chmod(stat.S_IREAD | stat.S_IEXEC)
+
+            try:
+                result = self.run_helper(
+                    staged_manifest=manifest,
+                    output=output,
+                    path_prefix=tmpdir,
+                    environment_overrides={"TMPDIR": str(blocked_tmp)},
+                    cwd=blocked_tmp,
+                )
+            finally:
+                blocked_tmp.chmod(stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(read_tsv(output)[0]["accession"], "ACC7")
 
     def test_parallel_jobs_preserve_manifest_order(self) -> None:
         """Emit deterministic row order while processing multiple genomes in parallel."""
