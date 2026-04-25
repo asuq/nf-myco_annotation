@@ -129,20 +129,6 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("label 'process_single'", module_text)
         self.assertNotIn("label 'process_medium'", module_text)
 
-    def test_download_busco_dataset_uses_task_workdir(self) -> None:
-        """Require main BUSCO dataset downloads to avoid writing to params.busco_db."""
-        module_text = (MODULES_DIR / "download_busco_dataset.nf").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn('download_root="busco_download"', module_text)
-        self.assertIn('--download_path "\\${download_root}"', module_text)
-        self.assertIn('dataset_dir="\\${download_root}/${lineage}"', module_text)
-        self.assertIn('dataset_dir="\\${download_root}/lineages/${lineage}"', module_text)
-        self.assertIn('mv "\\${dataset_dir}" "${lineage}"', module_text)
-        self.assertNotIn("def downloadRoot = params.busco_db", module_text)
-        self.assertNotIn('mkdir -p "${downloadRoot}"', module_text)
-
     def test_busco_dataset_prep_reuses_stub_datasets_for_custom_lineages(self) -> None:
         """Require stub runs to tolerate custom BUSCO lineage names."""
         workflow_text = (
@@ -289,7 +275,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         module_text = module_path.read_text(encoding="utf-8")
 
         self.assertIn('tuple val(lineage), path("${lineage}"), emit: dataset', module_text)
-        self.assertIn('mv "\\${dataset_dir}" "${lineage}"', module_text)
+        self.assertIn('ln -s "\\${dataset_dir}" "${lineage}"', module_text)
 
     def test_busco_stages_offline_datasets_under_download_root(self) -> None:
         """Require BUSCO offline runs to stage lineage datasets and retry transient failures."""

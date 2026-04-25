@@ -62,10 +62,7 @@ nextflow run . -profile oist \
 ```
 
 When `--prepare_busco_datasets true` is enabled, existing lineage directories
-are reused and only missing configured lineages are downloaded. Main-workflow
-downloads are staged in the relevant task work directories so containers do not
-need write access to `--busco_db`; use `prepare_databases.nf` when the lineage
-directory should be persisted under the shared BUSCO root.
+are reused and only missing configured lineages are downloaded.
 
 ### Preparing metadata.tsv
 
