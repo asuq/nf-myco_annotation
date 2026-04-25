@@ -120,6 +120,15 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('--output "busco_summary_${lineage}.tsv"', module_text)
         self.assertIn("BUSCO_${lineage}", module_text)
 
+    def test_download_busco_dataset_uses_single_process_resources(self) -> None:
+        """Require BUSCO dataset prep downloads to use single-process resources."""
+        module_text = (MODULES_DIR / "download_busco_dataset.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("label 'process_single'", module_text)
+        self.assertNotIn("label 'process_medium'", module_text)
+
     def test_busco_dataset_prep_reuses_stub_datasets_for_custom_lineages(self) -> None:
         """Require stub runs to tolerate custom BUSCO lineage names."""
         workflow_text = (

@@ -3,7 +3,7 @@
  */
 process DOWNLOAD_BUSCO_DATASET {
     tag "${lineage}"
-    label 'process_medium'
+    label 'process_single'
 
     input:
     val lineage
