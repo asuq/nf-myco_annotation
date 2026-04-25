@@ -25,17 +25,36 @@ workflow BUSCO_DATASET_PREP {
             "Create it with prepare_databases.nf using the same --busco_db and " +
             "--busco_lineages values, or rerun main.nf with --prepare_busco_datasets true."
     }
+    def buildMountedDownloadTarget = { rawRoot ->
+        def rootFile = new File(rawRoot.toString()).canonicalFile
+        def parentFile = rootFile.getParentFile()
+        if (parentFile == null) {
+            error "BUSCO download root must have a parent directory: ${rootFile.absolutePath}"
+        }
+        parentFile.mkdirs()
+        return [
+            rootFile,
+            file(parentFile.absolutePath),
+            rootFile.getName(),
+        ]
+    }
 
     if (downloadEnabled) {
+        def downloadRootValue = params.busco_db ?: "${params.outdir}/resources/busco"
+        def mountedDownloadTarget = buildMountedDownloadTarget.call(downloadRootValue)
+        def downloadRootFile = mountedDownloadTarget[0]
+        def downloadParent = mountedDownloadTarget[1]
+        def downloadName = mountedDownloadTarget[2]
+
         if (params.busco_db) {
             reusableLineages = lineages.filter { lineage ->
-                new File(params.busco_db.toString(), lineage.toString()).exists()
+                new File(downloadRootFile, lineage.toString()).exists()
             }
             downloadLineages = lineages.filter { lineage ->
-                !new File(params.busco_db.toString(), lineage.toString()).exists()
+                !new File(downloadRootFile, lineage.toString()).exists()
             }
             reusedDatasets = reusableLineages.map { lineage ->
-                def datasetPath = new File(params.busco_db.toString(), lineage.toString()).absolutePath
+                def datasetPath = new File(downloadRootFile, lineage.toString()).absolutePath
                 tuple(
                     lineage,
                     file(datasetPath, checkIfExists: true),
@@ -46,7 +65,11 @@ workflow BUSCO_DATASET_PREP {
             reusedDatasets = Channel.empty()
         }
 
-        DOWNLOAD_BUSCO_DATASET(downloadLineages)
+        downloadJobs = downloadLineages.map { lineage ->
+            tuple(lineage, downloadParent, downloadName)
+        }
+
+        DOWNLOAD_BUSCO_DATASET(downloadJobs)
         datasets = reusedDatasets.mix(DOWNLOAD_BUSCO_DATASET.out.dataset)
         logs = DOWNLOAD_BUSCO_DATASET.out.log
         versions = DOWNLOAD_BUSCO_DATASET.out.versions

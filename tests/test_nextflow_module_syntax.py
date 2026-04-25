@@ -129,6 +129,22 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("label 'process_single'", module_text)
         self.assertNotIn("label 'process_medium'", module_text)
 
+    def test_download_busco_dataset_stages_download_parent(self) -> None:
+        """Require BUSCO dataset downloads to bind the destination parent."""
+        module_text = (MODULES_DIR / "download_busco_dataset.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "tuple val(lineage), path(download_parent), val(download_name)",
+            module_text,
+        )
+        self.assertIn('download_root="${download_parent}/${download_name}"', module_text)
+        self.assertIn('mkdir -p "\\${download_root}"', module_text)
+        self.assertIn('--download_path "\\${download_root}"', module_text)
+        self.assertIn('dataset_dir="\\${download_root}/${lineage}"', module_text)
+        self.assertIn('dataset_dir="\\${download_root}/lineages/${lineage}"', module_text)
+
     def test_busco_dataset_prep_reuses_stub_datasets_for_custom_lineages(self) -> None:
         """Require stub runs to tolerate custom BUSCO lineage names."""
         workflow_text = (
@@ -151,13 +167,20 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             workflow_text,
         )
         self.assertIn("if (downloadEnabled) {", workflow_text)
+        self.assertIn("def buildMountedDownloadTarget = { rawRoot ->", workflow_text)
+        self.assertIn("parentFile.mkdirs()", workflow_text)
+        self.assertIn("file(parentFile.absolutePath)", workflow_text)
+        self.assertIn('def downloadRootValue = params.busco_db ?: "${params.outdir}/resources/busco"', workflow_text)
+        self.assertIn("def mountedDownloadTarget = buildMountedDownloadTarget.call(downloadRootValue)", workflow_text)
         self.assertIn("reusableLineages = lineages.filter { lineage ->", workflow_text)
         self.assertIn("downloadLineages = lineages.filter { lineage ->", workflow_text)
         self.assertIn(
-            "new File(params.busco_db.toString(), lineage.toString()).exists()",
+            "new File(downloadRootFile, lineage.toString()).exists()",
             workflow_text,
         )
-        self.assertIn("DOWNLOAD_BUSCO_DATASET(downloadLineages)", workflow_text)
+        self.assertIn("downloadJobs = downloadLineages.map { lineage ->", workflow_text)
+        self.assertIn("tuple(lineage, downloadParent, downloadName)", workflow_text)
+        self.assertIn("DOWNLOAD_BUSCO_DATASET(downloadJobs)", workflow_text)
         self.assertIn(
             "datasets = reusedDatasets.mix(DOWNLOAD_BUSCO_DATASET.out.dataset)",
             workflow_text,

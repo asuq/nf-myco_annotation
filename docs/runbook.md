@@ -62,7 +62,10 @@ nextflow run . -profile oist \
 ```
 
 When `--prepare_busco_datasets true` is enabled, existing lineage directories
-are reused and only missing configured lineages are downloaded.
+are reused and only missing configured lineages are downloaded under
+`--busco_db`. The main downloader stages the BUSCO DB parent as a Nextflow
+`path` input so Singularity/Apptainer profiles can bind the shared destination
+for writes.
 
 ### Preparing metadata.tsv
 
