@@ -418,6 +418,13 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
             final_outputs_text,
         )
         self.assertIn("unpackTuple.call(item, 'checkm2_summaries', 2)", final_outputs_text)
+        self.assertIn("unpackTuple.call(item, 'prokka_results', 6)", final_outputs_text)
+        self.assertIn("def log = values[5]", final_outputs_text)
+        self.assertIn(
+            "tuple val(meta), path('prokka'), path('prokka.gff'), path('prokka.faa'), "
+            "path('prokka.gbk'), path('prokka.log'), emit: results",
+            (MODULES_DIR / "prokka.nf").read_text(encoding="utf-8"),
+        )
         self.assertIsNone(
             re.search(r"\.map\s*\{\s*[A-Za-z_][A-Za-z0-9_]*\s*,", final_outputs_text)
         )

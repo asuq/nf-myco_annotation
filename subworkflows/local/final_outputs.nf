@@ -152,11 +152,11 @@ workflow FINAL_OUTPUTS {
         .of('accession\texit_code\tgff_size\tfaa_size')
         .concat(
             prokka_results.map { item ->
-                def values = unpackTuple.call(item, 'prokka_results', 5)
+                def values = unpackTuple.call(item, 'prokka_results', 6)
                 def meta = values[0]
                 def gff = values[2]
                 def faa = values[3]
-                def log = values[4]
+                def log = values[5]
                 "${meta.accession}\t${extractExitCode.call(log)}\t${gff.toFile().length()}\t${faa.toFile().length()}"
             }
         )
