@@ -131,6 +131,41 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("&& !new File(datasetPath).exists()", workflow_text)
         self.assertIn("datasetPath = stubDatasetFallback", workflow_text)
 
+    def test_busco_dataset_prep_downloads_only_missing_lineages_when_enabled(self) -> None:
+        """Require main BUSCO prep to mix reused and downloaded lineage datasets."""
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "busco_dataset_prep.nf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "def downloadEnabled = parseBoolean.call(params.prepare_busco_datasets)",
+            workflow_text,
+        )
+        self.assertIn("if (downloadEnabled) {", workflow_text)
+        self.assertIn("reusableLineages = lineages.filter { lineage ->", workflow_text)
+        self.assertIn("downloadLineages = lineages.filter { lineage ->", workflow_text)
+        self.assertIn(
+            "new File(params.busco_db.toString(), lineage.toString()).exists()",
+            workflow_text,
+        )
+        self.assertIn("DOWNLOAD_BUSCO_DATASET(downloadLineages)", workflow_text)
+        self.assertIn(
+            "datasets = reusedDatasets.mix(DOWNLOAD_BUSCO_DATASET.out.dataset)",
+            workflow_text,
+        )
+
+    def test_busco_dataset_prep_reports_missing_lineages_clearly(self) -> None:
+        """Require missing offline BUSCO datasets to fail with operator guidance."""
+        workflow_text = (
+            ROOT / "subworkflows" / "local" / "busco_dataset_prep.nf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("BUSCO lineage dataset is missing: ${lineage}.", workflow_text)
+        self.assertIn("Expected path: ${datasetPath}.", workflow_text)
+        self.assertIn("prepare_databases.nf using the same --busco_db", workflow_text)
+        self.assertIn("rerun main.nf with --prepare_busco_datasets true", workflow_text)
+        self.assertIn("missingDatasetError.call(lineage, datasetPath)", workflow_text)
+
     def test_barrnap_publishes_only_raw_outputs(self) -> None:
         """Require Barrnap to stay tool-only and publish just its raw outputs."""
         module_text = (MODULES_DIR / "barrnap.nf").read_text(encoding="utf-8")

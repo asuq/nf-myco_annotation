@@ -13,6 +13,57 @@ The pipeline requires:
 - `--busco_db` or `--prepare_busco_datasets true`
 - `--eggnog_db` for real eggNOG runs
 
+## Nextflow version
+
+The pipeline keeps its declared minimum at Nextflow `>=25.04.8`. Nextflow
+`25.10.4` is also supported and can be selected explicitly on systems where
+multiple versions are available:
+
+```bash
+NXF_VER=25.10.4 nextflow run . -profile test -stub-run
+```
+
+## BUSCO lineage datasets
+
+`main.nf` reuses existing lineage directories below `--busco_db` by default.
+For example, a configured lineage `alcaligenaceae_odb12` is expected at:
+
+```text
+${BUSCO_DIR}/alcaligenaceae_odb12
+```
+
+If a configured lineage is missing, either prepare the BUSCO root ahead of the
+analysis run with the same lineage list:
+
+```bash
+nextflow run prepare_databases.nf -profile oist \
+  --busco_db "$BUSCO_DIR" \
+  --busco_lineages alcaligenaceae_odb12 \
+  --download_missing_databases true \
+  --singularity_cache_dir "$SINGULARITY_CACHE" \
+  --outdir "$DBPREP_OUT"
+```
+
+or let the main workflow download missing BUSCO lineages explicitly:
+
+```bash
+nextflow run . -profile oist \
+  --sample_csv "$SAMPLE_CSV" \
+  --metadata "$METADATA_TSV" \
+  --taxdump "$TAXDUMP_DIR" \
+  --checkm2_db "$CHECKM2_DIR" \
+  --codetta_db "$CODETTA_DIR" \
+  --busco_db "$BUSCO_DIR" \
+  --busco_lineages alcaligenaceae_odb12 \
+  --prepare_busco_datasets true \
+  --eggnog_db "$EGGNOG_DIR" \
+  --singularity_cache_dir "$SINGULARITY_CACHE" \
+  --outdir "$RESULT_ROOT/out"
+```
+
+When `--prepare_busco_datasets true` is enabled, existing lineage directories
+are reused and only missing configured lineages are downloaded.
+
 ### Preparing metadata.tsv
 
 `accessions.txt` should contain one accession per line. `datasets` and

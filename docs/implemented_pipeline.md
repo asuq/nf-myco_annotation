@@ -15,6 +15,9 @@ design freeze.
 
 The repository currently exposes two Nextflow DSL2 entrypoints.
 
+The declared minimum Nextflow version remains `>=25.04.8`; Nextflow `25.10.4`
+is also supported for current stable runs.
+
 ### `main.nf`
 
 Use the main entrypoint for normal analysis runs. It orchestrates:
@@ -39,7 +42,11 @@ Use the main entrypoint for normal analysis runs. It orchestrates:
 - `busco_lineages`
 
 BUSCO lineage datasets are resolved by `BUSCO_DATASET_PREP`. The current
-implementation requires either:
+implementation reuses existing lineage directories below `busco_db`. If
+`prepare_busco_datasets = true`, missing configured lineages are downloaded
+while existing lineages are reused. Otherwise, missing lineages fail during
+preflight with a message naming the expected path. Main workflow BUSCO
+resolution requires either:
 
 - `busco_db`, or
 - `prepare_busco_datasets = true`
