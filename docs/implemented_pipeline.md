@@ -44,9 +44,10 @@ Use the main entrypoint for normal analysis runs. It orchestrates:
 BUSCO lineage datasets are resolved by `BUSCO_DATASET_PREP`. The current
 implementation reuses existing lineage directories below `busco_db`. If
 `prepare_busco_datasets = true`, missing configured lineages are downloaded
-while existing lineages are reused. Otherwise, missing lineages fail during
-preflight with a message naming the expected path. Main workflow BUSCO
-resolution requires either:
+into task work directories while existing lineages are reused. This keeps the
+main workflow from writing to the shared BUSCO root inside containers. Missing
+lineages fail during preflight with a message naming the expected path when
+download is disabled. Main workflow BUSCO resolution requires either:
 
 - `busco_db`, or
 - `prepare_busco_datasets = true`

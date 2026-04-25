@@ -1,5 +1,5 @@
 /*
- * Download one BUSCO lineage dataset for later offline reuse.
+ * Download one BUSCO lineage dataset for later offline use in this run.
  */
 process DOWNLOAD_BUSCO_DATASET {
     tag "${lineage}"
@@ -14,13 +14,13 @@ process DOWNLOAD_BUSCO_DATASET {
     path 'versions.yml', emit: versions
 
     script:
-    def downloadRoot = params.busco_db ?: "${params.outdir}/resources/busco"
     """
-    mkdir -p "${downloadRoot}"
+    download_root="busco_download"
+    mkdir -p "\${download_root}"
 
     set +e
     busco \
-        --download_path "${downloadRoot}" \
+        --download_path "\${download_root}" \
         --download "${lineage}" \
         > download.log 2>&1
     exit_code=\$?
@@ -32,10 +32,10 @@ process DOWNLOAD_BUSCO_DATASET {
     fi
 
     dataset_dir=""
-    if [[ -d "${downloadRoot}/${lineage}" ]]; then
-        dataset_dir="${downloadRoot}/${lineage}"
-    elif [[ -d "${downloadRoot}/lineages/${lineage}" ]]; then
-        dataset_dir="${downloadRoot}/lineages/${lineage}"
+    if [[ -d "\${download_root}/${lineage}" ]]; then
+        dataset_dir="\${download_root}/${lineage}"
+    elif [[ -d "\${download_root}/lineages/${lineage}" ]]; then
+        dataset_dir="\${download_root}/lineages/${lineage}"
     fi
 
     if [[ -z "\${dataset_dir}" ]]; then
@@ -43,7 +43,7 @@ process DOWNLOAD_BUSCO_DATASET {
         exit 1
     fi
 
-    ln -s "\${dataset_dir}" "${lineage}"
+    mv "\${dataset_dir}" "${lineage}"
 
     {
         printf '"%s":\n' "${task.process}"
