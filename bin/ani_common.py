@@ -25,9 +25,13 @@ REQUIRED_SCORING_METADATA_COLS: set[str] = {
 BUSCO_RE = re.compile(r"C:(?P<C>\d+(?:\.\d+)?)%.*?M:(?P<M>\d+(?:\.\d+)?)%", re.IGNORECASE)
 ASSEMBLY_LEVEL_MAP: dict[str, str] = {
     "complete genome": "Complete Genome",
+    "complete genomes": "Complete Genome",
     "chromosome": "Chromosome",
+    "chromosomes": "Chromosome",
     "scaffold": "Scaffold",
+    "scaffolds": "Scaffold",
     "contig": "Contig",
+    "contigs": "Contig",
 }
 ASSEMBLY_RANK: dict[str, int] = {
     "Contig": 0,

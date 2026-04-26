@@ -37,6 +37,16 @@ VALIDATION_WARNING_COLUMNS = ("accession", "warning_code", "message")
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 TRUE_TOKENS = {"true", "t", "yes", "y", "1"}
 FALSE_TOKENS = {"false", "f", "no", "n", "0"}
+ASSEMBLY_LEVEL_MAP = {
+    "complete genome": "Complete Genome",
+    "complete genomes": "Complete Genome",
+    "chromosome": "Chromosome",
+    "chromosomes": "Chromosome",
+    "scaffold": "Scaffold",
+    "scaffolds": "Scaffold",
+    "contig": "Contig",
+    "contigs": "Contig",
+}
 
 
 class ValidationError(RuntimeError):
@@ -125,6 +135,20 @@ def normalise_optional_value(value: str | None) -> str:
     if is_missing(value):
         return "NA"
     return value.strip()
+
+
+def normalise_assembly_level(value: str | None, accession: str) -> str:
+    """Normalise a sample-manifest assembly level to the canonical ANI token."""
+    if is_missing(value):
+        return "NA"
+    token = value.strip().casefold()
+    if token in ASSEMBLY_LEVEL_MAP:
+        return ASSEMBLY_LEVEL_MAP[token]
+    allowed_values = ", ".join(sorted(set(ASSEMBLY_LEVEL_MAP.values())))
+    raise ValidationError(
+        f"Sample {accession!r} has invalid assembly_level {value!r}. "
+        f"Expected one of: {allowed_values}."
+    )
 
 
 def normalise_boolean(value: str) -> str:
@@ -340,7 +364,7 @@ def validate_samples(
     for row in sample_rows:
         accession = row["accession"].strip()
         is_new = normalise_boolean(row["is_new"])
-        assembly_level = normalise_optional_value(row["assembly_level"])
+        assembly_level = normalise_assembly_level(row["assembly_level"], accession)
         if is_new == "true" and assembly_level == "NA":
             raise ValidationError(
                 f"Sample {accession!r} has is_new=true but no assembly_level."

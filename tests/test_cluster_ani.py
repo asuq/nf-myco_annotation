@@ -54,7 +54,7 @@ class ClusterAniHelperTestCase(unittest.TestCase):
             genome, reasons = cluster_ani.build_genome_from_row(
                 {
                     "path": str(genome_path),
-                    "assembly_level": "Scaffold",
+                    "assembly_level": "Scaffolds",
                     "gcode": "11",
                     "checkm2_completeness": "95.0",
                     "checkm2_contamination": "1.5",

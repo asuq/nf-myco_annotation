@@ -140,6 +140,62 @@ class ValidateInputsTestCase(unittest.TestCase):
                 "na",
             )
 
+    def test_main_canonicalises_sample_assembly_levels(self) -> None:
+        """Canonicalise sample-manifest assembly levels before staging outputs."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_one = self.write_text_file(tmpdir / "genomes" / "one.fna", ">a\nACGT\n")
+            fasta_two = self.write_text_file(tmpdir / "genomes" / "two.fna", ">b\nTGCA\n")
+            fasta_three = self.write_text_file(tmpdir / "genomes" / "three.fna", ">c\nGATC\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,true,Scaffolds,{fasta_one}",
+                        f"ACC2,true,cOnTiGs,{fasta_two}",
+                        f"ACC3,false,CHROMOSOMES,{fasta_three}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "\n".join(
+                    [
+                        "accession,Tax_ID",
+                        "ACC3,3",
+                    ]
+                )
+                + "\n",
+            )
+            outdir = tmpdir / "validated"
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            validated_rows = {
+                row["accession"]: row for row in read_tsv(outdir / "validated_samples.tsv")
+            }
+            accession_map_rows = {
+                row["accession"]: row for row in read_tsv(outdir / "accession_map.tsv")
+            }
+            self.assertEqual(validated_rows["ACC1"]["assembly_level"], "Scaffold")
+            self.assertEqual(validated_rows["ACC2"]["assembly_level"], "Contig")
+            self.assertEqual(validated_rows["ACC3"]["assembly_level"], "Chromosome")
+            self.assertEqual(accession_map_rows["ACC1"]["assembly_level"], "Scaffold")
+            self.assertEqual(accession_map_rows["ACC2"]["assembly_level"], "Contig")
+            self.assertEqual(accession_map_rows["ACC3"]["assembly_level"], "Chromosome")
+
     def test_main_uses_staged_sample_status_columns_asset(self) -> None:
         """Allow one valid sample-status contract file to be provided explicitly."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -499,6 +555,41 @@ class ValidateInputsTestCase(unittest.TestCase):
             )
 
             self.assertEqual(exit_code, 1)
+
+    def test_main_rejects_invalid_new_sample_assembly_level(self) -> None:
+        """Fail when a new sample uses a non-parseable assembly level."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            fasta_path = self.write_text_file(tmpdir / "genome.fna", ">a\nACGT\n")
+            sample_csv = self.write_text_file(
+                tmpdir / "samples.csv",
+                "\n".join(
+                    [
+                        "accession,is_new,assembly_level,genome_fasta",
+                        f"ACC1,true,metagenome,{fasta_path}",
+                    ]
+                )
+                + "\n",
+            )
+            metadata_csv = self.write_text_file(
+                tmpdir / "metadata.csv",
+                "accession,Tax_ID\nACC1,1\n",
+            )
+            outdir = tmpdir / "validated"
+
+            exit_code = validate_inputs.main(
+                [
+                    "--sample-csv",
+                    str(sample_csv),
+                    "--metadata",
+                    str(metadata_csv),
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse((outdir / "validated_samples.tsv").exists())
 
     def test_main_rejects_missing_genome_fasta_paths(self) -> None:
         """Fail when a manifest row points to a genome FASTA that does not exist."""
