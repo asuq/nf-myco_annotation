@@ -596,14 +596,14 @@ Step-by-step procedure:
 1. Start a persistent shell on the login node and move into the repository.
 
 ```bash
-tmux new -s nf_myco_hpc
-cd /path/to/nf-myco_annotation
+tmux new -s nf_annotation_hpc
+cd /path/to/nf-annotation
 ```
 
 2. Define one clean HPC root.
 
 ```bash
-export HPC_ROOT=/scratch/$USER/nf_myco_hpc_$(date +%Y%m%d)
+export HPC_ROOT=/scratch/$USER/nf_annotation_hpc_$(date +%Y%m%d)
 export ACCEPT_ROOT=$HPC_ROOT/acceptance
 export DB_ROOT=$HPC_ROOT/db
 export RESULT_ROOT=$HPC_ROOT/results
@@ -778,7 +778,7 @@ opt-in storage override:
 ```bash
 nextflow run . -profile oist \
   -c conf/oist_20k_storage.config \
-  -work-dir /flash/path/to/work_nf_myco_annotation_20k \
+  -work-dir /flash/path/to/work_nf_annotation_20k \
   --sample_csv "$ACCEPT_ROOT/generated/sample_sheet.csv" \
   --metadata "$ACCEPT_ROOT/generated/metadata.tsv" \
   --taxdump "$TAXDUMP_DIR" \
@@ -804,7 +804,7 @@ Resume example:
 nextflow run . -profile oist \
   -c conf/oist_20k_storage.config \
   -resume \
-  -work-dir /flash/path/to/work_nf_myco_annotation_20k \
+  -work-dir /flash/path/to/work_nf_annotation_20k \
   --sample_csv "$ACCEPT_ROOT/generated/sample_sheet.csv" \
   --metadata "$ACCEPT_ROOT/generated/metadata.tsv" \
   --taxdump "$TAXDUMP_DIR" \

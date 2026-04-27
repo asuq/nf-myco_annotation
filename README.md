@@ -1,10 +1,10 @@
-# nf-myco_annotation
+# nf-annotation
 
 [![Nextflow](https://img.shields.io/badge/version-25.04.8-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
 
-`nf-myco_annotation` is a Nextflow DSL2 pipeline for cohort-scale genome
+`nf-annotation` is a Nextflow DSL2 pipeline for cohort-scale genome
 annotation, QC, taxonomy expansion, and ANI-based reporting.
 
 The implemented workflow validates the input manifest and metadata, stages
@@ -317,7 +317,7 @@ Large OIST cohort run with the opt-in storage overrides:
 ```bash
 nextflow run . -profile oist \
   -c conf/oist_20k_storage.config \
-  -work-dir /flash/path/to/work_nf_myco_annotation_20k \
+  -work-dir /flash/path/to/work_nf_annotation_20k \
   --sample_csv samples.csv \
   --metadata metadata.tsv \
   --taxdump /path/to/pinned-taxdump \
