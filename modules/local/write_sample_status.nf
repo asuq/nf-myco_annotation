@@ -82,7 +82,7 @@ process WRITE_SAMPLE_STATUS {
         'gcode_status',
         'gcode',
         'low_quality',
-        *((busco_lineages as List<String>).collect { "busco_${it}_status" }),
+    ] + (busco_lineages as List<String>).collect { "busco_${it}_status" } + [
         'codetta_status',
         'prokka_status',
         'ccfinder_status',
@@ -93,29 +93,22 @@ process WRITE_SAMPLE_STATUS {
         'warnings',
         'notes',
     ]
+    def sampleStatusStubValues = [
+        accession: 'sample_a',
+        internal_id: 'sample_a',
+        is_new: 'false',
+        gcode: '4',
+        low_quality: 'false',
+        ani_included: 'true',
+        ani_exclusion_reason: '',
+        warnings: 'stub_warning',
+        notes: 'stub note',
+    ]
     def sampleStatusRow = sampleStatusColumns.collect { column ->
-        switch (column) {
-            case 'accession':
-                return 'sample_a'
-            case 'internal_id':
-                return 'sample_a'
-            case 'is_new':
-                return 'false'
-            case 'gcode':
-                return '4'
-            case 'low_quality':
-                return 'false'
-            case 'ani_included':
-                return 'true'
-            case 'ani_exclusion_reason':
-                return ''
-            case 'warnings':
-                return 'stub_warning'
-            case 'notes':
-                return 'stub note'
-            default:
-                return column.endsWith('_status') ? 'done' : ''
+        if (sampleStatusStubValues.containsKey(column)) {
+            return sampleStatusStubValues[column]
         }
+        return column.endsWith('_status') ? 'done' : ''
     }.join('\t')
     """
     cat <<'EOF' > sample_status.tsv

@@ -59,7 +59,7 @@ EOF
         'gcode_status',
         'gcode',
         'low_quality',
-        *((busco_lineages as List<String>).collect { "busco_${it}_status" }),
+    ] + (busco_lineages as List<String>).collect { "busco_${it}_status" } + [
         'codetta_status',
         'prokka_status',
         'ccfinder_status',
@@ -70,28 +70,22 @@ EOF
         'warnings',
         'notes',
     ]
+    def sampleStatusStubValues = [
+        accession: 'TEST_ACC',
+        internal_id: 'TEST_ACC',
+        is_new: 'false',
+        validation_status: 'done',
+        warnings: 'stub_warning',
+        notes: 'stub warning',
+        gcode: 'NA',
+        low_quality: 'NA',
+        ani_included: 'na',
+    ]
     def sampleStatusRow = sampleStatusColumns.collect { column ->
-        switch (column) {
-            case 'accession':
-                return 'TEST_ACC'
-            case 'internal_id':
-                return 'TEST_ACC'
-            case 'is_new':
-                return 'false'
-            case 'validation_status':
-                return 'done'
-            case 'warnings':
-                return 'stub_warning'
-            case 'notes':
-                return 'stub warning'
-            case 'gcode':
-            case 'low_quality':
-                return 'NA'
-            case 'ani_included':
-                return 'na'
-            default:
-                return column.endsWith('_status') ? 'na' : ''
+        if (sampleStatusStubValues.containsKey(column)) {
+            return sampleStatusStubValues[column]
         }
+        return column.endsWith('_status') ? 'na' : ''
     }.join('\t')
     """cat <<'EOF' > validated_samples.tsv
 accession	is_new	assembly_level	genome_fasta	internal_id

@@ -433,8 +433,8 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         ):
             self.assertIn("cache 'deep'", module_text)
 
-        self.assertIn("import java.nio.file.Path", input_staging_text)
-        self.assertIn("Path.of(row.genome_fasta).toRealPath()", input_staging_text)
+        self.assertNotIn("import java.nio.file.Path", input_staging_text)
+        self.assertIn("java.nio.file.Path.of(row.genome_fasta).toRealPath()", input_staging_text)
         self.assertIn("finalOutputsCollectDir = file(", final_outputs_text)
         self.assertIn("workflow.sessionId", final_outputs_text)
         self.assertIn("storeDir: finalOutputsCollectDir", final_outputs_text)

@@ -88,7 +88,7 @@ process BUILD_MASTER_TABLE {
         'Codetta_NCBI_Table_Candidates',
         'Low_quality',
         '16S',
-        *((busco_lineages as List<String>).collect { "BUSCO_${it}" }),
+    ] + (busco_lineages as List<String>).collect { "BUSCO_${it}" } + [
         'CRISPRS',
         'SPACERS_SUM',
         'CRISPR_FRAC',
@@ -97,41 +97,29 @@ process BUILD_MASTER_TABLE {
         'ANI_to_Representative',
         'Score',
     ]
+    def appendStubValues = [
+        is_new: 'false',
+        Gcode: '4',
+        GC_Content: '50',
+        Codetta_Genetic_Code: 'FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG',
+        Codetta_NCBI_Table_Candidates: '1;11',
+        Low_quality: 'false',
+        '16S': 'Yes',
+        CRISPRS: '2',
+        SPACERS_SUM: '7',
+        CRISPR_FRAC: '0.1',
+        Cluster_ID: 'cluster_1',
+        Is_Representative: 'yes',
+        ANI_to_Representative: '100',
+        Score: '0.95',
+    ]
     def appendRow = appendColumns.collect { column ->
-        switch (column) {
-            case 'is_new':
-                return 'false'
-            case 'Gcode':
-                return '4'
-            case 'GC_Content':
-                return '50'
-            case 'Codetta_Genetic_Code':
-                return 'FFLLSSSSYY??CCWWLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG'
-            case 'Codetta_NCBI_Table_Candidates':
-                return '1;11'
-            case 'Low_quality':
-                return 'false'
-            case '16S':
-                return 'Yes'
-            case 'CRISPRS':
-                return '2'
-            case 'SPACERS_SUM':
-                return '7'
-            case 'CRISPR_FRAC':
-                return '0.1'
-            case 'Cluster_ID':
-                return 'cluster_1'
-            case 'Is_Representative':
-                return 'yes'
-            case 'ANI_to_Representative':
-                return '100'
-            case 'Score':
-                return '0.95'
-            default:
-                return column.startsWith('BUSCO_')
-                    ? 'C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200'
-                    : 'NA'
+        if (appendStubValues.containsKey(column)) {
+            return appendStubValues[column]
         }
+        return column.startsWith('BUSCO_')
+            ? 'C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200'
+            : 'NA'
     }.join('\t')
     """
     metadata_header="\$(head -n 1 "${metadata}")"
