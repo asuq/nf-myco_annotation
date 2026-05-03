@@ -218,24 +218,17 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         """Keep shared helper processes on the single Python helper image."""
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
-        self.assertIn(
-            "params.standardMaxRetries = { Math.max((params.task_attempts as int) - 1, 0) }",
-            config_text,
-        )
-        self.assertIn(
-            "def retryThenFinish = { retries ->\n"
-            "    return {\n"
-            "        final resolvedRetries = retries instanceof Closure ? retries() : retries\n"
-            "        task.attempt <= resolvedRetries ? 'retry' : 'finish'\n"
-            "    }\n"
-            "}",
-            config_text,
-        )
+        self.assertNotIn("params.standardMaxRetries", config_text)
+        self.assertNotIn("def retryThenFinish", config_text)
         self.assertNotIn("soft_fail_attempts", config_text)
         self.assertNotIn("errorStrategy = 'retry'", config_text)
-        self.assertIn("errorStrategy = retryThenFinish(params.standardMaxRetries)", config_text)
+        self.assertIn("errorStrategy = {", config_text)
         self.assertIn(
-            "maxRetries = { params.standardMaxRetries instanceof Closure ? params.standardMaxRetries() : params.standardMaxRetries }",
+            "task.attempt <= Math.max((params.task_attempts as int) - 1, 0)",
+            config_text,
+        )
+        self.assertIn(
+            "maxRetries = { Math.max((params.task_attempts as int) - 1, 0) }",
             config_text,
         )
         self.assertIn("withName: CLUSTER_ANI {\n        container = params.python_container", config_text)
@@ -255,20 +248,23 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         root_config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
         config_text = BASE_CONFIG.read_text(encoding="utf-8")
 
+        self.assertNotIn("params.dbDownloadMaxRetries", config_text)
         self.assertIn(
-            "params.dbDownloadMaxRetries = { Math.max((params.db_download_attempts as int) - 1, 0) }",
+            "task.attempt <= Math.max((params.db_download_attempts as int) - 1, 0)",
             config_text,
         )
         self.assertIn(
-            "withName: DOWNLOAD_BUSCO_DATASET {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.busco_container",
+            "maxRetries = { Math.max((params.db_download_attempts as int) - 1, 0) }",
             config_text,
         )
+        self.assertIn("withName: DOWNLOAD_BUSCO_DATASET {\n        errorStrategy = {", config_text)
         self.assertIn(
-            "withLabel: prep_taxdump_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.runtime_db_helper_container",
+            "withName: DOWNLOAD_BUSCO_DATASET {\n        errorStrategy = {\n            task.attempt <= Math.max((params.db_download_attempts as int) - 1, 0)",
             config_text,
         )
+        self.assertIn("withLabel: prep_taxdump_database {\n        errorStrategy = {", config_text)
         self.assertIn(
-            "withLabel: prep_codetta_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.runtime_db_helper_container",
+            "withLabel: prep_codetta_database {\n        errorStrategy = {",
             config_text,
         )
         self.assertIn(
@@ -283,15 +279,15 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.2", config_text)
         self.assertNotIn("quay.io/asuq1617/nf-myco_db:0.2", root_config_text)
         self.assertIn(
-            "withLabel: download_checkm2_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.checkm2_container",
+            "withLabel: download_checkm2_database {\n        errorStrategy = {",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_busco_databases {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.busco_container",
+            "withLabel: download_busco_databases {\n        errorStrategy = {",
             config_text,
         )
         self.assertIn(
-            "withLabel: download_eggnog_database {\n        errorStrategy = retryThenFinish(params.dbDownloadMaxRetries)\n        maxRetries = { params.dbDownloadMaxRetries instanceof Closure ? params.dbDownloadMaxRetries() : params.dbDownloadMaxRetries }\n        container = params.eggnog_container",
+            "withLabel: download_eggnog_database {\n        errorStrategy = {",
             config_text,
         )
         self.assertNotIn("withName: PREP_TAXDUMP_DATABASE", config_text)
@@ -325,7 +321,8 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         """Keep SLURM runtime profiles on the shared retry-then-finish policy."""
         slurm_text = SLURM_CONFIG.read_text(encoding="utf-8")
 
-        self.assertIn("process.clusterOptions = buildSlurmClusterOptions()", slurm_text)
+        self.assertNotIn("def buildSlurmClusterOptions", slurm_text)
+        self.assertIn("process.clusterOptions = {", slurm_text)
         self.assertIn("params.slurm_cluster_options instanceof Boolean", slurm_text)
         self.assertIn("Use --slurm_qos 2h or --slurm_cluster_options='--qos=2h'.", slurm_text)
         self.assertIn('params.slurm_qos ? "--qos=${params.slurm_qos}" : null', slurm_text)
