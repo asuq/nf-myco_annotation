@@ -326,13 +326,18 @@ nextflow run . -profile oist \
   --busco_db /path/to/busco \
   --eggnog_db /path/to/eggnog-db \
   --singularity_cache_dir /path/to/singularity-cache \
-  --outdir results
+  --outdir /nfs/path/to/results
 ```
 
-To resume that run safely, reuse the same launch directory, `-work-dir`, and
-`--outdir`, then append `-resume`. Do not enable `cleanup = true`, do not
-delete `.nextflow/cache`, and do not purge the shared `/flash` work tree
-between runs.
+For OIST storage, placing `-work-dir` on Lustre, such as `/flash`, while
+placing `--outdir` on NFS can reduce retained Lustre usage because final
+published outputs land on NFS. Active Nextflow work still uses the Lustre work
+directory during execution.
+
+To resume that run safely, reuse the same launch directory, Lustre-backed
+`-work-dir`, and NFS-backed `--outdir`, then append `-resume`. Do not enable
+`cleanup = true`, do not delete `.nextflow/cache`, and do not purge the shared
+`/flash` work tree between runs.
 
 Main-workflow BUSCO dataset download variant:
 
