@@ -97,11 +97,11 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             result.stdout,
         )
         self.assertIn(
-            "--source-catalog /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/tables/medium/source_catalog.tsv",
+            f"--source-catalog {ROOT}/assets/tables/medium/source_catalog.tsv",
             result.stdout,
         )
         self.assertIn(
-            "--cohort-plan /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/tables/medium/cohort_plan.tsv",
+            f"--cohort-plan {ROOT}/assets/tables/medium/cohort_plan.tsv",
             result.stdout,
         )
 
@@ -226,11 +226,11 @@ class RunOistHpcMatrixScriptTestCase(unittest.TestCase):
             result.stdout,
         )
         self.assertIn(
-            "--cohort-plan /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/tables/medium/cohort_plan.tsv",
+            f"--cohort-plan {ROOT}/assets/tables/medium/cohort_plan.tsv",
             result.stdout,
         )
         self.assertIn(
-            "--source-catalog /Users/asuq/Documents/Lab/Coding/nf-myco_annotation/assets/tables/medium/source_catalog.tsv",
+            f"--source-catalog {ROOT}/assets/tables/medium/source_catalog.tsv",
             result.stdout,
         )
 
