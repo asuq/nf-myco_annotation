@@ -15,8 +15,8 @@ design freeze.
 
 The repository currently exposes two Nextflow DSL2 entrypoints.
 
-The declared minimum Nextflow version remains `>=25.04.8`; Nextflow `25.10.4`
-is also supported for current stable runs.
+The declared minimum Nextflow version is `>=26.04.0`, matching the strict
+syntax parser used by current stable Nextflow releases.
 
 ### `main.nf`
 

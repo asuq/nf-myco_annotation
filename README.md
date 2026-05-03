@@ -1,6 +1,6 @@
 # nf-annotation
 
-[![Nextflow](https://img.shields.io/badge/version-25.04.8-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)
+[![Nextflow](https://img.shields.io/badge/version-26.04.0-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
 
@@ -85,7 +85,7 @@ BUSCO, and eggNOG resources in place and writes
 
 ## Prerequisites
 
-- Nextflow `>= 25.04.8`
+- Nextflow `>= 26.04.0`
 - either Docker or Singularity for containerised runs
 - access to the configured tool images
 - a pinned taxdump directory

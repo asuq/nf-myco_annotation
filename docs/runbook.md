@@ -15,12 +15,12 @@ The pipeline requires:
 
 ## Nextflow version
 
-The pipeline keeps its declared minimum at Nextflow `>=25.04.8`. Nextflow
-`25.10.4` is also supported and can be selected explicitly on systems where
-multiple versions are available:
+The pipeline requires Nextflow `>=26.04.0`, matching the strict syntax parser
+used by current stable Nextflow releases. Select a v26 runtime explicitly on
+systems where multiple versions are available:
 
 ```bash
-NXF_VER=25.10.4 nextflow run . -profile test -stub-run
+NXF_VER=26.04.0 nextflow run . -profile test -stub-run
 ```
 
 ## BUSCO lineage datasets
