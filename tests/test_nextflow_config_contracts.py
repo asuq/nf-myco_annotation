@@ -16,6 +16,7 @@ SLURM_CONFIG = ROOT / "conf" / "slurm.config"
 OIST_CONFIG = ROOT / "conf" / "oist.config"
 OIST_20K_STORAGE_CONFIG = ROOT / "conf" / "oist_20k_storage.config"
 GWDG_CONFIG = ROOT / "conf" / "gwdg.config"
+MARMIC_CONFIG = ROOT / "conf" / "marmic.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
 DEBUG_CONFIG = ROOT / "conf" / "debug.config"
 BASE_CONFIG = ROOT / "conf" / "base.config"
@@ -49,6 +50,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("includeConfig 'conf/debug.config'", config_text)
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
         self.assertIn("includeConfig 'conf/gwdg.config'", config_text)
+        self.assertIn("includeConfig 'conf/marmic.config'", config_text)
         self.assertNotIn("padloc_db = null", config_text)
         self.assertNotIn("padloc_db_label = null", config_text)
         self.assertNotIn("slurm_account", config_text)
@@ -79,80 +81,39 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertNotIn("params.slurm_account", slurm_text)
         self.assertNotIn("apptainer.enabled = false", docker_text)
 
-    def test_oist_profile_is_available_as_one_standalone_runtime(self) -> None:
-        """Keep the OIST profile self-contained for SLURM plus Singularity runs."""
+    def test_oist_profile_layers_project_overrides_on_nf_helper(self) -> None:
+        """Keep OIST site defaults shared while preserving annotation limits."""
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
         oist_text = OIST_CONFIG.read_text(encoding="utf-8")
+        shared_oist = ROOT / "external" / "nf-helper" / "conf" / "sites" / "oist.config"
 
         self.assertTrue(OIST_CONFIG.is_file())
+        self.assertTrue(shared_oist.is_file())
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
+        self.assertIn('includeConfig "${projectDir}/external/nf-helper/conf/sites/oist.config"', oist_text)
         self.assertIn("profiles {", oist_text)
         self.assertIn("oist {", oist_text)
-        self.assertIn("process.executor = 'slurm'", oist_text)
-        self.assertIn("executor.queueSize = params.executor_queue_size", oist_text)
-        self.assertIn("process.queue = params.slurm_queue ?: 'short'", oist_text)
-        self.assertIn("process.clusterOptions = buildSlurmClusterOptions()", oist_text)
-        self.assertIn("params.slurm_cluster_options instanceof Boolean", oist_text)
-        self.assertIn("Use --slurm_qos 2h or --slurm_cluster_options='--qos=2h'.", oist_text)
-        self.assertIn('params.slurm_qos ? "--qos=${params.slurm_qos}" : null', oist_text)
-        self.assertIn("params.slurm_cluster_options ?: null", oist_text)
-        self.assertIn("singularity.enabled = true", oist_text)
-        self.assertIn("singularity.autoMounts = true", oist_text)
-        self.assertIn("singularity.cacheDir = params.singularity_cache_dir ?: null", oist_text)
-        self.assertIn("docker.enabled = false", oist_text)
-        self.assertIn("process.containerOptions = params.singularity_run_options ?: ''", oist_text)
-        self.assertIn("process.resourceLimits = [", oist_text)
+        self.assertIn("max_memory = 500.GB", oist_text)
+        self.assertIn("max_time = 2.h", oist_text)
+        self.assertIn("queue = params.slurm_queue ?: 'short'", oist_text)
+        self.assertIn("containerOptions = params.singularity_run_options ?: ''", oist_text)
         self.assertIn("withLabel: process_medium", oist_text)
         self.assertIn("withLabel: process_high", oist_text)
-        self.assertNotIn("errorStrategy", oist_text)
-        self.assertNotIn("params.slurm_account", oist_text)
+        self.assertNotIn("def buildSlurmClusterOptions", oist_text)
         self.assertNotIn("beforeScript", oist_text)
 
-    def test_gwdg_profile_is_available_as_one_standalone_runtime(self) -> None:
-        """Keep the GWDG profile self-contained for SCC SLURM plus Singularity runs."""
+    def test_gwdg_profile_layers_project_overrides_on_nf_helper(self) -> None:
+        """Keep GWDG site defaults shared while preserving annotation selectors."""
         config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
         gwdg_text = GWDG_CONFIG.read_text(encoding="utf-8")
+        shared_gwdg = ROOT / "external" / "nf-helper" / "conf" / "sites" / "gwdg.config"
 
         self.assertTrue(GWDG_CONFIG.is_file())
+        self.assertTrue(shared_gwdg.is_file())
         self.assertIn("includeConfig 'conf/gwdg.config'", config_text)
+        self.assertIn('includeConfig "${projectDir}/external/nf-helper/conf/sites/gwdg.config"', gwdg_text)
         self.assertIn("profiles {", gwdg_text)
         self.assertIn("gwdg {", gwdg_text)
-        self.assertIn("process.executor = 'slurm'", gwdg_text)
-        self.assertIn("executor.queueSize = params.executor_queue_size", gwdg_text)
-        self.assertIn("process.queue = params.slurm_queue ?: 'scc-cpu'", gwdg_text)
-        self.assertIn("process.clusterOptions = buildSlurmClusterOptions(['--export=ALL', '-C ssd'])", gwdg_text)
-        self.assertIn("params.slurm_cluster_options instanceof Boolean", gwdg_text)
-        self.assertIn("Use --slurm_qos 2h or --slurm_cluster_options='--qos=2h'.", gwdg_text)
-        self.assertIn('params.slurm_qos ? "--qos=${params.slurm_qos}" : null', gwdg_text)
-        self.assertIn("params.slurm_cluster_options ?: null", gwdg_text)
-        self.assertIn("singularity.enabled = true", gwdg_text)
-        self.assertIn("singularity.autoMounts = true", gwdg_text)
-        self.assertIn(
-            "singularity.cacheDir = params.singularity_cache_dir ?: '/projects/scc/MPG/MBMM/scc_mbmm_harder_/dir.project/Softwares/nfx_singularity_cache'",
-            gwdg_text,
-        )
-        self.assertIn("singularity.pullTimeout = '4h'", gwdg_text)
-        self.assertIn("docker.enabled = false", gwdg_text)
-        self.assertIn("process.containerOptions = params.singularity_run_options ?: ''", gwdg_text)
-        self.assertIn("process.resourceLimits = [", gwdg_text)
-        self.assertIn("process.scratch = '$LOCAL_TMPDIR'", gwdg_text)
-        self.assertIn("process.stageOutMode = 'copy'", gwdg_text)
-        self.assertIn("process.beforeScript = {", gwdg_text)
-        self.assertIn("task.attempt == 1", gwdg_text)
-        self.assertIn(
-            '${NXF_SCRATCH:-${SHM_TMPDIR:-${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}}}',
-            gwdg_text,
-        )
-        self.assertIn(
-            '${NXF_SCRATCH:-${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}}',
-            gwdg_text,
-        )
-        self.assertIn('${SHM_TMPDIR:-${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}}', gwdg_text)
-        self.assertIn('${LOCAL_TMPDIR:-${SHARED_SSD_TMPDIR:-${SHARED_TMPDIR:-/tmp}}}', gwdg_text)
-        self.assertNotIn('\\${${name}:-}', gwdg_text)
-        self.assertNotIn('\\${${name}}', gwdg_text)
-        self.assertIn('export APPTAINERENV_TMPDIR="${temp_root}"', gwdg_text)
-        self.assertIn('export SINGULARITYENV_TMPDIR="${temp_root}"', gwdg_text)
         self.assertIn("withLabel: process_medium", gwdg_text)
         self.assertIn("withLabel: process_high", gwdg_text)
         self.assertIn("cpus = { Math.min(16 * task.attempt, params.max_cpus as int) }", gwdg_text)
@@ -161,22 +122,26 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("cpus = { Math.min(64 * task.attempt, params.max_cpus as int) }", gwdg_text)
         self.assertIn("memory = { [200.GB * task.attempt, params.max_memory].min() }", gwdg_text)
         self.assertIn("time = { [1.d * task.attempt, params.max_time].min() }", gwdg_text)
-        self.assertIn(
-            "withName: PROKKA {\n"
-            "                container = params.prokka_container\n"
-            "                stageInMode = 'copy'",
-            gwdg_text,
-        )
-        self.assertIn(
-            "withName: CALCULATE_ASSEMBLY_STATS {\n"
-            "                container = params.seqtk_container\n"
-            "                cpus = { Math.min(4 * task.attempt, params.max_cpus as int) }\n"
-            "                memory = { [8.GB * task.attempt, params.max_memory].min() }\n"
-            "                time = { [4.h * task.attempt, params.max_time].min() }\n"
-            "                stageInMode = 'copy'",
-            gwdg_text,
-        )
+        self.assertIn("withName: PROKKA", gwdg_text)
+        self.assertIn("container = params.prokka_container", gwdg_text)
+        self.assertIn("withName: CALCULATE_ASSEMBLY_STATS", gwdg_text)
+        self.assertIn("container = params.seqtk_container", gwdg_text)
+        self.assertIn("stageInMode = 'copy'", gwdg_text)
+        self.assertNotIn("def buildSlurmClusterOptions", gwdg_text)
         self.assertNotIn("params.slurm_account", gwdg_text)
+
+    def test_marmic_profile_comes_from_nf_helper(self) -> None:
+        """Expose Marmic as a reusable shared site profile."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+        marmic_text = MARMIC_CONFIG.read_text(encoding="utf-8")
+        shared_marmic = ROOT / "external" / "nf-helper" / "conf" / "sites" / "marmic.config"
+
+        self.assertTrue(MARMIC_CONFIG.is_file())
+        self.assertTrue(shared_marmic.is_file())
+        self.assertIn("includeConfig 'conf/marmic.config'", config_text)
+        self.assertIn('includeConfig "${projectDir}/external/nf-helper/conf/sites/marmic.config"', marmic_text)
+        self.assertNotIn("assembly", marmic_text)
+        self.assertNotIn("trace {", marmic_text)
 
     def test_oist_20k_storage_override_is_opt_in_and_resume_safe(self) -> None:
         """Keep the large-cohort OIST override separate from the default tracked profiles."""
