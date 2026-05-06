@@ -27,6 +27,7 @@ workflow FINAL_OUTPUTS {
     ani_matrix
     busco_lineages
     primary_busco_column
+    ani_allow_incomplete_16s
     version_files
     nextflow_version
     pipeline_version
@@ -266,6 +267,7 @@ workflow FINAL_OUTPUTS {
         SELECT_ANI_REPRESENTATIVES.out.ani_summary,
         assembly_stats,
         primary_busco_column,
+        ani_allow_incomplete_16s,
     )
 
     final_versions = SELECT_ANI_REPRESENTATIVES.out.versions

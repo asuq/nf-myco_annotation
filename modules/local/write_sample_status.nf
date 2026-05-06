@@ -30,6 +30,7 @@ process WRITE_SAMPLE_STATUS {
     path ani_summary
     path assembly_stats
     val primary_busco_column
+    val ani_allow_incomplete_16s
 
     output:
     path 'sample_status.tsv', emit: sample_status
@@ -41,6 +42,7 @@ process WRITE_SAMPLE_STATUS {
     def lineageArgs = (busco_lineages as List<String>).collect {
         "--busco-lineage \"${it}\""
     }.join(' \\\n        ')
+    def allowIncomplete16sArg = ani_allow_incomplete_16s ? '--ani-allow-incomplete-16s' : ''
     """
     script_path="\$(command -v build_sample_status.py)"
     python3 "\${script_path}" \
@@ -60,6 +62,7 @@ process WRITE_SAMPLE_STATUS {
         --ani "${ani_summary}" \
         --assembly-stats "${assembly_stats}" \
         --primary-busco-column "${primary_busco_column}" \
+        ${allowIncomplete16sArg} \
         --output sample_status.tsv
 
     cat <<EOF > versions.yml

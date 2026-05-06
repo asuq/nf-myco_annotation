@@ -121,6 +121,8 @@ Useful defaults from the implementation:
 - `--busco_lineages` defaults to `bacillota_odb12,mycoplasmatota_odb12`
 - `--gcode_rule` defaults to `strict_delta`
 - `--ani_threshold` defaults to `0.95`
+- `--ani_allow_incomplete_16s` defaults to off; when supplied, `16S = No`
+  and `16S = partial` samples may enter ANI if all other ANI gates pass
 - `--outdir` defaults to `results`
 
 ## Preparing sample_csv

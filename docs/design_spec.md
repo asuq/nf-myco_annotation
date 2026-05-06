@@ -176,6 +176,9 @@ Low_quality = (chosen_completeness - 5 * chosen_contamination) <= 50
   - genomes without **complete** 16S (`16S != Yes`);
   - atypical genomes.
 - Exception: genomes atypical **only because of** `unverified source organism` must still be included in ANI clustering.
+- Optional CLI exception: `--ani_allow_incomplete_16s` relaxes only the 16S
+  gate so `16S = No` and `16S = partial` samples may be included; `16S = NA`
+  remains excluded.
 - The BUSCO lineage prioritised for ANI representative scoring is the **first lineage in the configured list**.
 
 ### 2.14 Final reporting policy
@@ -837,6 +840,9 @@ A genome is eligible only if all of the following are true:
 - `16S == Yes`
 - `Gcode` is `4` or `11`
 - not atypical, **or** atypical only because of `unverified source organism`
+
+When `params.ani_allow_incomplete_16s` is true, `16S = No` and
+`16S = partial` pass the 16S gate. `16S = NA` remains excluded.
 
 For excluded genomes:
 

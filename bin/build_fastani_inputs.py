@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from ani_common import derive_sixteen_s_ani_exclusion_reason
 from atypical_warnings import classify_atypical_warnings
 from build_master_table import (
     choose_assembly_level,
@@ -102,6 +103,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--assembly-stats",
         type=Path,
         help="Optional in-house assembly stats TSV keyed by accession.",
+    )
+    parser.add_argument(
+        "--ani-allow-incomplete-16s",
+        action="store_true",
+        help="Allow 16S=No and 16S=partial samples to pass the ANI 16S gate.",
     )
     parser.add_argument(
         "--outdir",
@@ -292,6 +298,7 @@ def run_build_fastani_inputs(
     primary_busco_column: str,
     assembly_stats: Path | None,
     outdir: Path,
+    ani_allow_incomplete_16s: bool = False,
 ) -> None:
     """Build FastANI path lists, ANI metadata, and ANI exclusion rows."""
     validated_header, validated_rows = read_table(validated_samples, delimiter="\t")
@@ -344,13 +351,12 @@ def run_build_fastani_inputs(
         elif low_quality == "NA" and gcode in {"4", "11"}:
             reasons.append("missing_low_quality")
 
-        sixteen_s_value = sixteen_s_row.get("16S", MISSING_VALUE) or MISSING_VALUE
-        if sixteen_s_value == "partial":
-            reasons.append("partial_16s")
-        elif sixteen_s_value == "No":
-            reasons.append("no_16s")
-        elif sixteen_s_value != "Yes":
-            reasons.append("16s_na")
+        sixteen_s_reason = derive_sixteen_s_ani_exclusion_reason(
+            sixteen_s_row.get("16S", MISSING_VALUE) or MISSING_VALUE,
+            allow_incomplete=ani_allow_incomplete_16s,
+        )
+        if sixteen_s_reason is not None:
+            reasons.append(sixteen_s_reason)
 
         atypical_value = (
             detect_metadata_value(metadata_row, "Atypical_Warnings")
@@ -463,6 +469,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             primary_busco_column=args.primary_busco_column,
             assembly_stats=args.assembly_stats,
             outdir=args.outdir,
+            ani_allow_incomplete_16s=args.ani_allow_incomplete_16s,
         )
     except (FastAniInputError, FileNotFoundError, OSError) as error:
         LOGGER.error(str(error))

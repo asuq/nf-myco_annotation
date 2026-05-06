@@ -39,6 +39,11 @@ ASSEMBLY_RANK: dict[str, int] = {
     "Chromosome": 2,
     "Complete Genome": 3,
 }
+SIXTEEN_S_STATUS_MAP: dict[str, str] = {
+    "yes": "Yes",
+    "no": "No",
+    "partial": "partial",
+}
 
 
 class AniInputError(RuntimeError):
@@ -74,6 +79,30 @@ def normalize_header(name: str) -> str:
 def is_missing_value(value: Any) -> bool:
     """Return True when a scalar should be treated as missing."""
     return str(value).strip().upper() in {"", "NA"}
+
+
+def normalise_sixteen_s_status(value: Any) -> str:
+    """Normalise one 16S status value to the public reporting vocabulary."""
+    text = str(value or "").strip()
+    if is_missing_value(text):
+        return "NA"
+    return SIXTEEN_S_STATUS_MAP.get(text.casefold(), text)
+
+
+def derive_sixteen_s_ani_exclusion_reason(
+    value: Any,
+    *,
+    allow_incomplete: bool = False,
+) -> str | None:
+    """Return the ANI exclusion reason for one 16S status, if any."""
+    status = normalise_sixteen_s_status(value)
+    if status == "Yes":
+        return None
+    if status == "partial":
+        return None if allow_incomplete else "partial_16s"
+    if status == "No":
+        return None if allow_incomplete else "no_16s"
+    return "16s_na"
 
 
 def try_parse_int_like(value: Any) -> int | None:

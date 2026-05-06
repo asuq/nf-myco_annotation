@@ -29,6 +29,22 @@ workflow {
         }
         return lineages
     }
+    def normaliseBooleanParam = { rawValue, paramName ->
+        if (rawValue instanceof Boolean) {
+            return rawValue
+        }
+        if (rawValue == null) {
+            return false
+        }
+        def token = rawValue.toString().trim().toLowerCase()
+        if (token in ['true', 't', 'yes', 'y', '1']) {
+            return true
+        }
+        if (token in ['false', 'f', 'no', 'n', '0']) {
+            return false
+        }
+        error "params.${paramName} must be boolean-like: true/false, yes/no, or 1/0."
+    }
 
     if (!params.sample_csv) {
         error "params.sample_csv is required."
@@ -50,6 +66,10 @@ workflow {
     }
     buscoLineagesList = normaliseBuscoLineages.call(params.busco_lineages)
     primaryBuscoColumn = (params.busco_primary_column ?: "BUSCO_${buscoLineagesList[0]}").toString()
+    aniAllowIncomplete16s = normaliseBooleanParam.call(
+        params.ani_allow_incomplete_16s,
+        'ani_allow_incomplete_16s',
+    )
 
     log.warn 'PADLOC and eggNOG outputs are retained in sample folders but are intentionally excluded from master_table.tsv.'
 
@@ -88,6 +108,7 @@ workflow {
         PER_SAMPLE_QC.out.sixteen_s_summaries,
         PER_SAMPLE_QC.out.busco_summaries,
         Channel.value(primaryBuscoColumn),
+        Channel.value(aniAllowIncomplete16s),
     )
     FINAL_OUTPUTS(
         INPUT_VALIDATION_AND_STAGING.out.validated_samples,
@@ -108,6 +129,7 @@ workflow {
         COHORT_ANI.out.fastani_matrix,
         Channel.value(buscoLineagesList),
         Channel.value(primaryBuscoColumn),
+        Channel.value(aniAllowIncomplete16s),
         INPUT_VALIDATION_AND_STAGING.out.versions
             .mix(BUSCO_DATASET_PREP.out.versions)
             .mix(COHORT_TAXONOMY.out.versions)

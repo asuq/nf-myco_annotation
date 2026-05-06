@@ -27,6 +27,7 @@ process BUILD_FASTANI_INPUTS {
     path busco_tables, name: 'busco_tables/busco_table??.tsv'
     path assembly_stats
     val primary_busco_column
+    val ani_allow_incomplete_16s
 
     output:
     path 'fastani_inputs', emit: fastani_inputs
@@ -38,6 +39,7 @@ process BUILD_FASTANI_INPUTS {
     script:
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
+    def allowIncomplete16sArg = ani_allow_incomplete_16s ? '--ani-allow-incomplete-16s' : ''
     """build_fastani_inputs.py \
     --validated-samples "${validated_samples}" \
     --metadata "${metadata}" \
@@ -47,6 +49,7 @@ process BUILD_FASTANI_INPUTS {
     ${buscoArgs} \
     --primary-busco-column "${primary_busco_column}" \
     --assembly-stats "${assembly_stats}" \
+    ${allowIncomplete16sArg} \
     --outdir .
 
     cat <<EOF > versions.yml

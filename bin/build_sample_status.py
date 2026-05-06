@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from ani_common import derive_sixteen_s_ani_exclusion_reason
 from atypical_warnings import classify_atypical_warnings
 import build_master_table as table_helpers
 import master_table_contract
@@ -129,6 +130,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--primary-busco-column",
         type=str,
         help="BUSCO_<lineage> column used for ANI eligibility decisions.",
+    )
+    parser.add_argument(
+        "--ani-allow-incomplete-16s",
+        action="store_true",
+        help="Allow 16S=No and 16S=partial samples to pass the ANI 16S gate.",
     )
     parser.add_argument(
         "--busco-lineage",
@@ -451,6 +457,7 @@ def derive_ani_decision(
     ani_index: dict[str, dict[str, str]],
     ani_requested: bool,
     primary_busco_value: str,
+    ani_allow_incomplete_16s: bool = False,
 ) -> tuple[str, str]:
     """Return ANI inclusion status and exclusion reasons for one sample."""
     if not ani_requested:
@@ -467,12 +474,12 @@ def derive_ani_decision(
     elif low_quality_value == "NA" and gcode_value in {"4", "11"}:
         exclusion_reasons.append("missing_low_quality")
 
-    if sixteen_s_value == "partial":
-        exclusion_reasons.append("partial_16s")
-    elif sixteen_s_value == "No":
-        exclusion_reasons.append("no_16s")
-    elif sixteen_s_value == "NA":
-        exclusion_reasons.append("16s_na")
+    sixteen_s_reason = derive_sixteen_s_ani_exclusion_reason(
+        sixteen_s_value,
+        allow_incomplete=ani_allow_incomplete_16s,
+    )
+    if sixteen_s_reason is not None:
+        exclusion_reasons.append(sixteen_s_reason)
 
     if is_atypical and not is_exception:
         exclusion_reasons.append("atypical")
@@ -646,6 +653,7 @@ def build_status_row(
     ani_index: dict[str, dict[str, str]],
     ani_requested: bool,
     primary_busco_column: str | None,
+    ani_allow_incomplete_16s: bool,
 ) -> dict[str, str]:
     """Build one final status row by overlaying derived statuses on the seed row."""
     row = {column: initial_row.get(column, "") for column in output_columns}
@@ -794,6 +802,7 @@ def build_status_row(
         ani_index=ani_index,
         ani_requested=ani_requested,
         primary_busco_value=primary_busco_value,
+        ani_allow_incomplete_16s=ani_allow_incomplete_16s,
     )
 
     row["warnings"] = table_helpers.join_tokens(warnings)
@@ -938,6 +947,7 @@ def run_build(args: argparse.Namespace) -> None:
                 ani_index=ani_index,
                 ani_requested=args.ani is not None,
                 primary_busco_column=args.primary_busco_column,
+                ani_allow_incomplete_16s=args.ani_allow_incomplete_16s,
             )
         )
 

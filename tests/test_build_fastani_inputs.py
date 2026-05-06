@@ -33,6 +33,56 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
+    def write_fastani_fixture(
+        self,
+        tmpdir: Path,
+        sixteen_s_statuses: dict[str, str],
+    ) -> tuple[dict[str, Path], dict[str, Path]]:
+        """Write a compact multi-sample ANI fixture and return input paths."""
+        staged_paths: dict[str, Path] = {}
+        validated_lines = ["accession\tis_new\tassembly_level\tgenome_fasta\tinternal_id"]
+        metadata_lines = [
+            "Accession\tOrganism_Name\tAssembly_Level\tN50\tScaffolds\tGenome_Size\tAtypical_Warnings"
+        ]
+        staged_manifest_lines = ["accession\tinternal_id\tstaged_filename"]
+        checkm2_lines = [
+            "accession\tCompleteness_gcode4\tCompleteness_gcode11\t"
+            "Contamination_gcode4\tContamination_gcode11\tGcode\tLow_quality"
+        ]
+        sixteen_s_lines = ["accession\t16S\tbest_16S_header\tbest_16S_length\twarnings"]
+        busco_lines = ["accession\tlineage\tBUSCO_bacillota_odb12\tbusco_status\twarnings"]
+
+        for offset, (accession, sixteen_s_status) in enumerate(sixteen_s_statuses.items(), start=1):
+            staged_path = self.write_text_file(tmpdir / f"{accession}.fasta", ">a\nACGT\n")
+            staged_paths[accession] = staged_path
+            validated_lines.append(f"{accession}\tfalse\tNA\t{staged_path}\t{accession}")
+            metadata_lines.append(
+                f"{accession}\tGenome {offset}\tScaffold\t50000\t2\t800000\tNA"
+            )
+            staged_manifest_lines.append(f"{accession}\t{accession}\t{accession}.fasta")
+            checkm2_lines.append(f"{accession}\tNA\t95\tNA\t1\t11\tfalse")
+            sixteen_s_lines.append(f"{accession}\t{sixteen_s_status}\th{offset}\t1500\t")
+            busco_lines.append(
+                f"{accession}\tbacillota_odb12\t"
+                "C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200\tdone\t"
+            )
+
+        files = {
+            "validated_samples": self.write_text_file(
+                tmpdir / "validated_samples.tsv",
+                "\n".join(validated_lines) + "\n",
+            ),
+            "metadata": self.write_text_file(tmpdir / "metadata.tsv", "\n".join(metadata_lines) + "\n"),
+            "staged_manifest": self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "\n".join(staged_manifest_lines) + "\n",
+            ),
+            "checkm2": self.write_text_file(tmpdir / "checkm2.tsv", "\n".join(checkm2_lines) + "\n"),
+            "sixteen_s": self.write_text_file(tmpdir / "16s.tsv", "\n".join(sixteen_s_lines) + "\n"),
+            "busco": self.write_text_file(tmpdir / "busco.tsv", "\n".join(busco_lines) + "\n"),
+        }
+        return files, staged_paths
+
     def test_builds_inputs_for_eligible_and_exception_samples(self) -> None:
         """Include valid samples and the locked atypical unverified-source exception."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
@@ -303,6 +353,104 @@ class BuildFastAniInputsTestCase(unittest.TestCase):
             )
             self.assertTrue((outdir / "fastani_inputs").is_dir())
             self.assertEqual(list((outdir / "fastani_inputs").iterdir()), [])
+
+    def test_default_excludes_no_and_partial_16s_samples(self) -> None:
+        """Keep the locked complete-16S ANI gate by default."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            files, _staged_paths = self.write_fastani_fixture(
+                tmpdir,
+                {
+                    "ACC_NO": "No",
+                    "ACC_PARTIAL": "partial",
+                },
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = build_fastani_inputs.main(
+                [
+                    "--validated-samples",
+                    str(files["validated_samples"]),
+                    "--metadata",
+                    str(files["metadata"]),
+                    "--staged-manifest",
+                    str(files["staged_manifest"]),
+                    "--checkm2",
+                    str(files["checkm2"]),
+                    "--16s-status",
+                    str(files["sixteen_s"]),
+                    "--busco",
+                    str(files["busco"]),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(read_tsv(outdir / "ani_metadata.tsv"), [])
+            exclusions = {row["accession"]: row for row in read_tsv(outdir / "ani_exclusions.tsv")}
+            self.assertEqual(exclusions["ACC_NO"]["ani_included"], "false")
+            self.assertEqual(exclusions["ACC_NO"]["ani_exclusion_reason"], "no_16s")
+            self.assertEqual(exclusions["ACC_PARTIAL"]["ani_included"], "false")
+            self.assertEqual(
+                exclusions["ACC_PARTIAL"]["ani_exclusion_reason"],
+                "partial_16s",
+            )
+
+    def test_flag_allows_no_and_partial_but_not_na_16s_samples(self) -> None:
+        """Allow incomplete 16S samples while keeping missing 16S status excluded."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            files, staged_paths = self.write_fastani_fixture(
+                tmpdir,
+                {
+                    "ACC_NO": "No",
+                    "ACC_PARTIAL": "partial",
+                    "ACC_NA": "NA",
+                },
+            )
+            outdir = tmpdir / "out"
+
+            exit_code = build_fastani_inputs.main(
+                [
+                    "--validated-samples",
+                    str(files["validated_samples"]),
+                    "--metadata",
+                    str(files["metadata"]),
+                    "--staged-manifest",
+                    str(files["staged_manifest"]),
+                    "--checkm2",
+                    str(files["checkm2"]),
+                    "--16s-status",
+                    str(files["sixteen_s"]),
+                    "--busco",
+                    str(files["busco"]),
+                    "--primary-busco-column",
+                    "BUSCO_bacillota_odb12",
+                    "--ani-allow-incomplete-16s",
+                    "--outdir",
+                    str(outdir),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            metadata_rows = read_tsv(outdir / "ani_metadata.tsv")
+            self.assertEqual([row["accession"] for row in metadata_rows], ["ACC_NO", "ACC_PARTIAL"])
+            self.assertTrue((outdir / "fastani_inputs" / "ACC_NO.fasta").samefile(staged_paths["ACC_NO"]))
+            self.assertTrue(
+                (outdir / "fastani_inputs" / "ACC_PARTIAL.fasta").samefile(
+                    staged_paths["ACC_PARTIAL"]
+                )
+            )
+            exclusions = {row["accession"]: row for row in read_tsv(outdir / "ani_exclusions.tsv")}
+            self.assertEqual(exclusions["ACC_NO"]["ani_included"], "true")
+            self.assertEqual(exclusions["ACC_NO"]["ani_exclusion_reason"], "")
+            self.assertEqual(exclusions["ACC_PARTIAL"]["ani_included"], "true")
+            self.assertEqual(exclusions["ACC_PARTIAL"]["ani_exclusion_reason"], "")
+            self.assertEqual(exclusions["ACC_NA"]["ani_included"], "false")
+            self.assertEqual(exclusions["ACC_NA"]["ani_exclusion_reason"], "16s_na")
 
     def test_uses_in_house_assembly_stats_when_metadata_metrics_are_missing(self) -> None:
         """Use computed stats for ANI eligibility and ANI metadata output."""

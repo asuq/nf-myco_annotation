@@ -88,6 +88,75 @@ class BuildSampleStatusTestCase(unittest.TestCase):
         row.update(overrides)
         return row
 
+    def make_ani_metrics(self) -> build_sample_status.EffectiveAssemblyMetrics:
+        """Build complete assembly metrics for direct ANI-decision tests."""
+        return build_sample_status.EffectiveAssemblyMetrics(
+            n50="50000",
+            scaffolds="2",
+            genome_size="800000",
+        )
+
+    def test_ani_decision_defaults_exclude_no_and_partial_16s(self) -> None:
+        """Exclude incomplete 16S samples from ANI by default."""
+        for sixteen_s_value, expected_reason in (
+            ("No", "no_16s"),
+            ("partial", "partial_16s"),
+        ):
+            with self.subTest(sixteen_s_value=sixteen_s_value):
+                included, reason = build_sample_status.derive_ani_decision(
+                    "ACC1",
+                    gcode_value="11",
+                    low_quality_value="false",
+                    sixteen_s_value=sixteen_s_value,
+                    assembly_level_value="Scaffold",
+                    metadata_row={"Atypical_Warnings": "NA"},
+                    assembly_metrics=self.make_ani_metrics(),
+                    ani_index={},
+                    ani_requested=True,
+                    primary_busco_value="C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+                )
+
+                self.assertEqual(included, "false")
+                self.assertEqual(reason, expected_reason)
+
+    def test_ani_decision_flag_allows_incomplete_but_not_na_16s(self) -> None:
+        """Allow No and partial 16S values while keeping NA excluded."""
+        for sixteen_s_value in ("No", "partial"):
+            with self.subTest(sixteen_s_value=sixteen_s_value):
+                included, reason = build_sample_status.derive_ani_decision(
+                    "ACC1",
+                    gcode_value="11",
+                    low_quality_value="false",
+                    sixteen_s_value=sixteen_s_value,
+                    assembly_level_value="Scaffold",
+                    metadata_row={"Atypical_Warnings": "NA"},
+                    assembly_metrics=self.make_ani_metrics(),
+                    ani_index={"ACC1": {}},
+                    ani_requested=True,
+                    primary_busco_value="C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+                    ani_allow_incomplete_16s=True,
+                )
+
+                self.assertEqual(included, "true")
+                self.assertEqual(reason, "")
+
+        included, reason = build_sample_status.derive_ani_decision(
+            "ACC1",
+            gcode_value="11",
+            low_quality_value="false",
+            sixteen_s_value="NA",
+            assembly_level_value="Scaffold",
+            metadata_row={"Atypical_Warnings": "NA"},
+            assembly_metrics=self.make_ani_metrics(),
+            ani_index={},
+            ani_requested=True,
+            primary_busco_value="C:98.0%[S:98.0%,D:0.0%],F:1.0%,M:1.0%,n:200",
+            ani_allow_incomplete_16s=True,
+        )
+
+        self.assertEqual(included, "false")
+        self.assertEqual(reason, "16s_na")
+
     def test_main_builds_authoritative_status_with_stable_order(self) -> None:
         """Preserve seed warnings while overlaying downstream status columns."""
         with tempfile.TemporaryDirectory() as tmpdir_name:
