@@ -74,6 +74,21 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
 
         self.assertIn("name: 'checkm2_gcode4_report.tsv'", module_text)
         self.assertIn("name: 'checkm2_gcode11_report.tsv'", module_text)
+        self.assertIn(
+            (
+                'tuple val(meta), path("${meta.internal_id}_checkm2_summary.tsv"), '
+                "emit: cohort_summary"
+            ),
+            module_text,
+        )
+        self.assertIn(
+            'cp checkm2_summary.tsv "${meta.internal_id}_checkm2_summary.tsv"',
+            module_text,
+        )
+        self.assertIn(
+            "saveAs: { filename -> filename == 'checkm2_summary.tsv' ? filename : null }",
+            module_text,
+        )
 
     def test_per_sample_qc_joins_checkm2_reports_by_accession(self) -> None:
         """Require per-sample QC to stream paired CheckM2 reports via a keyed join."""
@@ -260,9 +275,13 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('"${params.outdir}/cohort/16s"', module_text)
         self.assertIn("path best_fastas, stageAs: 'summaries/*'", module_text)
         self.assertIn("path status_tables, stageAs: 'summaries/*'", module_text)
+        self.assertIn("path qc_tables, stageAs: 'qc/*'", module_text)
         self.assertIn("path metadata", module_text)
         self.assertIn(
-            'printf \'accession\\tinternal_id\\tstatus_tsv\\tbest_16s_fasta\\n\' > cohort_inputs.tsv',
+            (
+                "printf 'accession\\tinternal_id\\tstatus_tsv\\tbest_16s_fasta\\t"
+                "qc_tsv\\n' > cohort_inputs.tsv"
+            ),
             module_text,
         )
         self.assertNotIn(
@@ -273,21 +292,44 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('--metadata "${metadata}"', module_text)
         self.assertIn("--cohort-kind intact", module_text)
         self.assertIn("--cohort-kind partial", module_text)
+        self.assertIn("--cohort-kind low_quality_intact", module_text)
+        self.assertIn("--cohort-kind low_quality_partial", module_text)
         self.assertIn('internal_id="\\${stem}"', module_text)
+        self.assertIn('qc_table="qc/\\${stem}_checkm2_summary.tsv"', module_text)
         self.assertIn('"\\$(pwd)/\\${status_table}"', module_text)
         self.assertIn('"\\$(pwd)/\\${best_fasta}"', module_text)
+        self.assertIn('"\\$(pwd)/\\${qc_table}"', module_text)
         self.assertNotIn('"${PWD}/\\${status_table}"', module_text)
         self.assertNotIn('"${PWD}/\\${best_fasta}"', module_text)
         self.assertIn("path 'all_best_16S.fna', emit: best_fasta", module_text)
         self.assertIn("path 'all_best_16S_manifest.tsv', emit: best_manifest", module_text)
         self.assertIn("path 'all_partial_16S.fna', emit: partial_fasta", module_text)
         self.assertIn("path 'all_partial_16S_manifest.tsv', emit: partial_manifest", module_text)
+        self.assertIn(
+            "path 'low_quality_best_16S.fna', emit: low_quality_best_fasta",
+            module_text,
+        )
+        self.assertIn(
+            "path 'low_quality_best_16S_manifest.tsv', emit: low_quality_best_manifest",
+            module_text,
+        )
+        self.assertIn(
+            "path 'low_quality_partial_16S.fna', emit: low_quality_partial_fasta",
+            module_text,
+        )
+        self.assertIn(
+            (
+                "path 'low_quality_partial_16S_manifest.tsv', "
+                "emit: low_quality_partial_manifest"
+            ),
+            module_text,
+        )
         self.assertIn('python_version="\\$(python3 --version 2>&1 | sed \'s/^Python //\')"', module_text)
         self.assertIn("printf '\"%s\":\\n  python: \"%s\"\\n  script: \"%s\"\\n' \\", module_text)
         self.assertNotIn('cat <<EOF > versions.yml', module_text)
 
     def test_cohort_16s_builds_outputs_from_per_sample_summaries(self) -> None:
-        """Require the cohort 16S workflow to collect per-sample summaries only."""
+        """Require the cohort 16S workflow to collect per-sample summaries."""
         workflow_text = (ROOT / "subworkflows" / "local" / "cohort_16s.nf").read_text(
             encoding="utf-8"
         )
@@ -296,10 +338,11 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         )
         main_text = (ROOT / "main.nf").read_text(encoding="utf-8")
 
-        self.assertIn("take:\n    sixteen_s_summaries\n    metadata", workflow_text)
+        self.assertIn("take:\n    sixteen_s_summaries\n    gcode_qc\n    metadata", workflow_text)
         self.assertIn("include { BUILD_COHORT_16S }", workflow_text)
         self.assertIn("collected_best_16s = sixteen_s_summaries", workflow_text)
         self.assertIn("collected_status_tables = sixteen_s_summaries", workflow_text)
+        self.assertIn("collected_qc_tables = gcode_qc", workflow_text)
         self.assertIn(".collect()", workflow_text)
         self.assertNotIn("SUMMARISE_16S(", workflow_text)
         self.assertNotIn("collectFile(name: 'all_best_16S.fna')", workflow_text)
@@ -308,12 +351,20 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn("SUMMARISE_16S(BARRNAP.out.results)", per_sample_qc_text)
         self.assertIn("sixteen_s_summaries = SUMMARISE_16S.out.summaries", per_sample_qc_text)
         self.assertIn(
+            "gcode_qc_for_cohort_16s = ASSIGN_GCODE_AND_QC.out.cohort_summary",
+            per_sample_qc_text,
+        )
+        self.assertIn(
             'metadata = Channel.value(file(params.metadata, checkIfExists: true))',
             main_text,
         )
-        self.assertIn("COHORT_16S(PER_SAMPLE_QC.out.sixteen_s_summaries, metadata)", main_text)
+        self.assertIn("COHORT_16S(", main_text)
         self.assertIn(
             "PER_SAMPLE_QC.out.sixteen_s_summaries,",
+            main_text,
+        )
+        self.assertIn(
+            "PER_SAMPLE_QC.out.gcode_qc_for_cohort_16s,",
             main_text,
         )
 

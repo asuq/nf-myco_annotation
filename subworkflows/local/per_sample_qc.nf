@@ -94,6 +94,7 @@ workflow PER_SAMPLE_QC {
     checkm2_gcode4 = CHECKM2_GCODE4.out.results
     checkm2_gcode11 = CHECKM2_GCODE11.out.results
     gcode_qc = ASSIGN_GCODE_AND_QC.out.summary
+    gcode_qc_for_cohort_16s = ASSIGN_GCODE_AND_QC.out.cohort_summary
     busco = BUSCO.out.results
     busco_summaries = BUSCO.out.summary
     versions = versions

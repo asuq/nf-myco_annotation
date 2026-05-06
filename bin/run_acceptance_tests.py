@@ -935,12 +935,26 @@ def records_with_role(plan: Sequence[CohortRecord], role_tag: str) -> list[Cohor
     return [record for record in plan if role_tag in record.role_tags]
 
 
+def read_16s_manifest_accessions(path: Path, missing_column_error: str) -> set[str]:
+    """Read accessions from one cohort 16S manifest."""
+    header, rows = read_tsv(path)
+    if "accession" not in header:
+        raise AcceptanceTestError(missing_column_error)
+    return {
+        row.get("accession", "").strip()
+        for row in rows
+        if row.get("accession", "").strip()
+    }
+
+
 def assert_role_coverage(
     *,
     plan: Sequence[CohortRecord],
     master_rows: dict[str, dict[str, str]],
     status_rows: dict[str, dict[str, str]],
     intact_manifest_accessions: set[str],
+    standard_manifest_accessions: set[str],
+    low_quality_manifest_accessions: set[str],
 ) -> None:
     """Assert that the positive cohort proved all required acceptance roles."""
     gcode4_candidates = records_with_role(plan, "gcode4_candidate")
@@ -971,6 +985,30 @@ def assert_role_coverage(
         cluster_counts[cluster_id] = cluster_counts.get(cluster_id, 0) + 1
     if not any(count >= 2 for count in cluster_counts.values()):
         raise AcceptanceTestError("missing_ani_cluster_pair")
+
+    low_quality_candidates = [
+        record
+        for record in plan
+        if status_contains_token(
+            status_rows[record.accession]["ani_exclusion_reason"],
+            "low_quality",
+        )
+    ]
+    if any(
+        record.accession in standard_manifest_accessions
+        for record in low_quality_candidates
+    ):
+        raise AcceptanceTestError("unexpected_low_quality_16s_inclusion")
+    low_quality_16s_candidates = [
+        record
+        for record in low_quality_candidates
+        if master_rows[record.accession].get("16S") in {"Yes", "partial"}
+    ]
+    if low_quality_16s_candidates and not any(
+        record.accession in low_quality_manifest_accessions
+        for record in low_quality_16s_candidates
+    ):
+        raise AcceptanceTestError("missing_low_quality_16s_manifest_inclusion")
 
     atypical_excluded_candidates = records_with_role(plan, "atypical_excluded_candidate")
     if not any(
@@ -1069,21 +1107,33 @@ def assert_run_outputs(outdir: Path, plan: Sequence[CohortRecord], metadata_tsv:
             "missing_sample_folders:" + ",".join(missing_sample_dirs)
         )
 
-    intact_manifest_path = outdir / "cohort" / "16s" / "all_best_16S_manifest.tsv"
-    intact_manifest_header, intact_manifest_rows = read_tsv(intact_manifest_path)
-    if "accession" not in intact_manifest_header:
-        raise AcceptanceTestError("missing_intact_16s_manifest_accession_column")
-    intact_manifest_accessions = {
-        row.get("accession", "").strip()
-        for row in intact_manifest_rows
-        if row.get("accession", "").strip()
-    }
+    cohort_16s_dir = outdir / "cohort" / "16s"
+    intact_manifest_accessions = read_16s_manifest_accessions(
+        cohort_16s_dir / "all_best_16S_manifest.tsv",
+        "missing_intact_16s_manifest_accession_column",
+    )
+    partial_manifest_accessions = read_16s_manifest_accessions(
+        cohort_16s_dir / "all_partial_16S_manifest.tsv",
+        "missing_partial_16s_manifest_accession_column",
+    )
+    low_quality_best_manifest_accessions = read_16s_manifest_accessions(
+        cohort_16s_dir / "low_quality_best_16S_manifest.tsv",
+        "missing_low_quality_best_16s_manifest_accession_column",
+    )
+    low_quality_partial_manifest_accessions = read_16s_manifest_accessions(
+        cohort_16s_dir / "low_quality_partial_16S_manifest.tsv",
+        "missing_low_quality_partial_16s_manifest_accession_column",
+    )
 
     assert_role_coverage(
         plan=plan,
         master_rows=master_rows,
         status_rows=status_rows,
         intact_manifest_accessions=intact_manifest_accessions,
+        standard_manifest_accessions=intact_manifest_accessions | partial_manifest_accessions,
+        low_quality_manifest_accessions=(
+            low_quality_best_manifest_accessions | low_quality_partial_manifest_accessions
+        ),
     )
     return tables
 

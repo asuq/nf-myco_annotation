@@ -549,8 +549,20 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
             plan = run_acceptance_tests.load_cohort_plan(cohort_plan_path, catalog)
 
             master_rows = {
-                "SRC_MYCO_A": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "101"},
-                "SRC_MYCO_B": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "102"},
+                "SRC_MYCO_A": {
+                    "Gcode": "4",
+                    "CRISPRS": "0",
+                    "Cluster_ID": "NA",
+                    "Tax_ID": "101",
+                    "16S": "Yes",
+                },
+                "SRC_MYCO_B": {
+                    "Gcode": "4",
+                    "CRISPRS": "0",
+                    "Cluster_ID": "NA",
+                    "Tax_ID": "102",
+                    "16S": "Yes",
+                },
                 "SRC_ECOLI": {"Gcode": "11", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "103"},
                 "SRC_STREP": {"Gcode": "11", "CRISPRS": "2", "Cluster_ID": "NA", "Tax_ID": "104"},
                 "SRC_MYCO_A_NEW": {"Gcode": "4", "CRISPRS": "0", "Cluster_ID": "NA", "Tax_ID": "NA"},
@@ -578,6 +590,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                 master_rows=master_rows,
                 status_rows=status_rows,
                 intact_manifest_accessions={"MYCO_EXCEPTION"},
+                standard_manifest_accessions={"MYCO_EXCEPTION"},
+                low_quality_manifest_accessions={"SRC_MYCO_A", "SRC_MYCO_B"},
             )
 
     def test_assert_role_coverage_rejects_atypical_intact_16s_inclusion(self) -> None:
@@ -631,6 +645,8 @@ class RunAcceptanceTestsTestCase(unittest.TestCase):
                     master_rows=master_rows,
                     status_rows=status_rows,
                     intact_manifest_accessions={"MYCO-ATYPICAL", "MYCO_EXCEPTION"},
+                    standard_manifest_accessions={"MYCO-ATYPICAL", "MYCO_EXCEPTION"},
+                    low_quality_manifest_accessions=set(),
                 )
 
     def test_assert_metadata_contract_uses_locked_append_columns(self) -> None:

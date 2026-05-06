@@ -66,8 +66,14 @@ This is a **behaviour-preserving v1 refactor**, not a methodological redesign.
 - Output per-sample `best_16S.fna`.
 - Produce cohort-level `all_best_16S.fna`.
 - Produce cohort-level `all_partial_16S.fna`.
+- Move samples with `Low_quality = true` out of the standard cohort 16S
+  outputs and into cohort-level `low_quality_best_16S.fna` or
+  `low_quality_partial_16S.fna`.
 - If a genome is atypical, still run Barrnap and keep the per-sample result, but include its intact 16S in `all_best_16S.fna` only when it is atypical only because of `unverified source organism`.
-- Include all partial-only samples in `all_partial_16S.fna`, including atypical samples.
+- Include all non-low-quality partial-only samples in `all_partial_16S.fna`,
+  including atypical samples.
+- Include all low-quality intact and partial 16S sequences in the matching
+  low-quality cohort FASTA, including atypical samples.
 - `16S` master-table vocabulary is fixed as:
   - `Yes`
   - `partial`
@@ -379,7 +385,7 @@ per-sample gated branch (only if gcode = 4 or 11):
   eggnog
 
 cohort branch:
-  build_cohort_16s (cohort all_best_16S.fna and all_partial_16S.fna)
+  build_cohort_16s (standard and low-quality cohort 16S FASTA outputs)
   build_fastani_inputs
   fastani_all_vs_all
   cluster_ani
@@ -604,11 +610,18 @@ Required outputs:
 Implementation note:
 
 - cohort-level `all_best_16S.fna`, `all_best_16S_manifest.tsv`,
-  `all_partial_16S.fna`, and `all_partial_16S_manifest.tsv` are built in the
-  cohort 16S branch from the per-sample Barrnap summaries
+  `all_partial_16S.fna`, `all_partial_16S_manifest.tsv`,
+  `low_quality_best_16S.fna`, `low_quality_best_16S_manifest.tsv`,
+  `low_quality_partial_16S.fna`, and
+  `low_quality_partial_16S_manifest.tsv` are built in the cohort 16S branch
+  from the per-sample Barrnap summaries and CheckM2 QC summaries
 - intact cohort inclusion is applied there from metadata `Atypical_Warnings`
   using the locked `unverified source organism` exception
 - partial cohort inclusion is applied there from `16S = partial`
+- standard cohort outputs exclude only literal `Low_quality = true`; `false`
+  and `NA` use the ordinary intact or partial inclusion rules
+- low-quality cohort outputs include literal `Low_quality = true` samples with
+  matching `16S = Yes` or `16S = partial`, without atypical filtering
 
 ## 8.6 `checkm2`
 
@@ -1144,7 +1157,11 @@ results/
 │   │   ├── all_best_16S.fna
 │   │   ├── all_best_16S_manifest.tsv
 │   │   ├── all_partial_16S.fna
-│   │   └── all_partial_16S_manifest.tsv
+│   │   ├── all_partial_16S_manifest.tsv
+│   │   ├── low_quality_best_16S.fna
+│   │   ├── low_quality_best_16S_manifest.tsv
+│   │   ├── low_quality_partial_16S.fna
+│   │   └── low_quality_partial_16S_manifest.tsv
 │   ├── fastani/
 │   └── ani_clusters/
 └── tables/

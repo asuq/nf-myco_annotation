@@ -93,7 +93,11 @@ workflow {
         checkm2Db,
         BUSCO_DATASET_PREP.out.datasets,
     )
-    COHORT_16S(PER_SAMPLE_QC.out.sixteen_s_summaries, metadata)
+    COHORT_16S(
+        PER_SAMPLE_QC.out.sixteen_s_summaries,
+        PER_SAMPLE_QC.out.gcode_qc_for_cohort_16s,
+        metadata,
+    )
     PER_SAMPLE_ANNOTATION(
         INPUT_VALIDATION_AND_STAGING.out.staged_genomes,
         PER_SAMPLE_QC.out.gcode_qc,

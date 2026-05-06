@@ -8,7 +8,7 @@ process ASSIGN_GCODE_AND_QC {
         { "${params.outdir}/samples/${meta.accession}/checkm2" },
         mode: 'copy',
         overwrite: true,
-        saveAs: { filename -> filename == 'versions.yml' ? null : filename },
+        saveAs: { filename -> filename == 'checkm2_summary.tsv' ? filename : null },
     )
 
     input:
@@ -16,6 +16,7 @@ process ASSIGN_GCODE_AND_QC {
 
     output:
     tuple val(meta), path('checkm2_summary.tsv'), emit: summary
+    tuple val(meta), path("${meta.internal_id}_checkm2_summary.tsv"), emit: cohort_summary
     path 'versions.yml', emit: versions
 
     script:
@@ -27,6 +28,8 @@ process ASSIGN_GCODE_AND_QC {
         --gcode-rule "${params.gcode_rule}" \
         --output checkm2_summary.tsv
 
+    cp checkm2_summary.tsv "${meta.internal_id}_checkm2_summary.tsv"
+
     cat <<EOF > versions.yml
     "${task.process}":
       python: "\$(python3 --version 2>&1 | sed 's/^Python //')"
@@ -35,15 +38,16 @@ process ASSIGN_GCODE_AND_QC {
     """
 
     stub:
-    '''
+    """
     cat <<'EOF' > checkm2_summary.tsv
     accession	Completeness_gcode4	Completeness_gcode11	Contamination_gcode4	Contamination_gcode11	Coding_Density_gcode4	Coding_Density_gcode11	Average_Gene_Length_gcode4	Average_Gene_Length_gcode11	Total_Coding_Sequences_gcode4	Total_Coding_Sequences_gcode11	Gcode	Low_quality	checkm2_status	warnings
     sample_a	95	82	2	1	0.9	0.8	900	850	800	780	4	false	done
     EOF
+    cp checkm2_summary.tsv "${meta.internal_id}_checkm2_summary.tsv"
     cat <<'EOF' > versions.yml
     "${task.process}":
       python: "stub"
       script: "bin/summarise_checkm2.py"
     EOF
-    '''
+    """
 }

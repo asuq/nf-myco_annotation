@@ -17,6 +17,8 @@ if str(BIN_DIR) not in sys.path:
 import concat_best_16s  # noqa: E402
 import summarise_16s  # noqa: E402
 
+CohortInputRow = tuple[str, str, Path, Path] | tuple[str, str, Path, Path, Path]
+
 
 def read_status_row(path: Path) -> dict[str, str]:
     """Read a single-row status TSV."""
@@ -298,15 +300,44 @@ class ConcatBest16STestCase(unittest.TestCase):
         )
         return status_path, best_fasta
 
+    def write_qc_summary(
+        self,
+        path: Path,
+        *,
+        accession: str,
+        low_quality: str = "false",
+    ) -> Path:
+        """Write one per-sample CheckM2 QC summary."""
+        return self.write_text_file(
+            path,
+            "\n".join(
+                [
+                    "accession\tLow_quality",
+                    f"{accession}\t{low_quality}",
+                ]
+            )
+            + "\n",
+        )
+
     def write_cohort_inputs(
         self,
         path: Path,
-        rows: list[tuple[str, str, Path, Path]],
+        rows: list[CohortInputRow],
     ) -> Path:
         """Write one cohort input manifest."""
-        lines = ["accession\tinternal_id\tstatus_tsv\tbest_16s_fasta"]
-        for accession, internal_id, status_path, best_fasta in rows:
-            lines.append(f"{accession}\t{internal_id}\t{status_path}\t{best_fasta}")
+        lines = ["accession\tinternal_id\tstatus_tsv\tbest_16s_fasta\tqc_tsv"]
+        for row in rows:
+            accession, internal_id, status_path, best_fasta = row[:4]
+            if len(row) == 5:
+                qc_path = row[4]
+            else:
+                qc_path = self.write_qc_summary(
+                    path.parent / f"{internal_id}_checkm2_summary.tsv",
+                    accession=accession,
+                )
+            lines.append(
+                f"{accession}\t{internal_id}\t{status_path}\t{best_fasta}\t{qc_path}"
+            )
         return self.write_text_file(path, "\n".join(lines) + "\n")
 
     def test_concat_best_16s_includes_non_atypical_intact_rows(self) -> None:
@@ -549,6 +580,363 @@ class ConcatBest16STestCase(unittest.TestCase):
                 [row["best_16S_header"] for row in manifest_rows],
                 ["hit_partial", "hit_atyp_partial"],
             )
+
+    def test_concat_best_16s_moves_low_quality_intact_rows_out(self) -> None:
+        """Exclude low-quality intact rows from the standard intact cohort."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            sample_dir = tmpdir / "sample"
+            sample_dir.mkdir()
+            status_path, best_fasta = self.write_status_and_fasta(
+                sample_dir,
+                accession="ACC_LOW",
+                status_value="Yes",
+                header="hit_low",
+                length=70,
+            )
+            qc_path = self.write_qc_summary(
+                sample_dir / "ACC_LOW_checkm2_summary.tsv",
+                accession="ACC_LOW",
+                low_quality="true",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_LOW\tNA\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [("ACC_LOW", "acc_low_id", status_path, best_fasta, qc_path)],
+            )
+
+            intact_exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+            low_quality_exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--cohort-kind",
+                    "low_quality_intact",
+                    "--output-fasta",
+                    str(tmpdir / "low_quality_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "low_quality_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(intact_exit_code, 0)
+            self.assertEqual(low_quality_exit_code, 0)
+            self.assertEqual(read_tsv_rows(tmpdir / "all_best_16S_manifest.tsv"), [])
+            manifest_rows = read_tsv_rows(tmpdir / "low_quality_best_16S_manifest.tsv")
+            self.assertEqual([row["accession"] for row in manifest_rows], ["ACC_LOW"])
+            self.assertEqual(manifest_rows[0]["low_quality"], "true")
+            self.assertEqual(manifest_rows[0]["include_in_all_best_16S"], "false")
+
+    def test_concat_best_16s_moves_low_quality_partial_rows_out(self) -> None:
+        """Exclude low-quality partial rows from the standard partial cohort."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            sample_dir = tmpdir / "sample"
+            sample_dir.mkdir()
+            status_path, best_fasta = self.write_status_and_fasta(
+                sample_dir,
+                accession="ACC_LOW_PART",
+                status_value="partial",
+                header="hit_low_part",
+                length=60,
+            )
+            qc_path = self.write_qc_summary(
+                sample_dir / "ACC_LOW_PART_checkm2_summary.tsv",
+                accession="ACC_LOW_PART",
+                low_quality="true",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_LOW_PART\tNA\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [("ACC_LOW_PART", "acc_low_part_id", status_path, best_fasta, qc_path)],
+            )
+
+            partial_exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--cohort-kind",
+                    "partial",
+                    "--output-fasta",
+                    str(tmpdir / "all_partial_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_partial_16S_manifest.tsv"),
+                ]
+            )
+            low_quality_exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--cohort-kind",
+                    "low_quality_partial",
+                    "--output-fasta",
+                    str(tmpdir / "low_quality_partial_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "low_quality_partial_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(partial_exit_code, 0)
+            self.assertEqual(low_quality_exit_code, 0)
+            self.assertEqual(read_tsv_rows(tmpdir / "all_partial_16S_manifest.tsv"), [])
+            manifest_rows = read_tsv_rows(
+                tmpdir / "low_quality_partial_16S_manifest.tsv"
+            )
+            self.assertEqual([row["accession"] for row in manifest_rows], ["ACC_LOW_PART"])
+            self.assertEqual(manifest_rows[0]["low_quality"], "true")
+
+    def test_concat_best_16s_includes_low_quality_atypical_rows(self) -> None:
+        """Keep low-quality audit outputs independent of atypical filtering."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            intact_dir = tmpdir / "intact"
+            partial_dir = tmpdir / "partial"
+            intact_dir.mkdir()
+            partial_dir.mkdir()
+            intact_status, intact_fasta = self.write_status_and_fasta(
+                intact_dir,
+                accession="ACC_ATYP_LOW",
+                status_value="Yes",
+                header="hit_atyp_low",
+                length=75,
+            )
+            partial_status, partial_fasta = self.write_status_and_fasta(
+                partial_dir,
+                accession="ACC_ATYP_LOW_PART",
+                status_value="partial",
+                header="hit_atyp_low_part",
+                length=65,
+            )
+            intact_qc = self.write_qc_summary(
+                intact_dir / "ACC_ATYP_LOW_checkm2_summary.tsv",
+                accession="ACC_ATYP_LOW",
+                low_quality="true",
+            )
+            partial_qc = self.write_qc_summary(
+                partial_dir / "ACC_ATYP_LOW_PART_checkm2_summary.tsv",
+                accession="ACC_ATYP_LOW_PART",
+                low_quality="true",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "\n".join(
+                    [
+                        "Accession\tAtypical_Warnings",
+                        "ACC_ATYP_LOW\tcell culture adapted",
+                        "ACC_ATYP_LOW_PART\tcell culture adapted",
+                    ]
+                )
+                + "\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [
+                    ("ACC_ATYP_LOW", "acc_atyp_low_id", intact_status, intact_fasta, intact_qc),
+                    (
+                        "ACC_ATYP_LOW_PART",
+                        "acc_atyp_low_part_id",
+                        partial_status,
+                        partial_fasta,
+                        partial_qc,
+                    ),
+                ],
+            )
+
+            intact_exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--cohort-kind",
+                    "low_quality_intact",
+                    "--output-fasta",
+                    str(tmpdir / "low_quality_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "low_quality_best_16S_manifest.tsv"),
+                ]
+            )
+            partial_exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--cohort-kind",
+                    "low_quality_partial",
+                    "--output-fasta",
+                    str(tmpdir / "low_quality_partial_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "low_quality_partial_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(intact_exit_code, 0)
+            self.assertEqual(partial_exit_code, 0)
+            low_quality_best_rows = read_tsv_rows(
+                tmpdir / "low_quality_best_16S_manifest.tsv"
+            )
+            low_quality_partial_rows = read_tsv_rows(
+                tmpdir / "low_quality_partial_16S_manifest.tsv"
+            )
+            self.assertEqual(
+                [row["accession"] for row in low_quality_best_rows],
+                ["ACC_ATYP_LOW"],
+            )
+            self.assertEqual(
+                [row["accession"] for row in low_quality_partial_rows],
+                ["ACC_ATYP_LOW_PART"],
+            )
+
+    def test_concat_best_16s_keeps_na_low_quality_in_standard_outputs(self) -> None:
+        """Treat Low_quality=NA as a standard eligible QC value."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            sample_dir = tmpdir / "sample"
+            sample_dir.mkdir()
+            status_path, best_fasta = self.write_status_and_fasta(
+                sample_dir,
+                accession="ACC_NA_QC",
+                status_value="Yes",
+                header="hit_na_qc",
+                length=70,
+            )
+            qc_path = self.write_qc_summary(
+                sample_dir / "ACC_NA_QC_checkm2_summary.tsv",
+                accession="ACC_NA_QC",
+                low_quality="NA",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_NA_QC\tNA\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [("ACC_NA_QC", "acc_na_qc_id", status_path, best_fasta, qc_path)],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            manifest_rows = read_tsv_rows(tmpdir / "all_best_16S_manifest.tsv")
+            self.assertEqual([row["accession"] for row in manifest_rows], ["ACC_NA_QC"])
+            self.assertEqual(manifest_rows[0]["low_quality"], "NA")
+
+    def test_concat_best_16s_fails_when_qc_accession_mismatches(self) -> None:
+        """Fail when the cohort input and QC summary accessions disagree."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            status_path, best_fasta = self.write_status_and_fasta(
+                tmpdir,
+                accession="ACC_BAD_QC",
+                status_value="Yes",
+                header="hit_bad_qc",
+                length=70,
+            )
+            qc_path = self.write_qc_summary(
+                tmpdir / "ACC_OTHER_checkm2_summary.tsv",
+                accession="ACC_OTHER",
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_BAD_QC\tNA\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [("ACC_BAD_QC", "acc_bad_qc_id", status_path, best_fasta, qc_path)],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
+
+    def test_concat_best_16s_fails_when_qc_file_is_missing(self) -> None:
+        """Fail when a cohort input row points to a missing QC summary."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            status_path, best_fasta = self.write_status_and_fasta(
+                tmpdir,
+                accession="ACC_MISSING_QC",
+                status_value="Yes",
+                header="hit_missing_qc",
+                length=70,
+            )
+            metadata = self.write_text_file(
+                tmpdir / "metadata.tsv",
+                "Accession\tAtypical_Warnings\nACC_MISSING_QC\tNA\n",
+            )
+            cohort_inputs = self.write_cohort_inputs(
+                tmpdir / "cohort_inputs.tsv",
+                [
+                    (
+                        "ACC_MISSING_QC",
+                        "acc_missing_qc_id",
+                        status_path,
+                        best_fasta,
+                        tmpdir / "missing_qc.tsv",
+                    )
+                ],
+            )
+
+            exit_code = concat_best_16s.main(
+                [
+                    "--inputs",
+                    str(cohort_inputs),
+                    "--metadata",
+                    str(metadata),
+                    "--output-fasta",
+                    str(tmpdir / "all_best_16S.fna"),
+                    "--output-manifest",
+                    str(tmpdir / "all_best_16S_manifest.tsv"),
+                ]
+            )
+
+            self.assertEqual(exit_code, 1)
 
     def test_concat_best_16s_fails_when_included_fasta_is_empty(self) -> None:
         """Fail when a cohort-included sample has no FASTA content to append."""

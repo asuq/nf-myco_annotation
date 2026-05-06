@@ -109,6 +109,8 @@ main.nf
      -> BUILD_COHORT_16S
      -> all_best_16S.fna
      -> all_partial_16S.fna
+     -> low_quality_best_16S.fna
+     -> low_quality_partial_16S.fna
   -> PER_SAMPLE_ANNOTATION
      -> CODETTA
      -> SUMMARISE_CODETTA
@@ -201,6 +203,10 @@ results/
       all_best_16S_manifest.tsv
       all_partial_16S.fna
       all_partial_16S_manifest.tsv
+      low_quality_best_16S.fna
+      low_quality_best_16S_manifest.tsv
+      low_quality_partial_16S.fna
+      low_quality_partial_16S_manifest.tsv
     fastani/
       ani_exclusions.tsv
       ani_metadata.tsv
@@ -251,7 +257,8 @@ Notes on that layout:
   `ccfinder/` are flat curated publish folders: they keep the published logs
   and summary artefacts at the tool root and do not republish duplicate nested
   raw subdirectories when those would only mirror the same files
-- `cohort/16s/` contains the combined eligible-sample 16S FASTA and manifest
+- `cohort/16s/` contains the combined eligible-sample and low-quality 16S
+  FASTA and manifest outputs
 - `pipeline_info/` is enabled through base configuration for both entrypoints
 
 The database-preparation workflow publishes these top-level artefacts under its
@@ -364,7 +371,10 @@ or labels, pipeline metadata, and the active container engine in one final TSV.
   cohort 16S branch builds `all_best_16S.fna` from intact hits that are
   non-atypical or atypical only because of `unverified source organism`;
   mixed atypical reasons remain excluded. It builds `all_partial_16S.fna`
-  from every partial-only sample, including atypical partial samples.
+  from every non-low-quality partial-only sample, including atypical partial
+  samples. Literal `Low_quality = true` samples are moved to
+  `low_quality_best_16S.fna` or `low_quality_partial_16S.fna`, including
+  atypical samples.
 - CheckM2 always runs twice per sample, once with translation table `4` and
   once with `11`. `summarise_checkm2.py` applies `params.gcode_rule` and emits
   the merged per-sample QC summary.

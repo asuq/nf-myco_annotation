@@ -14,7 +14,13 @@ from atypical_warnings import classify_atypical_warnings
 
 LOGGER = logging.getLogger(__name__)
 
-REQUIRED_INPUT_COLUMNS = ("accession", "internal_id", "status_tsv", "best_16s_fasta")
+REQUIRED_INPUT_COLUMNS = (
+    "accession",
+    "internal_id",
+    "status_tsv",
+    "best_16s_fasta",
+    "qc_tsv",
+)
 REQUIRED_STATUS_COLUMNS = (
     "accession",
     "16S",
@@ -28,9 +34,16 @@ COHORT_MANIFEST_COLUMNS = (
     "best_16S_header",
     "best_16S_length",
     "include_in_all_best_16S",
+    "low_quality",
     "warnings",
 )
-COHORT_KINDS = ("intact", "partial")
+REQUIRED_QC_COLUMNS = ("accession", "Low_quality")
+COHORT_KINDS = (
+    "intact",
+    "partial",
+    "low_quality_intact",
+    "low_quality_partial",
+)
 MISSING_VALUE_TOKENS = {"", "na", "n/a", "null", "none"}
 
 
@@ -47,7 +60,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--inputs",
         required=True,
         type=Path,
-        help="TSV listing accession, internal_id, status_tsv, and best_16s_fasta paths.",
+        help=(
+            "TSV listing accession, internal_id, status_tsv, best_16s_fasta, "
+            "and qc_tsv paths."
+        ),
     )
     parser.add_argument(
         "--metadata",
@@ -192,6 +208,15 @@ def load_status_row(path: Path) -> dict[str, str]:
     return rows[0]
 
 
+def load_qc_row(path: Path) -> dict[str, str]:
+    """Load and validate a single per-sample CheckM2 QC row."""
+    header, rows = read_tsv(path)
+    require_columns(header, REQUIRED_QC_COLUMNS, path)
+    if len(rows) != 1:
+        raise Cohort16SError(f"QC TSV must contain exactly one data row: {path}")
+    return rows[0]
+
+
 def find_column_by_normalised_name(
     header: Sequence[str],
     column_name: str,
@@ -279,11 +304,19 @@ def append_fasta_content(
 
 def should_include_in_cohort(
     status_row: dict[str, str],
+    qc_row: dict[str, str],
     cohort_kind: str,
     metadata_atypical_index: dict[str, str],
 ) -> bool:
     """Return True when a sample belongs in the requested cohort subset."""
     status_value = status_row["16S"]
+    low_quality = qc_row["Low_quality"] == "true"
+    if cohort_kind == "low_quality_intact":
+        return low_quality and status_value == "Yes"
+    if cohort_kind == "low_quality_partial":
+        return low_quality and status_value == "partial"
+    if low_quality:
+        return False
     if cohort_kind == "partial":
         return status_value == "partial"
     if status_value != "Yes":
@@ -302,6 +335,7 @@ def should_include_in_cohort(
 
 def build_manifest_row(
     status_row: dict[str, str],
+    qc_row: dict[str, str],
     *,
     cohort_kind: str,
 ) -> dict[str, str]:
@@ -312,6 +346,7 @@ def build_manifest_row(
         "best_16S_header": status_row["best_16S_header"],
         "best_16S_length": status_row["best_16S_length"],
         "include_in_all_best_16S": "true" if cohort_kind == "intact" else "false",
+        "low_quality": qc_row["Low_quality"] or "NA",
         "warnings": status_row["warnings"],
     }
 
@@ -347,12 +382,19 @@ def build_cohort_fasta(
         for cohort_row in cohort_rows:
             status_path = Path(cohort_row["status_tsv"]).expanduser()
             best_fasta_path = Path(cohort_row["best_16s_fasta"]).expanduser()
+            qc_path = Path(cohort_row["qc_tsv"]).expanduser()
             internal_id = cohort_row["internal_id"].strip()
             status_row = load_status_row(status_path)
+            qc_row = load_qc_row(qc_path)
             if status_row["accession"] != cohort_row["accession"]:
                 raise Cohort16SError(
                     "Cohort input accession does not match the status TSV accession "
                     f"for {status_path}."
+                )
+            if qc_row["accession"] != cohort_row["accession"]:
+                raise Cohort16SError(
+                    "Cohort input accession does not match the QC TSV accession "
+                    f"for {qc_path}."
                 )
             if not internal_id:
                 raise Cohort16SError(
@@ -360,6 +402,7 @@ def build_cohort_fasta(
                 )
             if not should_include_in_cohort(
                 status_row=status_row,
+                qc_row=qc_row,
                 cohort_kind=cohort_kind,
                 metadata_atypical_index=metadata_atypical_index,
             ):
@@ -370,7 +413,7 @@ def build_cohort_fasta(
                 internal_id=internal_id,
             )
             manifest_rows.append(
-                build_manifest_row(status_row, cohort_kind=cohort_kind)
+                build_manifest_row(status_row, qc_row, cohort_kind=cohort_kind)
             )
 
     write_manifest(output_manifest, manifest_rows)
