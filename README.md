@@ -28,6 +28,7 @@ recommended first real server validation path, see
 ## Table of contents
 
 - [Project summary](#project-summary)
+- [ANI clustering and representatives](#ani-clustering-and-representatives)
 - [Entrypoints](#entrypoints)
 - [Prerequisites](#prerequisites)
 - [Required inputs and databases](#required-inputs-and-databases)
@@ -64,6 +65,62 @@ tables through `GC_Content`, `Codetta_Genetic_Code`,
 compatible with `v2.0`, the default container image is
 `quay.io/asuq1617/codetta:2.0`, and the pinned upstream `main` commit used for
 the image build is recorded explicitly.
+
+## ANI clustering and representatives
+
+ANI reporting starts by building the FastANI input set from samples that pass
+the cohort-level eligibility gates. A sample is eligible only when it is not
+low quality, has an assigned gcode of `4` or `11`, has `16S = Yes` by default,
+has the primary BUSCO result needed for scoring, and is not atypical. The one
+atypical exception is `unverified source organism`, which is still allowed into
+ANI clustering. Supplying `--ani_allow_incomplete_16s` relaxes only the 16S
+gate so `16S = No` and `16S = partial` may enter ANI; `16S = NA` remains
+excluded.
+
+FastANI then runs all-vs-all on the eligible genomes. The matrix is clustered
+with complete linkage at `--ani_threshold`, which defaults to `0.95`. Complete
+linkage means every pair of genomes inside a cluster must meet the threshold;
+the clustering helper also performs a post-check and fails if a completed
+cluster contains a below-threshold or missing ANI pair. Cluster IDs are stable:
+clusters are named `C000001`, `C000002`, and so on, ordered first by descending
+cluster size and then by the smallest accession in the cluster.
+
+One representative is selected for each ANI cluster. Each cluster member is
+scored from six components:
+
+- assembly rank
+- CheckM2 quality
+- BUSCO completeness-minus-missing
+- N50
+- scaffold count
+- ANI centrality within the cluster
+
+The BUSCO component uses the primary BUSCO lineage, which is the first lineage
+in `--busco_lineages`. The CheckM2 component uses the completeness and
+contamination values associated with the sample's assigned gcode. Raw BUSCO,
+CheckM2, N50, and scaffold values are winsorised for larger clusters,
+normalised to the `[0, 1]` range within the cluster, and combined with the
+chosen `--ani_score_profile`. ANI centrality is based on the average ANI from
+one member to the other members in the same cluster; singleton clusters receive
+a centrality value of `1.0`.
+
+If the top representative score is tied within the script tolerance, the
+pipeline resolves the tie deterministically in this order:
+
+- higher assembly rank
+- higher BUSCO complete percentage
+- lower BUSCO missing percentage
+- lower CheckM2 contamination
+- higher CheckM2 completeness
+- fewer scaffolds
+- higher N50
+- lexicographically smallest accession
+
+The published ANI files are under `results/cohort/ani_clusters/`.
+`cluster.tsv` records accession-to-cluster membership, `ani_representatives.tsv`
+records one representative row per cluster, and `ani_summary.tsv` records the
+per-accession ANI fields later merged into `master_table.tsv`: `Cluster_ID`,
+`Is_Representative`, `ANI_to_Representative`, and `Score`.
 
 ## Entrypoints
 
