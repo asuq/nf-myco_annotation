@@ -102,7 +102,16 @@ CheckM2, N50, and scaffold values are winsorised for larger clusters,
 normalised to the `[0, 1]` range within the cluster, and combined with the
 chosen `--ani_score_profile`. ANI centrality is based on the average ANI from
 one member to the other members in the same cluster; singleton clusters receive
-a centrality value of `1.0`.
+a centrality value of `1.0`. The scaffold component is inverted before
+weighting, so fewer scaffolds contribute a higher component value.
+
+The scoring profiles use these weights in the component order above:
+
+| `--ani_score_profile` | Weights |
+| --- | --- |
+| `default` | `3.0, 2.0, 1.5, 0.75, 0.5, 0.5` |
+| `isolate` | `3.5, 1.5, 1.5, 1.0, 0.25, 0.5` |
+| `mag` | `1.0, 3.0, 2.0, 0.5, 1.5, 0.5` |
 
 If the top representative score is tied within the script tolerance, the
 pipeline resolves the tie deterministically in this order:
