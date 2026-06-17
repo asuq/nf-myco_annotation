@@ -52,6 +52,7 @@ process BUSCO {
             --lineage_dataset "${lineage}" \
             --mode genome \
             --offline \
+            --tar \
             --cpu ${task.cpus} \
             --out "\${output_dir}" \
             --out_path . \

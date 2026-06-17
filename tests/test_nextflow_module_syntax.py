@@ -810,6 +810,7 @@ class NextflowModuleSyntaxTestCase(unittest.TestCase):
         self.assertIn('cp quality_report.tsv "\\${output_dir}/"', checkm2_text)
 
         self.assertIn('path("busco_${lineage}")', busco_text)
+        self.assertIn("--tar", busco_text)
         self.assertIn('rm -rf "\\${output_dir}"', busco_text)
         self.assertIn('cp short_summary.json "\\${output_dir}/"', busco_text)
 

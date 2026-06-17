@@ -927,7 +927,10 @@ Codetta contributes `Codetta_Genetic_Code` and
 Published sample and cohort folders retain the logs and stable intermediate
 files used to assemble the master table, while large raw CheckM2, BUSCO,
 Prokka, CRISPRCasFinder, and Codetta artefacts are pruned before task
-completion. Under the 20k OIST override, `results/cohort/fastani/` keeps only
+completion. BUSCO is also run with its native `--tar` option so file-heavy
+intermediate BUSCO subdirectories are compressed before the existing curated
+BUSCO summary/log view is retained. Under the 20k OIST override,
+`results/cohort/fastani/` keeps only
 `ani_metadata.tsv`, `ani_exclusions.tsv`, `fastani_paths.txt`, and the FastANI
 matrix/log outputs; the staged `fastani_inputs/` directory remains in `work/`.
 By default, only `16S = Yes` samples pass the ANI 16S gate. Supply the naked
