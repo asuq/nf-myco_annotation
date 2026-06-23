@@ -79,6 +79,40 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
         seqtk_path.chmod(seqtk_path.stat().st_mode | stat.S_IXUSR)
         return seqtk_path
 
+    def install_sigpipe_sensitive_sort(self, directory: Path) -> Path:
+        """Install a fake sort that reports SIGPIPE when the reader exits early."""
+        sort_path = directory / "sort"
+        sort_path.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env python3
+                import signal
+                import sys
+                from pathlib import Path
+
+                signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+                numeric_reverse = "-nr" in sys.argv[1:]
+                path_args = [argument for argument in sys.argv[1:] if not argument.startswith("-")]
+                if path_args:
+                    lines = Path(path_args[-1]).read_text(encoding="utf-8").splitlines()
+                else:
+                    lines = sys.stdin.read().splitlines()
+
+                if numeric_reverse:
+                    values = [int(line.strip()) for line in lines if line.strip()]
+                    sorted_lines = [str(value) for value in sorted(values, reverse=True)]
+                else:
+                    sorted_lines = sorted(line for line in lines if line.strip())
+                for value in sorted_lines:
+                    print(value, flush=True)
+                """
+            ),
+            encoding="utf-8",
+        )
+        sort_path.chmod(sort_path.stat().st_mode | stat.S_IXUSR)
+        return sort_path
+
     def run_helper(
         self,
         *,
@@ -340,6 +374,32 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
             self.assertTrue(all(row["n50"] == "30" for row in rows))
             self.assertTrue(all(row["scaffolds"] == "4" for row in rows))
             self.assertTrue(all(row["genome_size"] == "110" for row in rows))
+
+    def test_n50_calculation_drains_sort_output_under_pipefail(self) -> None:
+        """Avoid SIGPIPE failures when N50 is found before sort finishes writing."""
+        with tempfile.TemporaryDirectory() as tmpdir_name:
+            tmpdir = Path(tmpdir_name)
+            self.install_fake_seqtk(tmpdir)
+            self.install_sigpipe_sensitive_sort(tmpdir)
+            fasta_lines = []
+            for index in range(30000):
+                fasta_lines.append(f">contig{index}")
+                fasta_lines.append("A")
+            self.write_text_file(tmpdir / "ACC8.fasta", "\n".join(fasta_lines) + "\n")
+            manifest = self.write_text_file(
+                tmpdir / "staged_manifest.tsv",
+                "accession\tinternal_id\tstaged_filename\nACC8\tid_8\tACC8.fasta\n",
+            )
+            output = tmpdir / "assembly_stats.tsv"
+
+            result = self.run_helper(
+                staged_manifest=manifest,
+                output=output,
+                path_prefix=tmpdir,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(read_tsv(output)[0]["n50"], "1")
 
     def test_parallel_jobs_report_failing_accession(self) -> None:
         """Fail the stage when one parallel worker cannot derive contig lengths."""

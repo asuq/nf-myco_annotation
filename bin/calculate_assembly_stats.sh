@@ -205,10 +205,15 @@ compute_assembly_stats() {
         sort -nr "${lengths_file}" | awk -v target="${target}" '
             {
                 cumulative += $1
-                if (cumulative >= target) {
-                    print $1
-                    exit
+                if (cumulative >= target && n50 == "") {
+                    n50 = $1
                 }
+            }
+            END {
+                if (n50 == "") {
+                    exit 1
+                }
+                print n50
             }
         '
     )"; then
