@@ -63,18 +63,71 @@ resolve_script_path() {
     command -v "${invocation}"
 }
 
+write_worker_failure() {
+    local error_path="$1"
+    local accession="$2"
+    local fasta_path="$3"
+    local reason="$4"
+    local seqtk_stderr="${5:-}"
+    local diagnostic_path="${6:-}"
+    local first_nonempty file_size
+
+    {
+        printf 'Failed to calculate assembly statistics for %s.\n' "${accession}"
+        printf 'FASTA: %s\n' "${fasta_path}"
+        printf 'Reason: %s\n' "${reason}"
+        if [[ -e "${fasta_path}" ]]; then
+            file_size="$(wc -c < "${fasta_path}" 2>/dev/null || true)"
+            if [[ -n "${file_size}" ]]; then
+                printf 'FASTA size bytes: %s\n' "${file_size//[[:space:]]/}"
+            fi
+            first_nonempty="$(awk 'NF { print; exit }' "${fasta_path}" 2>/dev/null || true)"
+            if [[ -z "${first_nonempty}" ]]; then
+                printf 'First non-empty FASTA line: <none>\n'
+            elif [[ "${first_nonempty}" != ">"* ]]; then
+                printf 'First non-empty FASTA line: %s\n' "${first_nonempty:0:160}"
+            fi
+        fi
+        if [[ -n "${diagnostic_path}" && -s "${diagnostic_path}" ]]; then
+            printf 'Diagnostic: '
+            cat "${diagnostic_path}"
+        fi
+        if [[ -n "${seqtk_stderr}" && -s "${seqtk_stderr}" ]]; then
+            printf 'seqtk stderr:\n'
+            cat "${seqtk_stderr}"
+        fi
+    } > "${error_path}"
+}
+
 compute_assembly_stats() {
     local accession="$1"
     local fasta_path="$2"
     local temp_dir="$3"
     local result_path="$4"
-    local lengths_file summary_file n50 target scaffolds genome_size
+    local error_path="$5"
+    local lengths_file summary_file seqtk_stderr diagnostic_file n50 target scaffolds genome_size
     local adenine_count cytosine_count guanine_count thymine_count canonical_bases gc_content
+    local pipeline_statuses reason
 
     lengths_file="$(mktemp "${temp_dir}/lengths.XXXXXX")"
     summary_file="$(mktemp "${temp_dir}/summary.XXXXXX")"
+    seqtk_stderr="$(mktemp "${temp_dir}/seqtk_stderr.XXXXXX")"
+    diagnostic_file="$(mktemp "${temp_dir}/diagnostic.XXXXXX")"
 
-    if ! seqtk comp "${fasta_path}" | awk -v summary_file="${summary_file}" '
+    if [[ ! -s "${fasta_path}" ]]; then
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "FASTA is empty or unavailable."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
+        return 1
+    fi
+
+    set +e
+    seqtk comp "${fasta_path}" 2> "${seqtk_stderr}" | awk \
+        -v summary_file="${summary_file}" \
+        -v diagnostic_file="${diagnostic_file}" '
         BEGIN {
             count = 0
             total = 0
@@ -95,19 +148,56 @@ compute_assembly_stats() {
             }
         }
         END {
-            if (count == 0 || (adenine + cytosine + guanine + thymine) == 0) {
+            if (count == 0) {
+                print "seqtk comp produced no valid contig rows." > diagnostic_file
+                exit 1
+            }
+            if ((adenine + cytosine + guanine + thymine) == 0) {
+                print "FASTA contains no canonical A/C/G/T bases." > diagnostic_file
                 exit 1
             }
             printf "%d\t%d\t%d\t%d\t%d\t%d\n", \
                 count, total, adenine, cytosine, guanine, thymine > summary_file
         }
-    ' > "${lengths_file}"; then
-        rm -f "${lengths_file}" "${summary_file}"
+    ' > "${lengths_file}"
+    pipeline_statuses=("${PIPESTATUS[@]}")
+    set -e
+
+    if ((pipeline_statuses[0] != 0)); then
+        reason="seqtk comp exited with status ${pipeline_statuses[0]}."
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "${reason}" \
+            "${seqtk_stderr}" \
+            "${diagnostic_file}"
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
+        return 1
+    fi
+    if ((pipeline_statuses[1] != 0)); then
+        reason="seqtk comp output did not contain usable assembly statistics."
+        if [[ -s "${diagnostic_file}" ]]; then
+            reason="$(cat "${diagnostic_file}")"
+        fi
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "${reason}" \
+            "${seqtk_stderr}" \
+            "${diagnostic_file}"
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
 
     if ! IFS=$'\t' read -r scaffolds genome_size adenine_count cytosine_count guanine_count thymine_count < "${summary_file}"; then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "Could not read seqtk summary output."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
     target=$(( (genome_size + 1) / 2 ))
@@ -122,18 +212,33 @@ compute_assembly_stats() {
             }
         '
     )"; then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "Could not calculate N50 from contig lengths."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
 
     if [[ -z "${n50}" ]]; then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "N50 calculation produced an empty value."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
 
     canonical_bases=$((adenine_count + cytosine_count + guanine_count + thymine_count))
     if ((canonical_bases == 0)); then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "FASTA contains no canonical A/C/G/T bases."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
 
@@ -148,11 +253,21 @@ compute_assembly_stats() {
             }
         '
     )"; then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "Could not calculate GC content."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
     if [[ -z "${gc_content}" ]]; then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "GC-content calculation produced an empty value."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
 
@@ -163,11 +278,16 @@ compute_assembly_stats() {
         "${genome_size}" \
         "${gc_content}" \
         > "${result_path}"; then
-        rm -f "${lengths_file}" "${summary_file}"
+        write_worker_failure \
+            "${error_path}" \
+            "${accession}" \
+            "${fasta_path}" \
+            "Could not write worker result row."
+        rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
         return 1
     fi
 
-    rm -f "${lengths_file}" "${summary_file}"
+    rm -f "${lengths_file}" "${summary_file}" "${seqtk_stderr}" "${diagnostic_file}"
 }
 
 run_worker() {
@@ -184,10 +304,9 @@ run_worker() {
     mkdir -p "${temp_dir}"
     rm -f "${result_path}" "${error_path}"
 
-    if ! compute_assembly_stats "${accession}" "${fasta_path}" "${temp_dir}" "${result_path}"; then
+    if ! compute_assembly_stats "${accession}" "${fasta_path}" "${temp_dir}" "${result_path}" "${error_path}"; then
         rm -rf "${temp_dir}"
-        printf '%s\n' "Failed to calculate assembly statistics for ${accession}." > "${error_path}"
-        return 255
+        return 1
     fi
 
     rm -rf "${temp_dir}"

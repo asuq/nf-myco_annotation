@@ -367,6 +367,14 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Failed to calculate assembly statistics for ACC2", result.stderr)
+            self.assertIn(f"FASTA: {tmpdir / 'ACC2.fasta'}", result.stderr)
+            self.assertIn(
+                "Reason: seqtk comp produced no valid contig rows.",
+                result.stderr,
+            )
+            self.assertIn("seqtk stderr:", result.stderr)
+            self.assertIn("invalid FASTA", result.stderr)
+            self.assertNotIn("exited with status 255", result.stderr)
 
     def test_parallel_jobs_accept_paths_with_spaces(self) -> None:
         """Pass FASTA paths with spaces safely through the worker queue."""
@@ -412,6 +420,14 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Failed to calculate assembly statistics for ACC3", result.stderr)
+            self.assertIn(f"FASTA: {tmpdir / 'ACC3.fasta'}", result.stderr)
+            self.assertIn(
+                "Reason: seqtk comp produced no valid contig rows.",
+                result.stderr,
+            )
+            self.assertIn("First non-empty FASTA line: not-a-fasta", result.stderr)
+            self.assertIn("seqtk stderr:", result.stderr)
+            self.assertIn("invalid FASTA", result.stderr)
 
     def test_fails_when_fasta_contains_no_canonical_bases(self) -> None:
         """Reject FASTA input that contains no A, C, G, or T bases."""
@@ -433,6 +449,10 @@ class CalculateAssemblyStatsTestCase(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Failed to calculate assembly statistics for ACC6", result.stderr)
+            self.assertIn(
+                "Reason: FASTA contains no canonical A/C/G/T bases.",
+                result.stderr,
+            )
 
 
 if __name__ == "__main__":
