@@ -53,6 +53,7 @@ logs/
 *.log
 
 # Temporary files
+.pixi/
 tmp/
 temp/
 *.tmp

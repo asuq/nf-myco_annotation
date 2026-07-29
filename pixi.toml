@@ -1,0 +1,17 @@
+[workspace]
+name = "nf-annotation"
+channels = ["conda-forge", "bioconda"]
+platforms = ["osx-arm64", "linux-64"]
+
+[dependencies]
+biopython = "1.84.*"
+nextflow = "26.04.*"
+numpy = "==2.1.1"
+python = "3.12.*"
+scipy = "==1.14.1"
+
+[tasks]
+test-python = "python -m unittest discover -s tests"
+test-helper-integration = "bash tests/test_nf_helper_integration.sh"
+test-viper-config = "HOSTNAME=viper05i NXF_APPTAINER_CACHEDIR=/ptmp/pixi-test/apptainer-cache NXF_SYNTAX_PARSER=v2 nextflow config -profile viper-cpu >/dev/null"
+test = { depends-on = ["test-python", "test-helper-integration", "test-viper-config"] }
