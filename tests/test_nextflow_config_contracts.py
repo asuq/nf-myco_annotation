@@ -17,6 +17,7 @@ OIST_CONFIG = ROOT / "conf" / "oist.config"
 OIST_20K_STORAGE_CONFIG = ROOT / "conf" / "oist_20k_storage.config"
 GWDG_CONFIG = ROOT / "conf" / "gwdg.config"
 MARMIC_CONFIG = ROOT / "conf" / "marmic.config"
+VIPER_CPU_CONFIG = ROOT / "conf" / "viper-cpu.config"
 LOCAL_CONFIG = ROOT / "conf" / "local.config"
 DEBUG_CONFIG = ROOT / "conf" / "debug.config"
 BASE_CONFIG = ROOT / "conf" / "base.config"
@@ -52,6 +53,7 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn("includeConfig 'conf/oist.config'", config_text)
         self.assertIn("includeConfig 'conf/gwdg.config'", config_text)
         self.assertIn("includeConfig 'conf/marmic.config'", config_text)
+        self.assertIn("includeConfig 'conf/viper-cpu.config'", config_text)
         self.assertNotIn("padloc_db = null", config_text)
         self.assertNotIn("padloc_db_label = null", config_text)
         self.assertNotIn("slurm_account", config_text)
@@ -143,6 +145,33 @@ class NextflowConfigContractsTestCase(unittest.TestCase):
         self.assertIn('includeConfig "${projectDir}/external/nf-helper/conf/sites/marmic.config"', marmic_text)
         self.assertNotIn("assembly", marmic_text)
         self.assertNotIn("trace {", marmic_text)
+
+    def test_viper_cpu_profile_maps_database_downloads_to_the_login_node(self) -> None:
+        """Keep Viper site defaults shared and all internet selectors explicit."""
+        config_text = NEXTFLOW_CONFIG.read_text(encoding="utf-8")
+        viper_text = VIPER_CPU_CONFIG.read_text(encoding="utf-8")
+        shared_viper = ROOT / "external" / "nf-helper" / "conf" / "sites" / "viper-cpu.config"
+
+        self.assertTrue(VIPER_CPU_CONFIG.is_file())
+        self.assertTrue(shared_viper.is_file())
+        self.assertIn("includeConfig 'conf/viper-cpu.config'", config_text)
+        self.assertIn(
+            'includeConfig "${projectDir}/external/nf-helper/conf/sites/viper-cpu.config"',
+            viper_text,
+        )
+        self.assertIn("'viper-cpu' {", viper_text)
+        for process_name in (
+            "DOWNLOAD_BUSCO_DATASET",
+            "PREP_TAXDUMP_DATABASE",
+            "PREP_CODETTA_DATABASE",
+            "DOWNLOAD_CHECKM2_DATABASE",
+            "DOWNLOAD_BUSCO_DATABASES",
+            "DOWNLOAD_EGGNOG_DATABASE",
+        ):
+            self.assertIn(process_name, viper_text)
+        self.assertIn("executor = 'local'", viper_text)
+        self.assertIn("cpus = 1", viper_text)
+        self.assertIn("memory = 16.GB", viper_text)
 
     def test_oist_20k_storage_override_is_opt_in_and_resume_safe(self) -> None:
         """Keep the large-cohort OIST override separate from the default tracked profiles."""

@@ -380,6 +380,38 @@ nextflow run . -profile oist \
   --outdir results
 ```
 
+MPCDF Viper CPU run, launched from `viper05i`:
+
+```bash
+export NXF_APPTAINER_CACHEDIR="/ptmp/$USER/apptainer-cache"
+
+nextflow run . -profile viper-cpu \
+  -w "/ptmp/$USER/nf-annotation-work" \
+  --sample_csv samples.csv \
+  --metadata metadata.tsv \
+  --taxdump /path/to/pinned-taxdump \
+  --checkm2_db /path/to/checkm2-db \
+  --codetta_db /path/to/codetta-db \
+  --busco_db /path/to/busco \
+  --eggnog_db /path/to/eggnog-db \
+  --outdir "/ptmp/$USER/nf-annotation-results"
+```
+
+The profile sends compute tasks to Slurm without fixing a partition, account,
+or QoS. BUSCO-lineage, taxdump, Codetta, CheckM2, BUSCO-database, and eggNOG
+preparation tasks remain intact and run locally because they need internet
+access. They use one CPU and at most 16 GB each, with no more than two running
+at once. Override the container cache with `--apptainer_cache_dir` and the
+default `apptainer/1.4.3` module with
+`--viper_apptainer_module <module/name>` when necessary.
+
+Both the `-w` directory and Apptainer cache must be shared `/ptmp` paths.
+Viper `/ptmp` is not backed up and inactive files are subject to retention
+cleanup, so preserve final results elsewhere when required. `/r` is accessible
+only from login nodes; `/tmp` and generic `$TMPDIR` are unsuitable for
+Nextflow work or shared container caches. The opt-in `process_local_scratch`
+label uses `$JOB_TMPDIR` only for processes explicitly assigned that label.
+
 Large OIST cohort run with the opt-in storage overrides:
 
 ```bash
@@ -452,6 +484,8 @@ The most important outputs are:
 For the full published layout and the exact reporting column contracts, see
 [`docs/implemented_pipeline.md`](docs/implemented_pipeline.md).
 
+Run the dependency-locked development test suite with `pixi run test`.
+
 ## Profiles
 
 - `local`: local executor
@@ -460,6 +494,8 @@ For the full published layout and the exact reporting column contracts, see
   `--slurm_qos`, and `--slurm_cluster_options`
 - `singularity`: enables Singularity execution
 - `oist`: OIST HPC profile with SLURM and Singularity enabled
+- `viper-cpu`: MPCDF Viper CPU profile; launch from `viper05i` with a
+  `/ptmp` work directory and Apptainer cache
 - `test`: fixture-backed local profile for `-stub-run`
 - `debug`: composable profile that sets
   `--eggnog_only_accessions GCA_000027325.1`
