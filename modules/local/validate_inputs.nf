@@ -28,7 +28,7 @@ process VALIDATE_INPUTS {
     path 'versions.yml', emit: versions
 
     script:
-    def lineageArgs = (busco_lineages as List<String>).collect {
+    def lineageArgs = (busco_lineages as List).collect {
         "--busco-lineage \"${it}\""
     }.join(' \\\n    ')
     """validate_inputs.py \
@@ -59,7 +59,7 @@ EOF
         'gcode_status',
         'gcode',
         'low_quality',
-    ] + (busco_lineages as List<String>).collect { "busco_${it}_status" } + [
+    ] + (busco_lineages as List).collect { "busco_${it}_status" } + [
         'codetta_status',
         'prokka_status',
         'ccfinder_status',

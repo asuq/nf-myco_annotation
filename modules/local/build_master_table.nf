@@ -37,7 +37,7 @@ process BUILD_MASTER_TABLE {
     script:
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
-    def lineageArgs = (busco_lineages as List<String>).collect {
+    def lineageArgs = (busco_lineages as List).collect {
         "--busco-lineage \"${it}\""
     }.join(' \\\n        ')
     """
@@ -88,7 +88,7 @@ process BUILD_MASTER_TABLE {
         'Codetta_NCBI_Table_Candidates',
         'Low_quality',
         '16S',
-    ] + (busco_lineages as List<String>).collect { "BUSCO_${it}" } + [
+    ] + (busco_lineages as List).collect { "BUSCO_${it}" } + [
         'CRISPRS',
         'SPACERS_SUM',
         'CRISPR_FRAC',

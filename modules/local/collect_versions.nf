@@ -24,7 +24,7 @@ process COLLECT_VERSIONS {
     path 'tool_and_db_versions.tsv', emit: versions_table
 
     script:
-    def lineageArgs = (params.busco_lineages as List<String>).collect {
+    def lineageArgs = (params.busco_lineages as List).collect {
         "--busco-lineage \"${it}\""
     }.join(' \\\n        ')
     def containerRefs = [

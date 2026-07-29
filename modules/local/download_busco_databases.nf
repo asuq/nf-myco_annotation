@@ -15,7 +15,7 @@ process DOWNLOAD_BUSCO_DATABASES {
     path 'versions.yml', emit: versions
 
     script:
-    def renderedLineagesShell = (lineages as List<String>).collect { value ->
+    def renderedLineagesShell = (lineages as List).collect { value ->
         "'${value.replace("'", "'\"'\"'")}'"
     }.join(' ')
     """
@@ -90,7 +90,7 @@ process DOWNLOAD_BUSCO_DATABASES {
     """
 
     stub:
-    def stubRenderedLineagesShell = (lineages as List<String>).collect { value ->
+    def stubRenderedLineagesShell = (lineages as List).collect { value ->
         "'${value.replace("'", "'\"'\"'")}'"
     }.join(' ')
     """

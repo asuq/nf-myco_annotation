@@ -39,7 +39,7 @@ process WRITE_SAMPLE_STATUS {
     script:
     def buscoTableList = busco_tables instanceof Collection ? busco_tables : [busco_tables]
     def buscoArgs = buscoTableList.collect { "--busco \"${it}\"" }.join(' \\\n        ')
-    def lineageArgs = (busco_lineages as List<String>).collect {
+    def lineageArgs = (busco_lineages as List).collect {
         "--busco-lineage \"${it}\""
     }.join(' \\\n        ')
     def allowIncomplete16sArg = ani_allow_incomplete_16s ? '--ani-allow-incomplete-16s' : ''
@@ -85,7 +85,7 @@ process WRITE_SAMPLE_STATUS {
         'gcode_status',
         'gcode',
         'low_quality',
-    ] + (busco_lineages as List<String>).collect { "busco_${it}_status" } + [
+    ] + (busco_lineages as List).collect { "busco_${it}_status" } + [
         'codetta_status',
         'prokka_status',
         'ccfinder_status',
