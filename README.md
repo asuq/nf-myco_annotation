@@ -401,8 +401,11 @@ The profile sends compute tasks to Slurm without fixing a partition, account,
 or QoS. BUSCO-lineage, taxdump, Codetta, CheckM2, BUSCO-database, and eggNOG
 preparation tasks remain intact and run locally because they need internet
 access. They use one CPU and at most 16 GB each, with no more than two running
-at once. Override the container cache with `--apptainer_cache_dir` and the
-default `apptainer/1.4.3` module with
+at once. Nextflow keeps at most 250 Slurm tasks outstanding by default, leaving
+headroom below Viper's default 300-job per-user submission limit. Lower the
+ceiling with `--viper_slurm_queue_size` when other jobs or workflow launches
+share that limit. Override the container cache with `--apptainer_cache_dir` and
+the default `apptainer/1.4.3` module with
 `--viper_apptainer_module <module/name>` when necessary.
 
 Both the `-w` directory and Apptainer cache must be shared `/ptmp` paths.
